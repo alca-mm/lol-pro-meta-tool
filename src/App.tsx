@@ -78,7 +78,7 @@ function AppContent() {
                         onClick={() => setFiltersCollapsed((current) => !current)}
                         aria-expanded={!filtersCollapsed}
                     >
-                        {filtersCollapsed ? "Filter anzeigen" : "Filter ausblenden"}
+                        {filtersCollapsed ? "Filter" : "Filter ausblenden"}
                     </button>
 
                     {!filtersCollapsed && <Filters matches={allMatches} />}

@@ -1083,3 +1083,386 @@ table tbody tr:hover {
   }
 
 }
+/* Filter collapse controls - global fix */
+.filters-shell {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.filters-shell .filters {
+  width: 100%;
+  border-right: none;
+}
+
+.filters-collapse-button,
+.filters-floating-button {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.filters-collapse-button {
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  text-align: left;
+}
+
+.filters-collapse-button:hover,
+.filters-floating-button:hover {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+.app-body.filters-collapsed .filters-shell {
+  width: 0;
+  min-width: 0;
+  border-right: none;
+  overflow: hidden;
+}
+
+.filters-floating-button {
+  align-self: flex-start;
+  border-radius: var(--radius);
+  margin-bottom: -8px;
+}
+
+button:disabled,
+.role-tab:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+/* Draft weighting controls */
+.draft-weight-panel {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.draft-weight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 0.85rem;
+}
+
+.draft-weight-control {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(10, 12, 18, 0.35);
+  padding: 0.75rem;
+}
+
+.draft-weight-control span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.draft-weight-control strong {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.draft-weight-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+@media (max-width: 900px) {
+  .draft-weight-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .filters-shell {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .app-body.filters-collapsed .filters-shell {
+    width: 100%;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .draft-weight-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Draft AI / UI polish */
+button:disabled,
+.secondary-button:disabled,
+.role-tab:disabled,
+.filters-collapse-button:disabled,
+.filters-floating-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.filters-collapse-button,
+.filters-floating-button {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.filters-collapse-button:hover,
+.filters-floating-button:hover {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+.app-body > button,
+.app-main > button,
+button.filters-collapse-button,
+button.filters-floating-button {
+  background: var(--surface2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+.draft-weight-panel {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.draft-weight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.draft-weight-control {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  background: rgba(10, 12, 18, 0.5);
+  padding: 0.75rem;
+}
+
+.draft-weight-control span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.draft-weight-control strong {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.draft-weight-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.recommendation-section .recommendation-grid .secondary-button {
+  min-height: 54px;
+}
+
+.role-filter-tabs .role-tab,
+.recommendation-side-toggle button {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.role-filter-tabs .role-tab:hover,
+.recommendation-side-toggle button:hover {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+.role-filter-tabs .role-tab-active {
+  background: #1e2d4a;
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+
+/* App-level scrolling fix: keep the native browser scrollbar hidden and scroll inside the app */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  background: var(--bg);
+}
+
+html,
+body {
+  overflow: hidden;
+}
+
+#root {
+  overflow: hidden;
+}
+
+.app {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-main {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-color: var(--surface2) var(--bg);
+  scrollbar-width: thin;
+}
+
+.app-main::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.app-main::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+.app-main::-webkit-scrollbar-thumb {
+  background: var(--surface2);
+  border: 2px solid var(--bg);
+  border-radius: 999px;
+}
+
+.app-main::-webkit-scrollbar-thumb:hover {
+  background: var(--border);
+}
+
+.app-main::-webkit-scrollbar-corner {
+  background: var(--bg);
+}
+
+.app-main::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Scrollbar fix v2: keep normal page layout so tabs stay clickable/visible,
+   but hide the native white body scrollbar visually. */
+html,
+body,
+#root {
+  min-height: 100%;
+  height: auto;
+  background: var(--bg);
+}
+
+html,
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+#root {
+  overflow: visible;
+}
+
+.app {
+  min-height: 100vh;
+  height: auto;
+  overflow: visible;
+}
+
+.app-body {
+  min-height: 0;
+  overflow: visible;
+}
+
+.app-main {
+  min-height: 0;
+  overflow-y: visible;
+  overflow-x: hidden;
+}
+
+/* Series / Fearless game pills fix */
+.series-game-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.series-game-row button,
+.series-game-row span,
+.series-game-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(10, 12, 18, 0.55);
+  color: var(--text-dim);
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.series-game-row button {
+  cursor: pointer;
+}
+
+.series-game-row button:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
+.series-game-pill.is-current,
+.series-game-row .is-current {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+  background: rgba(200, 155, 60, 0.12);
+}
+
+.series-game-pill.is-saved,
+.series-game-row .is-saved {
+  border-color: rgba(76, 175, 130, 0.55);
+  color: var(--green);
+  background: rgba(76, 175, 130, 0.1);
+}

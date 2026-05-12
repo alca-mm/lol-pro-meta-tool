@@ -7,10 +7,30 @@ interface FiltersProps {
 
 const ROLES: Role[] = ["top", "jungle", "mid", "bot", "support"]
 
+function parsePatchParts(patch: string): number[] {
+  return patch
+    .split(".")
+    .map((part) => Number(part.replace(/[^\d]/g, "")))
+    .map((part) => (Number.isFinite(part) ? part : 0))
+}
+
+function comparePatchNewestFirst(a: string, b: string): number {
+  const aParts = parsePatchParts(a)
+  const bParts = parsePatchParts(b)
+  const maxLength = Math.max(aParts.length, bParts.length)
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const diff = (bParts[index] ?? 0) - (aParts[index] ?? 0)
+    if (diff !== 0) return diff
+  }
+
+  return b.localeCompare(a)
+}
+
 export function Filters({ matches }: FiltersProps) {
   const { filters, setFilter, resetFilters } = useFilters()
 
-  const patches = [...new Set(matches.map((m) => m.patch))].sort()
+  const patches = [...new Set(matches.map((m) => m.patch).filter(Boolean))].sort(comparePatchNewestFirst)
   const regions = [...new Set(matches.map((m) => m.region))].sort()
   const tournaments = [...new Set(matches.map((m) => m.tournament))].sort()
 
