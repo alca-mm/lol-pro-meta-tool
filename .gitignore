@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.*
+*.log
+
+# raw/downloaded data
+data/raw/
+data/reports/
+
+# IDE
+.idea/
+*.iml
+
+# Claude/local tooling
+.claude/

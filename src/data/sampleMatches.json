@@ -1,0 +1,488 @@
+[
+  {
+    "_notice": "SAMPLE DATA — keine echten Spielerdaten, nur zu Demo-Zwecken",
+    "matchId": "sample-001",
+    "date": "2024-03-01",
+    "tournament": "Spring Split",
+    "patch": "14.4",
+    "region": "LEC",
+    "blueTeam": "Team Alpha",
+    "redTeam": "Team Beta",
+    "winningTeam": "Team Alpha",
+    "picks": [
+      { "championName": "Garen", "team": "Team Alpha", "side": "blue", "role": "top", "won": true },
+      { "championName": "Jarvan IV", "team": "Team Alpha", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Orianna", "team": "Team Alpha", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Jinx", "team": "Team Alpha", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Thresh", "team": "Team Alpha", "side": "blue", "role": "support", "won": true },
+      { "championName": "Darius", "team": "Team Beta", "side": "red", "role": "top", "won": false },
+      { "championName": "Vi", "team": "Team Beta", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Syndra", "team": "Team Beta", "side": "red", "role": "mid", "won": false },
+      { "championName": "Caitlyn", "team": "Team Beta", "side": "red", "role": "bot", "won": false },
+      { "championName": "Lulu", "team": "Team Beta", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": [
+      { "championName": "Zed", "team": "Team Alpha", "side": "blue", "banOrder": 1 },
+      { "championName": "Yasuo", "team": "Team Beta", "side": "red", "banOrder": 2 }
+    ]
+  },
+  {
+    "matchId": "sample-002",
+    "date": "2024-03-02",
+    "tournament": "Spring Split",
+    "patch": "14.4",
+    "region": "LEC",
+    "blueTeam": "Team Gamma",
+    "redTeam": "Team Delta",
+    "winningTeam": "Team Delta",
+    "picks": [
+      { "championName": "Jax", "team": "Team Gamma", "side": "blue", "role": "top", "won": false },
+      { "championName": "Hecarim", "team": "Team Gamma", "side": "blue", "role": "jungle", "won": false },
+      { "championName": "Azir", "team": "Team Gamma", "side": "blue", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Gamma", "side": "blue", "role": "bot", "won": false },
+      { "championName": "Nautilus", "team": "Team Gamma", "side": "blue", "role": "support", "won": false },
+      { "championName": "Garen", "team": "Team Delta", "side": "red", "role": "top", "won": true },
+      { "championName": "Jarvan IV", "team": "Team Delta", "side": "red", "role": "jungle", "won": true },
+      { "championName": "Orianna", "team": "Team Delta", "side": "red", "role": "mid", "won": true },
+      { "championName": "Aphelios", "team": "Team Delta", "side": "red", "role": "bot", "won": true },
+      { "championName": "Thresh", "team": "Team Delta", "side": "red", "role": "support", "won": true }
+    ],
+    "bans": [
+      { "championName": "Zed", "team": "Team Gamma", "side": "blue", "banOrder": 1 },
+      { "championName": "Caitlyn", "team": "Team Delta", "side": "red", "banOrder": 2 }
+    ]
+  },
+  {
+    "matchId": "sample-003",
+    "date": "2024-03-03",
+    "tournament": "Spring Split",
+    "patch": "14.4",
+    "region": "LCK",
+    "blueTeam": "Team Epsilon",
+    "redTeam": "Team Zeta",
+    "winningTeam": "Team Epsilon",
+    "picks": [
+      { "championName": "Renekton", "team": "Team Epsilon", "side": "blue", "role": "top", "won": true },
+      { "championName": "Lee Sin", "team": "Team Epsilon", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Syndra", "team": "Team Epsilon", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Aphelios", "team": "Team Epsilon", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Leona", "team": "Team Epsilon", "side": "blue", "role": "support", "won": true },
+      { "championName": "Garen", "team": "Team Zeta", "side": "red", "role": "top", "won": false },
+      { "championName": "Hecarim", "team": "Team Zeta", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Orianna", "team": "Team Zeta", "side": "red", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Zeta", "side": "red", "role": "bot", "won": false },
+      { "championName": "Thresh", "team": "Team Zeta", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": [
+      { "championName": "Yasuo", "team": "Team Epsilon", "side": "blue" },
+      { "championName": "Zed", "team": "Team Zeta", "side": "red" }
+    ]
+  },
+  {
+    "matchId": "sample-004",
+    "date": "2024-03-05",
+    "tournament": "Spring Split",
+    "patch": "14.4",
+    "region": "LCK",
+    "blueTeam": "Team Alpha",
+    "redTeam": "Team Zeta",
+    "winningTeam": "Team Alpha",
+    "picks": [
+      { "championName": "Darius", "team": "Team Alpha", "side": "blue", "role": "top", "won": true },
+      { "championName": "Vi", "team": "Team Alpha", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Azir", "team": "Team Alpha", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Caitlyn", "team": "Team Alpha", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Lulu", "team": "Team Alpha", "side": "blue", "role": "support", "won": true },
+      { "championName": "Jax", "team": "Team Zeta", "side": "red", "role": "top", "won": false },
+      { "championName": "Lee Sin", "team": "Team Zeta", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Syndra", "team": "Team Zeta", "side": "red", "role": "mid", "won": false },
+      { "championName": "Aphelios", "team": "Team Zeta", "side": "red", "role": "bot", "won": false },
+      { "championName": "Leona", "team": "Team Zeta", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-005",
+    "date": "2024-03-07",
+    "tournament": "Spring Split",
+    "patch": "14.5",
+    "region": "LEC",
+    "blueTeam": "Team Beta",
+    "redTeam": "Team Gamma",
+    "winningTeam": "Team Gamma",
+    "picks": [
+      { "championName": "Renekton", "team": "Team Beta", "side": "blue", "role": "top", "won": false },
+      { "championName": "Jarvan IV", "team": "Team Beta", "side": "blue", "role": "jungle", "won": false },
+      { "championName": "Orianna", "team": "Team Beta", "side": "blue", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Beta", "side": "blue", "role": "bot", "won": false },
+      { "championName": "Thresh", "team": "Team Beta", "side": "blue", "role": "support", "won": false },
+      { "championName": "Garen", "team": "Team Gamma", "side": "red", "role": "top", "won": true },
+      { "championName": "Vi", "team": "Team Gamma", "side": "red", "role": "jungle", "won": true },
+      { "championName": "Azir", "team": "Team Gamma", "side": "red", "role": "mid", "won": true },
+      { "championName": "Aphelios", "team": "Team Gamma", "side": "red", "role": "bot", "won": true },
+      { "championName": "Lulu", "team": "Team Gamma", "side": "red", "role": "support", "won": true }
+    ],
+    "bans": [
+      { "championName": "Syndra", "team": "Team Beta", "side": "blue" },
+      { "championName": "Lee Sin", "team": "Team Gamma", "side": "red" }
+    ]
+  },
+  {
+    "matchId": "sample-006",
+    "date": "2024-03-08",
+    "tournament": "Spring Split",
+    "patch": "14.5",
+    "region": "LEC",
+    "blueTeam": "Team Delta",
+    "redTeam": "Team Epsilon",
+    "winningTeam": "Team Epsilon",
+    "picks": [
+      { "championName": "Jax", "team": "Team Delta", "side": "blue", "role": "top", "won": false },
+      { "championName": "Hecarim", "team": "Team Delta", "side": "blue", "role": "jungle", "won": false },
+      { "championName": "Syndra", "team": "Team Delta", "side": "blue", "role": "mid", "won": false },
+      { "championName": "Caitlyn", "team": "Team Delta", "side": "blue", "role": "bot", "won": false },
+      { "championName": "Nautilus", "team": "Team Delta", "side": "blue", "role": "support", "won": false },
+      { "championName": "Darius", "team": "Team Epsilon", "side": "red", "role": "top", "won": true },
+      { "championName": "Lee Sin", "team": "Team Epsilon", "side": "red", "role": "jungle", "won": true },
+      { "championName": "Azir", "team": "Team Epsilon", "side": "red", "role": "mid", "won": true },
+      { "championName": "Jinx", "team": "Team Epsilon", "side": "red", "role": "bot", "won": true },
+      { "championName": "Leona", "team": "Team Epsilon", "side": "red", "role": "support", "won": true }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-007",
+    "date": "2024-03-10",
+    "tournament": "Worlds Qualifier",
+    "patch": "14.5",
+    "region": "LCK",
+    "blueTeam": "Team Alpha",
+    "redTeam": "Team Epsilon",
+    "winningTeam": "Team Alpha",
+    "picks": [
+      { "championName": "Garen", "team": "Team Alpha", "side": "blue", "role": "top", "won": true },
+      { "championName": "Jarvan IV", "team": "Team Alpha", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Orianna", "team": "Team Alpha", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Aphelios", "team": "Team Alpha", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Thresh", "team": "Team Alpha", "side": "blue", "role": "support", "won": true },
+      { "championName": "Renekton", "team": "Team Epsilon", "side": "red", "role": "top", "won": false },
+      { "championName": "Vi", "team": "Team Epsilon", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Azir", "team": "Team Epsilon", "side": "red", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Epsilon", "side": "red", "role": "bot", "won": false },
+      { "championName": "Leona", "team": "Team Epsilon", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": [
+      { "championName": "Zed", "team": "Team Alpha", "side": "blue" },
+      { "championName": "Yasuo", "team": "Team Epsilon", "side": "red" }
+    ]
+  },
+  {
+    "matchId": "sample-008",
+    "date": "2024-03-11",
+    "tournament": "Worlds Qualifier",
+    "patch": "14.5",
+    "region": "LCK",
+    "blueTeam": "Team Beta",
+    "redTeam": "Team Zeta",
+    "winningTeam": "Team Zeta",
+    "picks": [
+      { "championName": "Darius", "team": "Team Beta", "side": "blue", "role": "top", "won": false },
+      { "championName": "Hecarim", "team": "Team Beta", "side": "blue", "role": "jungle", "won": false },
+      { "championName": "Syndra", "team": "Team Beta", "side": "blue", "role": "mid", "won": false },
+      { "championName": "Caitlyn", "team": "Team Beta", "side": "blue", "role": "bot", "won": false },
+      { "championName": "Lulu", "team": "Team Beta", "side": "blue", "role": "support", "won": false },
+      { "championName": "Jax", "team": "Team Zeta", "side": "red", "role": "top", "won": true },
+      { "championName": "Lee Sin", "team": "Team Zeta", "side": "red", "role": "jungle", "won": true },
+      { "championName": "Orianna", "team": "Team Zeta", "side": "red", "role": "mid", "won": true },
+      { "championName": "Aphelios", "team": "Team Zeta", "side": "red", "role": "bot", "won": true },
+      { "championName": "Thresh", "team": "Team Zeta", "side": "red", "role": "support", "won": true }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-009",
+    "date": "2024-03-13",
+    "tournament": "Worlds Qualifier",
+    "patch": "14.5",
+    "region": "LEC",
+    "blueTeam": "Team Gamma",
+    "redTeam": "Team Alpha",
+    "winningTeam": "Team Gamma",
+    "picks": [
+      { "championName": "Renekton", "team": "Team Gamma", "side": "blue", "role": "top", "won": true },
+      { "championName": "Jarvan IV", "team": "Team Gamma", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Azir", "team": "Team Gamma", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Jinx", "team": "Team Gamma", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Nautilus", "team": "Team Gamma", "side": "blue", "role": "support", "won": true },
+      { "championName": "Garen", "team": "Team Alpha", "side": "red", "role": "top", "won": false },
+      { "championName": "Vi", "team": "Team Alpha", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Syndra", "team": "Team Alpha", "side": "red", "role": "mid", "won": false },
+      { "championName": "Aphelios", "team": "Team Alpha", "side": "red", "role": "bot", "won": false },
+      { "championName": "Thresh", "team": "Team Alpha", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": [
+      { "championName": "Caitlyn", "team": "Team Gamma", "side": "blue" },
+      { "championName": "Lee Sin", "team": "Team Alpha", "side": "red" }
+    ]
+  },
+  {
+    "matchId": "sample-010",
+    "date": "2024-03-14",
+    "tournament": "Worlds Qualifier",
+    "patch": "14.6",
+    "region": "LCK",
+    "blueTeam": "Team Delta",
+    "redTeam": "Team Zeta",
+    "winningTeam": "Team Delta",
+    "picks": [
+      { "championName": "Garen", "team": "Team Delta", "side": "blue", "role": "top", "won": true },
+      { "championName": "Lee Sin", "team": "Team Delta", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Orianna", "team": "Team Delta", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Caitlyn", "team": "Team Delta", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Leona", "team": "Team Delta", "side": "blue", "role": "support", "won": true },
+      { "championName": "Darius", "team": "Team Zeta", "side": "red", "role": "top", "won": false },
+      { "championName": "Hecarim", "team": "Team Zeta", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Azir", "team": "Team Zeta", "side": "red", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Zeta", "side": "red", "role": "bot", "won": false },
+      { "championName": "Lulu", "team": "Team Zeta", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-011",
+    "date": "2024-03-15",
+    "tournament": "Spring Split",
+    "patch": "14.6",
+    "region": "LEC",
+    "blueTeam": "Team Epsilon",
+    "redTeam": "Team Beta",
+    "winningTeam": "Team Beta",
+    "picks": [
+      { "championName": "Jax", "team": "Team Epsilon", "side": "blue", "role": "top", "won": false },
+      { "championName": "Vi", "team": "Team Epsilon", "side": "blue", "role": "jungle", "won": false },
+      { "championName": "Syndra", "team": "Team Epsilon", "side": "blue", "role": "mid", "won": false },
+      { "championName": "Aphelios", "team": "Team Epsilon", "side": "blue", "role": "bot", "won": false },
+      { "championName": "Nautilus", "team": "Team Epsilon", "side": "blue", "role": "support", "won": false },
+      { "championName": "Renekton", "team": "Team Beta", "side": "red", "role": "top", "won": true },
+      { "championName": "Jarvan IV", "team": "Team Beta", "side": "red", "role": "jungle", "won": true },
+      { "championName": "Orianna", "team": "Team Beta", "side": "red", "role": "mid", "won": true },
+      { "championName": "Caitlyn", "team": "Team Beta", "side": "red", "role": "bot", "won": true },
+      { "championName": "Thresh", "team": "Team Beta", "side": "red", "role": "support", "won": true }
+    ],
+    "bans": [
+      { "championName": "Zed", "team": "Team Epsilon", "side": "blue" }
+    ]
+  },
+  {
+    "matchId": "sample-012",
+    "date": "2024-03-16",
+    "tournament": "Spring Split",
+    "patch": "14.6",
+    "region": "LCK",
+    "blueTeam": "Team Zeta",
+    "redTeam": "Team Gamma",
+    "winningTeam": "Team Gamma",
+    "picks": [
+      { "championName": "Darius", "team": "Team Zeta", "side": "blue", "role": "top", "won": false },
+      { "championName": "Hecarim", "team": "Team Zeta", "side": "blue", "role": "jungle", "won": false },
+      { "championName": "Azir", "team": "Team Zeta", "side": "blue", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Zeta", "side": "blue", "role": "bot", "won": false },
+      { "championName": "Lulu", "team": "Team Zeta", "side": "blue", "role": "support", "won": false },
+      { "championName": "Garen", "team": "Team Gamma", "side": "red", "role": "top", "won": true },
+      { "championName": "Lee Sin", "team": "Team Gamma", "side": "red", "role": "jungle", "won": true },
+      { "championName": "Orianna", "team": "Team Gamma", "side": "red", "role": "mid", "won": true },
+      { "championName": "Aphelios", "team": "Team Gamma", "side": "red", "role": "bot", "won": true },
+      { "championName": "Thresh", "team": "Team Gamma", "side": "red", "role": "support", "won": true }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-013",
+    "date": "2024-03-18",
+    "tournament": "Worlds Qualifier",
+    "patch": "14.6",
+    "region": "LEC",
+    "blueTeam": "Team Alpha",
+    "redTeam": "Team Delta",
+    "winningTeam": "Team Alpha",
+    "picks": [
+      { "championName": "Renekton", "team": "Team Alpha", "side": "blue", "role": "top", "won": true },
+      { "championName": "Vi", "team": "Team Alpha", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Syndra", "team": "Team Alpha", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Caitlyn", "team": "Team Alpha", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Leona", "team": "Team Alpha", "side": "blue", "role": "support", "won": true },
+      { "championName": "Jax", "team": "Team Delta", "side": "red", "role": "top", "won": false },
+      { "championName": "Jarvan IV", "team": "Team Delta", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Azir", "team": "Team Delta", "side": "red", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Delta", "side": "red", "role": "bot", "won": false },
+      { "championName": "Nautilus", "team": "Team Delta", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": [
+      { "championName": "Yasuo", "team": "Team Alpha", "side": "blue" },
+      { "championName": "Zed", "team": "Team Delta", "side": "red" }
+    ]
+  },
+  {
+    "matchId": "sample-014",
+    "date": "2024-03-19",
+    "tournament": "Worlds Qualifier",
+    "patch": "14.6",
+    "region": "LCK",
+    "blueTeam": "Team Epsilon",
+    "redTeam": "Team Zeta",
+    "winningTeam": "Team Epsilon",
+    "picks": [
+      { "championName": "Garen", "team": "Team Epsilon", "side": "blue", "role": "top", "won": true },
+      { "championName": "Hecarim", "team": "Team Epsilon", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Orianna", "team": "Team Epsilon", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Aphelios", "team": "Team Epsilon", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Lulu", "team": "Team Epsilon", "side": "blue", "role": "support", "won": true },
+      { "championName": "Darius", "team": "Team Zeta", "side": "red", "role": "top", "won": false },
+      { "championName": "Lee Sin", "team": "Team Zeta", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Syndra", "team": "Team Zeta", "side": "red", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Zeta", "side": "red", "role": "bot", "won": false },
+      { "championName": "Thresh", "team": "Team Zeta", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-015",
+    "date": "2024-03-21",
+    "tournament": "Spring Split",
+    "patch": "14.6",
+    "region": "LEC",
+    "blueTeam": "Team Beta",
+    "redTeam": "Team Alpha",
+    "winningTeam": "Team Beta",
+    "picks": [
+      { "championName": "Jax", "team": "Team Beta", "side": "blue", "role": "top", "won": true },
+      { "championName": "Vi", "team": "Team Beta", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Azir", "team": "Team Beta", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Caitlyn", "team": "Team Beta", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Nautilus", "team": "Team Beta", "side": "blue", "role": "support", "won": true },
+      { "championName": "Renekton", "team": "Team Alpha", "side": "red", "role": "top", "won": false },
+      { "championName": "Jarvan IV", "team": "Team Alpha", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Syndra", "team": "Team Alpha", "side": "red", "role": "mid", "won": false },
+      { "championName": "Aphelios", "team": "Team Alpha", "side": "red", "role": "bot", "won": false },
+      { "championName": "Leona", "team": "Team Alpha", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-016",
+    "date": "2024-03-22",
+    "tournament": "Spring Split",
+    "patch": "14.4",
+    "region": "LEC",
+    "blueTeam": "Team Zeta",
+    "redTeam": "Team Epsilon",
+    "winningTeam": "Team Epsilon",
+    "picks": [
+      { "championName": "Garen", "team": "Team Zeta", "side": "blue", "role": "top", "won": false },
+      { "championName": "Hecarim", "team": "Team Zeta", "side": "blue", "role": "jungle", "won": false },
+      { "championName": "Orianna", "team": "Team Zeta", "side": "blue", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Zeta", "side": "blue", "role": "bot", "won": false },
+      { "championName": "Thresh", "team": "Team Zeta", "side": "blue", "role": "support", "won": false },
+      { "championName": "Darius", "team": "Team Epsilon", "side": "red", "role": "top", "won": true },
+      { "championName": "Lee Sin", "team": "Team Epsilon", "side": "red", "role": "jungle", "won": true },
+      { "championName": "Syndra", "team": "Team Epsilon", "side": "red", "role": "mid", "won": true },
+      { "championName": "Caitlyn", "team": "Team Epsilon", "side": "red", "role": "bot", "won": true },
+      { "championName": "Nautilus", "team": "Team Epsilon", "side": "red", "role": "support", "won": true }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-017",
+    "date": "2024-03-24",
+    "tournament": "Worlds Qualifier",
+    "patch": "14.4",
+    "region": "LCK",
+    "blueTeam": "Team Gamma",
+    "redTeam": "Team Beta",
+    "winningTeam": "Team Beta",
+    "picks": [
+      { "championName": "Renekton", "team": "Team Gamma", "side": "blue", "role": "top", "won": false },
+      { "championName": "Vi", "team": "Team Gamma", "side": "blue", "role": "jungle", "won": false },
+      { "championName": "Azir", "team": "Team Gamma", "side": "blue", "role": "mid", "won": false },
+      { "championName": "Aphelios", "team": "Team Gamma", "side": "blue", "role": "bot", "won": false },
+      { "championName": "Lulu", "team": "Team Gamma", "side": "blue", "role": "support", "won": false },
+      { "championName": "Jax", "team": "Team Beta", "side": "red", "role": "top", "won": true },
+      { "championName": "Jarvan IV", "team": "Team Beta", "side": "red", "role": "jungle", "won": true },
+      { "championName": "Orianna", "team": "Team Beta", "side": "red", "role": "mid", "won": true },
+      { "championName": "Jinx", "team": "Team Beta", "side": "red", "role": "bot", "won": true },
+      { "championName": "Leona", "team": "Team Beta", "side": "red", "role": "support", "won": true }
+    ],
+    "bans": [
+      { "championName": "Zed", "team": "Team Gamma", "side": "blue" }
+    ]
+  },
+  {
+    "matchId": "sample-018",
+    "date": "2024-03-25",
+    "tournament": "Worlds Qualifier",
+    "patch": "14.5",
+    "region": "LEC",
+    "blueTeam": "Team Delta",
+    "redTeam": "Team Gamma",
+    "winningTeam": "Team Delta",
+    "picks": [
+      { "championName": "Garen", "team": "Team Delta", "side": "blue", "role": "top", "won": true },
+      { "championName": "Hecarim", "team": "Team Delta", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Syndra", "team": "Team Delta", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Caitlyn", "team": "Team Delta", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Thresh", "team": "Team Delta", "side": "blue", "role": "support", "won": true },
+      { "championName": "Darius", "team": "Team Gamma", "side": "red", "role": "top", "won": false },
+      { "championName": "Lee Sin", "team": "Team Gamma", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Azir", "team": "Team Gamma", "side": "red", "role": "mid", "won": false },
+      { "championName": "Aphelios", "team": "Team Gamma", "side": "red", "role": "bot", "won": false },
+      { "championName": "Nautilus", "team": "Team Gamma", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-019",
+    "date": "2024-03-27",
+    "tournament": "Spring Split",
+    "patch": "14.5",
+    "region": "LCK",
+    "blueTeam": "Team Alpha",
+    "redTeam": "Team Beta",
+    "winningTeam": "Team Beta",
+    "picks": [
+      { "championName": "Jax", "team": "Team Alpha", "side": "blue", "role": "top", "won": false },
+      { "championName": "Vi", "team": "Team Alpha", "side": "blue", "role": "jungle", "won": false },
+      { "championName": "Orianna", "team": "Team Alpha", "side": "blue", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Alpha", "side": "blue", "role": "bot", "won": false },
+      { "championName": "Lulu", "team": "Team Alpha", "side": "blue", "role": "support", "won": false },
+      { "championName": "Renekton", "team": "Team Beta", "side": "red", "role": "top", "won": true },
+      { "championName": "Hecarim", "team": "Team Beta", "side": "red", "role": "jungle", "won": true },
+      { "championName": "Syndra", "team": "Team Beta", "side": "red", "role": "mid", "won": true },
+      { "championName": "Aphelios", "team": "Team Beta", "side": "red", "role": "bot", "won": true },
+      { "championName": "Nautilus", "team": "Team Beta", "side": "red", "role": "support", "won": true }
+    ],
+    "bans": []
+  },
+  {
+    "matchId": "sample-020",
+    "date": "2024-03-28",
+    "tournament": "Worlds Qualifier",
+    "patch": "14.6",
+    "region": "LEC",
+    "blueTeam": "Team Zeta",
+    "redTeam": "Team Alpha",
+    "winningTeam": "Team Zeta",
+    "picks": [
+      { "championName": "Garen", "team": "Team Zeta", "side": "blue", "role": "top", "won": true },
+      { "championName": "Jarvan IV", "team": "Team Zeta", "side": "blue", "role": "jungle", "won": true },
+      { "championName": "Azir", "team": "Team Zeta", "side": "blue", "role": "mid", "won": true },
+      { "championName": "Caitlyn", "team": "Team Zeta", "side": "blue", "role": "bot", "won": true },
+      { "championName": "Leona", "team": "Team Zeta", "side": "blue", "role": "support", "won": true },
+      { "championName": "Darius", "team": "Team Alpha", "side": "red", "role": "top", "won": false },
+      { "championName": "Lee Sin", "team": "Team Alpha", "side": "red", "role": "jungle", "won": false },
+      { "championName": "Orianna", "team": "Team Alpha", "side": "red", "role": "mid", "won": false },
+      { "championName": "Jinx", "team": "Team Alpha", "side": "red", "role": "bot", "won": false },
+      { "championName": "Thresh", "team": "Team Alpha", "side": "red", "role": "support", "won": false }
+    ],
+    "bans": []
+  }
+]
