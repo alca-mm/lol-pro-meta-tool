@@ -25,12 +25,28 @@ export const dataSources: DataSource[] = [
     id: "oracles-elixir-2024",
     name: "Oracle's Elixir 2024 Pro Play CSV",
     type: "google-drive-csv",
+    googleDriveFileId: "1XXk2LO0CsNADBB1LRGOV5rUpyZdEZ8s2",
+    enabled: true,
+    sourceWebsite: "https://oracleselixir.com/tools/downloads",
+    notes: "2024 Oracle's Elixir match data CSV",
+  },
+  {
+    id: "oracles-elixir-2025",
+    name: "Oracle's Elixir 2025 Pro Play CSV",
+    type: "google-drive-csv",
+    googleDriveFileId: "1v6LRphp2kYciU4SXp0PCjEMuev1bDejc",
+    enabled: true,
+    sourceWebsite: "https://oracleselixir.com/tools/downloads",
+    notes: "2025 Oracle's Elixir match data CSV",
+  },
+  {
+    id: "oracles-elixir-2026",
+    name: "Oracle's Elixir 2026 Pro Play CSV",
+    type: "google-drive-csv",
     googleDriveFileId: "1hnpbrUpBMS1TZI7IovfpKeZfWJH1Aptm",
     enabled: true,
     sourceWebsite: "https://oracleselixir.com/tools/downloads",
-    notes:
-      "Trage hier die File-ID einer konkreten CSV aus dem öffentlichen Oracle's-Elixir-Google-Drive-Ordner ein. " +
-      "Ordner: https://drive.google.com/drive/u/0/folders/1gLSw0RLjBbtaNy0dgnGQDAZOHIgCe-HH",
+    notes: "2026 Oracle's Elixir match data CSV",
   },
 ]
 

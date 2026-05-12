@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import type { Match } from "../domain/types"
 
 interface DataSourceInfoProps {
@@ -14,24 +15,53 @@ function dateRange(matches: Match[]): string {
 }
 
 export function DataSourceInfo({ isUsingSampleData, matches, lastSyncDate }: DataSourceInfoProps) {
-  const patches = [...new Set(matches.map((m) => m.patch))].sort().join(", ")
-  const regions = [...new Set(matches.map((m) => m.region))].sort().join(", ")
+  const [visible, setVisible] = useState(true)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setVisible(false)
+    }, 20_000)
+
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  if (!visible) {
+    return null
+  }
 
   if (isUsingSampleData) {
     return (
-      <div className="datasource-badge sample">
-        SAMPLE-DATEN — keine echten Pro-Play-Daten. Führe <code>npm run sync:data</code> aus, um echte Daten zu laden.
-      </div>
+        <div className="datasource-badge sample">
+          <button
+              type="button"
+              className="datasource-close"
+              onClick={() => setVisible(false)}
+              aria-label="Datenhinweis schließen"
+          >
+            ×
+          </button>
+          SAMPLE-DATEN — keine echten Pro-Play-Daten. Führe <code>npm run sync:data</code> aus, um echte Daten zu laden.
+        </div>
     )
   }
 
   return (
-    <div className="datasource-badge synced">
-      Synchronisierte Pro-Play-Daten aktiv
-      <span className="datasource-meta">
-        {matches.length} Matches · {dateRange(matches)} · Patches: {patches} · Regionen: {regions}
-        {lastSyncDate ? ` · Sync: ${lastSyncDate}` : ""}
+      <div className="datasource-badge synced">
+        <button
+            type="button"
+            className="datasource-close"
+            onClick={() => setVisible(false)}
+            aria-label="Datenhinweis schließen"
+        >
+          ×
+        </button>
+
+        <strong>Synchronisierte Pro-Play-Daten aktiv</strong>
+
+        <span className="datasource-meta">
+        {matches.length} Matches · {dateRange(matches)}
+          {lastSyncDate ? ` · Sync: ${lastSyncDate}` : ""}
       </span>
-    </div>
+      </div>
   )
 }
