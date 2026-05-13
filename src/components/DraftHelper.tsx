@@ -10,6 +10,61 @@ import { ChampionPortraitGrid } from "./ChampionPortraitGrid"
 import { championIconUrl } from "../analysis/championAssets"
 import { useTranslation } from "../i18n/LanguageContext"
 import type { TranslationKey } from "../i18n/types"
+import type {
+    DraftVisualSide,
+    PickSlot,
+    ActiveDraftSlot,
+    DraftSnapshot,
+    CompletedGameDraft,
+    WeightKey,
+    WeightConfig,
+    DraftAiPresetKey,
+    PatchWeightPresetKey,
+    DraftEdgeSummary,
+    FlexChampionInfo,
+    BanRecommendation,
+    TeamCompWarning,
+    TeamCompMetric,
+    TeamCompReport,
+} from "../draft/types"
+import {
+    DRAFT_FLOW,
+    MAX_SERIES_GAMES,
+    PATCH_WEIGHT_MAX_PATCHES,
+    DEFAULT_PATCH_WEIGHTS,
+    PATCH_WEIGHT_PRESETS,
+    DEFAULT_WEIGHTS,
+    WEIGHT_PRESETS,
+    FRONTLINE_CHAMPIONS,
+    ENGAGE_CHAMPIONS,
+    AP_DAMAGE_CHAMPIONS,
+    AD_DAMAGE_CHAMPIONS,
+    POKE_CHAMPIONS,
+    PICK_CHAMPIONS,
+    DIVE_CHAMPIONS,
+    PEEL_CHAMPIONS,
+    SCALING_CHAMPIONS,
+    SPLITPUSH_CHAMPIONS,
+} from "../draft/constants"
+import {
+    weightedPatchWindow,
+    formatPatchWindowSummary,
+} from "../draft/patchWindow"
+import {
+    formatPercent,
+    formatScore,
+    normalizeChampionName,
+    clamp,
+    oppositeSide,
+    sideLabel,
+    filledPickCount,
+    filledBanCount,
+    slotsToDraftPicks,
+    nextEmptyPickIndex,
+    createEmptyPickSlots,
+    clonePickSlots,
+    draftHasContent,
+} from "../draft/helpers"
 
 interface DraftHelperProps {
     matches: Match[]
@@ -25,615 +80,6 @@ const ROLE_LABELS: Record<Role, string> = {
     support: "SUP",
 }
 
-type DraftVisualSide = "blue" | "red"
-
-type PickSlot = {
-    championName: string
-    role: Role | null
-}
-
-type ActiveDraftSlot =
-    | {
-    type: "pick"
-    visualSide: DraftVisualSide
-    index: number
-}
-    | {
-    type: "ban"
-    visualSide: DraftVisualSide
-    index: number
-}
-
-type DraftFlowStep =
-    | {
-    type: "ban"
-    visualSide: DraftVisualSide
-    index: number
-    label: string
-}
-    | {
-    type: "pick"
-    visualSide: DraftVisualSide
-    index: number
-    label: string
-}
-
-type DraftSnapshot = {
-    bluePickSlots: PickSlot[]
-    redPickSlots: PickSlot[]
-    blueBans: string[]
-    redBans: string[]
-    recommendationSide: DraftVisualSide
-    activeDraftSlot: ActiveDraftSlot | null
-    championSearch: string
-    poolRoleFilter: Role | null
-    draftFlowEnabled: boolean
-    flowStepIndex: number
-}
-
-type CompletedGameDraft = {
-    gameNumber: number
-    bluePickSlots: PickSlot[]
-    redPickSlots: PickSlot[]
-    blueBans: string[]
-    redBans: string[]
-}
-
-type WeightKey = "draftPriority" | "roleStats" | "synergy" | "matchup" | "winRate" | "sampleSize"
-
-type WeightConfig = Record<WeightKey, number>
-
-type DraftAiPresetKey = "balanced" | "counterpick" | "synergy" | "meta" | "safe"
-
-type PatchWeightPresetKey = "balanced" | "currentFocused" | "stable" | "currentOnly"
-
-type PatchWindowSummary = {
-    patch: string
-    rawMatches: number
-    weight: number
-    weightedMatches: number
-}
-
-type PatchWindowData = {
-    patches: string[]
-    matches: Match[]
-    rawMatches: Match[]
-    rawSample: number
-    weightedSample: number
-    summaries: PatchWindowSummary[]
-}
-
-type DraftEdgeSummary = {
-    score: number
-    completedPicks: number
-    assignedRoles: number
-    averageConfidence: number
-    notes: string[]
-}
-
-type FlexRoleInfo = {
-    role: Role
-    games: number
-    share: number
-    winRate: number | null
-}
-
-type FlexChampionInfo = {
-    championName: string
-    totalGames: number
-    roles: FlexRoleInfo[]
-    primaryRole: Role | null
-    isFlex: boolean
-}
-
-type BanRecommendation = {
-    championName: string
-    role: Role
-    score: number
-    reason: string
-    flexRoles: Role[]
-    hitsOpenRole: boolean
-}
-
-type TeamCompWarning = {
-    severity: "info" | "warning" | "danger"
-    title: string
-    description: string
-}
-
-type TeamCompMetric = {
-    label: string
-    value: number
-    max: number
-    description: string
-}
-
-type TeamCompReport = {
-    identity: string
-    primaryTags: string[]
-    metrics: TeamCompMetric[]
-    strengths: string[]
-    warnings: TeamCompWarning[]
-    damageProfile: {
-        ap: number
-        ad: number
-        mixed: number
-        unknown: number
-        label: string
-    }
-}
-
-const DRAFT_FLOW: DraftFlowStep[] = [
-    { type: "ban", visualSide: "blue", index: 0, label: "Blue Ban 1" },
-    { type: "ban", visualSide: "red", index: 0, label: "Red Ban 1" },
-    { type: "ban", visualSide: "blue", index: 1, label: "Blue Ban 2" },
-    { type: "ban", visualSide: "red", index: 1, label: "Red Ban 2" },
-    { type: "ban", visualSide: "blue", index: 2, label: "Blue Ban 3" },
-    { type: "ban", visualSide: "red", index: 2, label: "Red Ban 3" },
-
-    { type: "pick", visualSide: "blue", index: 0, label: "Blue Pick 1" },
-    { type: "pick", visualSide: "red", index: 0, label: "Red Pick 1" },
-    { type: "pick", visualSide: "red", index: 1, label: "Red Pick 2" },
-    { type: "pick", visualSide: "blue", index: 1, label: "Blue Pick 2" },
-    { type: "pick", visualSide: "blue", index: 2, label: "Blue Pick 3" },
-    { type: "pick", visualSide: "red", index: 2, label: "Red Pick 3" },
-
-    { type: "ban", visualSide: "red", index: 3, label: "Red Ban 4" },
-    { type: "ban", visualSide: "blue", index: 3, label: "Blue Ban 4" },
-    { type: "ban", visualSide: "red", index: 4, label: "Red Ban 5" },
-    { type: "ban", visualSide: "blue", index: 4, label: "Blue Ban 5" },
-
-    { type: "pick", visualSide: "red", index: 3, label: "Red Pick 4" },
-    { type: "pick", visualSide: "blue", index: 3, label: "Blue Pick 4" },
-    { type: "pick", visualSide: "blue", index: 4, label: "Blue Pick 5" },
-    { type: "pick", visualSide: "red", index: 4, label: "Red Pick 5" },
-]
-
-const MAX_SERIES_GAMES = 5
-const PATCH_WEIGHT_MAX_PATCHES = 6
-
-const DEFAULT_PATCH_WEIGHTS = [100, 70, 45, 25, 15, 10]
-
-const PATCH_WEIGHT_PRESETS: Record<PatchWeightPresetKey, { label: string; weights: number[] }> = {
-    balanced: {
-        label: "Balanced",
-        weights: DEFAULT_PATCH_WEIGHTS,
-    },
-    currentFocused: {
-        label: "Aktueller Patch",
-        weights: [100, 55, 30, 15, 5, 0],
-    },
-    stable: {
-        label: "Meta stabil",
-        weights: [100, 85, 70, 55, 40, 25],
-    },
-    currentOnly: {
-        label: "Nur aktuell",
-        weights: [100, 0, 0, 0, 0, 0],
-    },
-}
-
-const DEFAULT_WEIGHTS: WeightConfig = {
-    draftPriority: 40,
-    roleStats: 20,
-    synergy: 15,
-    matchup: 20,
-    winRate: 5,
-    sampleSize: 0,
-}
-
-const WEIGHT_PRESETS: Record<DraftAiPresetKey, { label: string; weights: WeightConfig }> = {
-    balanced: {
-        label: "Balanced",
-        weights: DEFAULT_WEIGHTS,
-    },
-    counterpick: {
-        label: "Counterpick",
-        weights: {
-            draftPriority: 20,
-            roleStats: 15,
-            synergy: 10,
-            matchup: 45,
-            winRate: 5,
-            sampleSize: 5,
-        },
-    },
-    synergy: {
-        label: "Synergy",
-        weights: {
-            draftPriority: 20,
-            roleStats: 15,
-            synergy: 45,
-            matchup: 10,
-            winRate: 5,
-            sampleSize: 5,
-        },
-    },
-    meta: {
-        label: "Meta Priority",
-        weights: {
-            draftPriority: 60,
-            roleStats: 20,
-            synergy: 5,
-            matchup: 10,
-            winRate: 5,
-            sampleSize: 0,
-        },
-    },
-    safe: {
-        label: "Safe / High Confidence",
-        weights: {
-            draftPriority: 25,
-            roleStats: 25,
-            synergy: 10,
-            matchup: 10,
-            winRate: 10,
-            sampleSize: 20,
-        },
-    },
-}
-
-// WEIGHT_LABELS is defined inside the component to support i18n
-
-const FRONTLINE_CHAMPIONS = new Set([
-    "aatrox",
-    "alistar",
-    "braum",
-    "ksante",
-    "leona",
-    "malphite",
-    "maokai",
-    "nautilus",
-    "ornn",
-    "poppy",
-    "rell",
-    "renekton",
-    "rakan",
-    "sejuani",
-    "shen",
-    "sion",
-    "tahmkench",
-    "taric",
-    "zac",
-])
-
-const ENGAGE_CHAMPIONS = new Set([
-    "alistar",
-    "amumu",
-    "ashe",
-    "gnar",
-    "gragas",
-    "jarvaniv",
-    "leona",
-    "malphite",
-    "maokai",
-    "nautilus",
-    "neeko",
-    "ornn",
-    "rakan",
-    "rell",
-    "sejuani",
-    "vi",
-    "wukong",
-])
-
-const AP_DAMAGE_CHAMPIONS = new Set([
-    "ahri",
-    "akali",
-    "annie",
-    "azir",
-    "brand",
-    "cassiopeia",
-    "corki",
-    "diana",
-    "elise",
-    "fiddlesticks",
-    "galio",
-    "gragas",
-    "gwen",
-    "hwei",
-    "karma",
-    "karthus",
-    "kennen",
-    "leblanc",
-    "lillia",
-    "lissandra",
-    "lux",
-    "malzahar",
-    "neeko",
-    "nidalee",
-    "orianna",
-    "rumble",
-    "ryze",
-    "seraphine",
-    "sylas",
-    "syndra",
-    "taliyah",
-    "twistedfate",
-    "veigar",
-    "viktor",
-    "vladimir",
-    "xerath",
-    "ziggs",
-    "zoe",
-])
-
-const AD_DAMAGE_CHAMPIONS = new Set([
-    "aatrox",
-    "akshan",
-    "aphelios",
-    "ashe",
-    "belveth",
-    "caitlyn",
-    "camille",
-    "darius",
-    "draven",
-    "ezreal",
-    "fiora",
-    "gangplank",
-    "gnar",
-    "graves",
-    "irelia",
-    "jarvaniv",
-    "jax",
-    "jayce",
-    "jinx",
-    "kaisa",
-    "kalista",
-    "khazix",
-    "kindred",
-    "leesin",
-    "lucian",
-    "missfortune",
-    "nilah",
-    "nocturne",
-    "olaf",
-    "pantheon",
-    "pyke",
-    "qiyana",
-    "quinn",
-    "reksai",
-    "renekton",
-    "rengar",
-    "samira",
-    "senna",
-    "sivir",
-    "tristana",
-    "tryndamere",
-    "twitch",
-    "varus",
-    "vayne",
-    "vi",
-    "viego",
-    "xayah",
-    "xinzhao",
-    "yasuo",
-    "yone",
-    "zeri",
-    "ziggs",
-])
-
-const POKE_CHAMPIONS = new Set([
-    "ashe",
-    "caitlyn",
-    "ezreal",
-    "hwei",
-    "jayce",
-    "karma",
-    "lux",
-    "maokai",
-    "nidalee",
-    "orianna",
-    "seraphine",
-    "varus",
-    "velkoz",
-    "xerath",
-    "ziggs",
-    "zoe",
-])
-
-const PICK_CHAMPIONS = new Set([
-    "ahri",
-    "ashe",
-    "blitzcrank",
-    "elise",
-    "jax",
-    "leblanc",
-    "leesin",
-    "leona",
-    "lissandra",
-    "lux",
-    "morgana",
-    "nautilus",
-    "neeko",
-    "pyke",
-    "rakan",
-    "renata",
-    "sejuani",
-    "syndra",
-    "thresh",
-    "twistedfate",
-    "vi",
-    "viego",
-])
-
-const DIVE_CHAMPIONS = new Set([
-    "akali",
-    "alistar",
-    "camille",
-    "diana",
-    "galio",
-    "hecarim",
-    "irelia",
-    "jarvaniv",
-    "kaisa",
-    "leesin",
-    "leona",
-    "malphite",
-    "nautilus",
-    "nocturne",
-    "rakan",
-    "rell",
-    "renekton",
-    "sejuani",
-    "sylas",
-    "vi",
-    "viego",
-    "wukong",
-    "yasuo",
-    "yone",
-])
-
-const PEEL_CHAMPIONS = new Set([
-    "alistar",
-    "braum",
-    "ivern",
-    "janna",
-    "karma",
-    "lulu",
-    "milio",
-    "nami",
-    "poppy",
-    "renata",
-    "rakan",
-    "seraphine",
-    "tahmkench",
-    "taric",
-    "thresh",
-    "zilean",
-])
-
-const SCALING_CHAMPIONS = new Set([
-    "aphelios",
-    "azir",
-    "cassiopeia",
-    "corki",
-    "gwen",
-    "jax",
-    "jinx",
-    "kaisa",
-    "kayle",
-    "kogmaw",
-    "orianna",
-    "ryze",
-    "senna",
-    "sivir",
-    "smolder",
-    "tristana",
-    "twitch",
-    "veigar",
-    "viktor",
-    "vladimir",
-    "xayah",
-    "zeri",
-])
-
-const SPLITPUSH_CHAMPIONS = new Set([
-    "camille",
-    "fiora",
-    "gwen",
-    "jax",
-    "jayce",
-    "ksante",
-    "renekton",
-    "riven",
-    "trundle",
-    "tryndamere",
-    "twistedfate",
-    "yone",
-])
-
-function createEmptyPickSlots(): PickSlot[] {
-    return Array.from({ length: 5 }, () => ({
-        championName: "",
-        role: null,
-    }))
-}
-
-function clonePickSlots(slots: PickSlot[]): PickSlot[] {
-    return slots.map((slot) => ({ ...slot }))
-}
-
-function formatPercent(value: number | null): string {
-    if (value === null) return "—"
-    return `${(value * 100).toFixed(1)} %`
-}
-
-function formatScore(value: number): string {
-    return value.toFixed(3)
-}
-
-function normalizeChampionName(name: string): string {
-    return name.trim().toLowerCase()
-}
-
-function parsePatchParts(patch: string): number[] {
-    return patch
-        .split(".")
-        .map((part) => Number(part.replace(/[^\d]/g, "")))
-        .map((part) => (Number.isFinite(part) ? part : 0))
-}
-
-function comparePatch(a: string, b: string): number {
-    const aParts = parsePatchParts(a)
-    const bParts = parsePatchParts(b)
-    const maxLength = Math.max(aParts.length, bParts.length)
-
-    for (let index = 0; index < maxLength; index += 1) {
-        const diff = (aParts[index] ?? 0) - (bParts[index] ?? 0)
-        if (diff !== 0) return diff
-    }
-
-    return a.localeCompare(b)
-}
-
-function weightedPatchWindow(matches: Match[], patchWeights: number[]): PatchWindowData {
-    const patches = [...new Set(matches.map((match) => match.patch).filter(Boolean))]
-        .sort(comparePatch)
-        .slice(-PATCH_WEIGHT_MAX_PATCHES)
-        .reverse()
-
-    const summaries: PatchWindowSummary[] = []
-    const rawMatches: Match[] = []
-    const weightedMatches: Match[] = []
-
-    for (const [patchIndex, patch] of patches.entries()) {
-        const weight = patchWeights[patchIndex] ?? 0
-        if (weight <= 0) continue
-
-        const patchMatches = matches.filter((match) => match.patch === patch)
-        const repeatCount = Math.max(1, Math.round(weight / 10))
-        rawMatches.push(...patchMatches)
-
-        for (let index = 0; index < repeatCount; index += 1) {
-            weightedMatches.push(...patchMatches)
-        }
-
-        summaries.push({
-            patch,
-            rawMatches: patchMatches.length,
-            weight,
-            weightedMatches: Math.round(patchMatches.length * (weight / 100)),
-        })
-    }
-
-    return {
-        patches: summaries.map((summary) => summary.patch),
-        matches: weightedMatches.length > 0 ? weightedMatches : rawMatches,
-        rawMatches,
-        rawSample: rawMatches.length,
-        weightedSample: summaries.reduce((sum, summary) => sum + summary.weightedMatches, 0),
-        summaries,
-    }
-}
-
-function formatPatchWindowSummary(patchData: PatchWindowData): string {
-    if (patchData.summaries.length === 0) return "keine Patchdaten"
-
-    return patchData.summaries
-        .map((summary) => `${summary.patch} (${summary.weight}%, ${summary.rawMatches} Games)`)
-        .join(" · ")
-}
 
 function iconFor(championName?: string) {
     if (!championName) return null
@@ -650,32 +96,6 @@ function iconFor(championName?: string) {
     )
 }
 
-function sideLabel(side: DraftVisualSide): string {
-    return side === "blue" ? "Blue Side" : "Red Side"
-}
-
-function filledPickCount(slots: PickSlot[]): number {
-    return slots.filter((slot) => Boolean(slot.championName)).length
-}
-
-function filledBanCount(bans: string[]): number {
-    return bans.filter(Boolean).length
-}
-
-function slotsToDraftPicks(slots: PickSlot[]): Partial<Record<Role, string>> {
-    const picks: Partial<Record<Role, string>> = {}
-
-    for (const slot of slots) {
-        if (!slot.championName || !slot.role) continue
-        picks[slot.role] = slot.championName
-    }
-
-    return picks
-}
-
-function nextEmptyPickIndex(slots: PickSlot[]): number {
-    return slots.findIndex((slot) => !slot.championName)
-}
 
 function getRoleRecommendations(
     recommendations: DraftRecommendation[],
@@ -798,13 +218,6 @@ function calculateWeightedScore(entry: DraftRecommendation, weights: WeightConfi
     return weightedSum / totalWeight
 }
 
-function clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value))
-}
-
-function oppositeSide(side: DraftVisualSide): DraftVisualSide {
-    return side === "blue" ? "red" : "blue"
-}
 
 function weightedRecommendations(
     matches: Match[],
@@ -1417,14 +830,6 @@ function pickSlotRoleLabel(slot: PickSlot): string {
     return slot.role ? ROLE_LABELS[slot.role] : "Role?"
 }
 
-function draftHasContent(bluePickSlots: PickSlot[], redPickSlots: PickSlot[], blueBans: string[], redBans: string[]): boolean {
-    return (
-        bluePickSlots.some((slot) => Boolean(slot.championName)) ||
-        redPickSlots.some((slot) => Boolean(slot.championName)) ||
-        blueBans.some(Boolean) ||
-        redBans.some(Boolean)
-    )
-}
 
 function getFearlessChampionKeys(games: CompletedGameDraft[]): Set<string> {
     const keys = new Set<string>()
