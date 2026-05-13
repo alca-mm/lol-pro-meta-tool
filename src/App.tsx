@@ -20,6 +20,7 @@ import { PatchComparisonView } from "./components/PatchComparisonView"
 import { DraftHelper } from "./components/DraftHelper"
 import sampleData from "./data/sampleMatches.json"
 import importedDataRaw from "./data/importedMatches.json"
+import syncReportRaw from "./data/latest-sync-report.json"
 
 const importedMatches = parseMatches(importedDataRaw as unknown)
 const sampleMatches = parseMatches(sampleData)
@@ -68,7 +69,11 @@ function AppContent() {
                 <h1>LoL Pro Meta Tool</h1>
             </header>
 
-            <DataSourceInfo isUsingSampleData={isUsingSampleData} matches={allMatches} />
+            <DataSourceInfo
+                isUsingSampleData={isUsingSampleData}
+                matches={allMatches}
+                syncReport={syncReportRaw}
+            />
 
             <div className={`app-body${filtersCollapsed ? " filters-collapsed" : ""}`}>
                 <aside className="filters-shell">

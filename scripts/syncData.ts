@@ -16,11 +16,14 @@ import type { SyncReport } from "../src/domain/types.js"
 
 const projectRoot = process.cwd()
 const outputFile = resolve(projectRoot, "src", "data", "importedMatches.json")
+const appReportFile = resolve(projectRoot, "src", "data", "latest-sync-report.json")
 const rawDataDir = resolve(projectRoot, "data", "raw")
 const reportsDir = resolve(projectRoot, "data", "reports")
+const appDataDir = resolve(projectRoot, "src", "data")
 
 mkdirSync(rawDataDir, { recursive: true })
 mkdirSync(reportsDir, { recursive: true })
+mkdirSync(appDataDir, { recursive: true })
 
 async function run() {
   const report: SyncReport = createEmptyReport(outputFile)
@@ -37,6 +40,7 @@ async function run() {
     const done = finishReport(report)
     writeReport(done)
     console.log(`   Bericht: ${join(reportsDir, "latest-sync-report.json")}`)
+    console.log(`   App-Bericht: ${appReportFile}`)
     return
   }
 
@@ -57,7 +61,6 @@ async function run() {
 
     console.log(`  ✓ Download erfolgreich (${Math.round(dlResult.content.length / 1024)} KB)`)
 
-    // Save raw CSV
     const rawPath = join(rawDataDir, `${source.id}.csv`)
     try {
       saveCsvToFile(dlResult.content, rawPath)
@@ -67,12 +70,10 @@ async function run() {
       console.warn(`  ⚠ Konnte CSV nicht speichern: ${msg}`)
     }
 
-    // Parse CSV
     const rows = parseCsvWithHeaders(dlResult.content)
     report.rowsRead += rows.length
     console.log(`  Zeilen gelesen: ${rows.length}`)
 
-    // Map to Match[]
     const { matches, warnings, skipped } = mapOracleElixirCsvToMatches(rows)
     report.gamesDetected += matches.length + skipped
     report.matchesSkipped += skipped
@@ -82,7 +83,6 @@ async function run() {
       report.warnings.push(`[${source.id}] ${w}`)
     }
 
-    // Validate
     const valid = validateMatches(matches as unknown[])
     const invalCount = matches.length - valid.length
     if (invalCount > 0) {
@@ -95,7 +95,6 @@ async function run() {
     allMatches.push(...valid)
   }
 
-  // Collect metadata
   report.detectedPatches = [...new Set(allMatches.map((m) => m.patch))].sort()
   report.detectedLeagues = [...new Set(allMatches.map((m) => m.region))].sort()
   report.detectedTournaments = [...new Set(allMatches.map((m) => m.tournament))].sort()
@@ -106,12 +105,10 @@ async function run() {
     report.dateRange = { from: dates[0], to: dates[dates.length - 1] }
   }
 
-  // Write output
   writeFileSync(outputFile, JSON.stringify(allMatches, null, 2), "utf8")
   const done = finishReport(report)
   writeReport(done)
 
-  // Summary
   console.log("\n─── Sync abgeschlossen ───────────────────────────────")
   console.log(`Quellen verarbeitet : ${done.sourcesProcessed}`)
   console.log(`Quellen erfolgreich : ${done.sourcesSucceeded}`)
@@ -120,6 +117,7 @@ async function run() {
   console.log(`Fehler              : ${done.errors.length}`)
   console.log(`Ausgabe             : ${outputFile}`)
   console.log(`Bericht             : ${join(reportsDir, "latest-sync-report.json")}`)
+  console.log(`App-Bericht         : ${appReportFile}`)
 
   if (done.errors.length > 0) {
     process.exit(1)
@@ -127,8 +125,12 @@ async function run() {
 }
 
 function writeReport(report: SyncReport) {
+  const reportJson = JSON.stringify(report, null, 2)
+
   const reportPath = join(reportsDir, "latest-sync-report.json")
-  writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf8")
+  writeFileSync(reportPath, reportJson, "utf8")
+
+  writeFileSync(appReportFile, reportJson, "utf8")
 }
 
 run().catch((err) => {

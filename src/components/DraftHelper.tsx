@@ -83,6 +83,24 @@ type WeightConfig = Record<WeightKey, number>
 
 type DraftAiPresetKey = "balanced" | "counterpick" | "synergy" | "meta" | "safe"
 
+type PatchWeightPresetKey = "balanced" | "currentFocused" | "stable" | "currentOnly"
+
+type PatchWindowSummary = {
+    patch: string
+    rawMatches: number
+    weight: number
+    weightedMatches: number
+}
+
+type PatchWindowData = {
+    patches: string[]
+    matches: Match[]
+    rawMatches: Match[]
+    rawSample: number
+    weightedSample: number
+    summaries: PatchWindowSummary[]
+}
+
 type DraftEdgeSummary = {
     score: number
     completedPicks: number
@@ -170,6 +188,28 @@ const DRAFT_FLOW: DraftFlowStep[] = [
 ]
 
 const MAX_SERIES_GAMES = 5
+const PATCH_WEIGHT_MAX_PATCHES = 6
+
+const DEFAULT_PATCH_WEIGHTS = [100, 70, 45, 25, 15, 10]
+
+const PATCH_WEIGHT_PRESETS: Record<PatchWeightPresetKey, { label: string; weights: number[] }> = {
+    balanced: {
+        label: "Balanced",
+        weights: DEFAULT_PATCH_WEIGHTS,
+    },
+    currentFocused: {
+        label: "Aktueller Patch",
+        weights: [100, 55, 30, 15, 5, 0],
+    },
+    stable: {
+        label: "Meta stabil",
+        weights: [100, 85, 70, 55, 40, 25],
+    },
+    currentOnly: {
+        label: "Nur aktuell",
+        weights: [100, 0, 0, 0, 0, 0],
+    },
+}
 
 const DEFAULT_WEIGHTS: WeightConfig = {
     draftPriority: 40,
@@ -552,20 +592,52 @@ function comparePatch(a: string, b: string): number {
     return a.localeCompare(b)
 }
 
-function latestPatchWindow(matches: Match[], patchCount: number): {
-    patches: string[]
-    matches: Match[]
-} {
+function weightedPatchWindow(matches: Match[], patchWeights: number[]): PatchWindowData {
     const patches = [...new Set(matches.map((match) => match.patch).filter(Boolean))]
         .sort(comparePatch)
-        .slice(-patchCount)
+        .slice(-PATCH_WEIGHT_MAX_PATCHES)
+        .reverse()
 
-    const patchSet = new Set(patches)
+    const summaries: PatchWindowSummary[] = []
+    const rawMatches: Match[] = []
+    const weightedMatches: Match[] = []
+
+    for (const [patchIndex, patch] of patches.entries()) {
+        const weight = patchWeights[patchIndex] ?? 0
+        if (weight <= 0) continue
+
+        const patchMatches = matches.filter((match) => match.patch === patch)
+        const repeatCount = Math.max(1, Math.round(weight / 10))
+        rawMatches.push(...patchMatches)
+
+        for (let index = 0; index < repeatCount; index += 1) {
+            weightedMatches.push(...patchMatches)
+        }
+
+        summaries.push({
+            patch,
+            rawMatches: patchMatches.length,
+            weight,
+            weightedMatches: Math.round(patchMatches.length * (weight / 100)),
+        })
+    }
 
     return {
-        patches,
-        matches: matches.filter((match) => patchSet.has(match.patch)),
+        patches: summaries.map((summary) => summary.patch),
+        matches: weightedMatches.length > 0 ? weightedMatches : rawMatches,
+        rawMatches,
+        rawSample: rawMatches.length,
+        weightedSample: summaries.reduce((sum, summary) => sum + summary.weightedMatches, 0),
+        summaries,
     }
+}
+
+function formatPatchWindowSummary(patchData: PatchWindowData): string {
+    if (patchData.summaries.length === 0) return "keine Patchdaten"
+
+    return patchData.summaries
+        .map((summary) => `${summary.patch} (${summary.weight}%, ${summary.rawMatches} Games)`)
+        .join(" · ")
 }
 
 function iconFor(championName?: string) {
@@ -1409,6 +1481,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
     const [flowStepIndex, setFlowStepIndex] = useState(0)
     const [history, setHistory] = useState<DraftSnapshot[]>([])
     const [weights, setWeights] = useState<WeightConfig>(DEFAULT_WEIGHTS)
+    const [patchWeights, setPatchWeights] = useState<number[]>(DEFAULT_PATCH_WEIGHTS)
     const [seriesGameNumber, setSeriesGameNumber] = useState(1)
     const [fearlessEnabled, setFearlessEnabled] = useState(false)
     const [seriesHistory, setSeriesHistory] = useState<CompletedGameDraft[]>([])
@@ -1417,7 +1490,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
     const bluePicks = useMemo(() => slotsToDraftPicks(bluePickSlots), [bluePickSlots])
     const redPicks = useMemo(() => slotsToDraftPicks(redPickSlots), [redPickSlots])
 
-    const recentPatchData = useMemo(() => latestPatchWindow(matches, 4), [matches])
+    const recentPatchData = useMemo(() => weightedPatchWindow(matches, patchWeights), [matches, patchWeights])
 
     const fearlessChampionSet = useMemo(
         () => (fearlessEnabled ? getFearlessChampionKeys(seriesHistory) : new Set<string>()),
@@ -2159,6 +2232,44 @@ export function DraftHelper({ matches }: DraftHelperProps) {
         setWeights({ ...WEIGHT_PRESETS[preset].weights })
     }
 
+    function applyPatchWeightPreset(preset: PatchWeightPresetKey) {
+        setPatchWeights([...PATCH_WEIGHT_PRESETS[preset].weights])
+    }
+
+    function updatePatchWeight(index: number, value: number) {
+        setPatchWeights((current) => {
+            const next = [...current]
+            next[index] = value
+            return next
+        })
+    }
+
+    function renderPatchWeightSlider(index: number) {
+        const label = index === 0 ? "Aktuellster Patch" : `${index} Patch${index === 1 ? "" : "es"} alt`
+        const patch = recentPatchData.summaries[index]?.patch ?? "—"
+        const rawMatches = recentPatchData.summaries[index]?.rawMatches ?? 0
+
+        return (
+            <label key={index} className="draft-weight-control">
+                <span>
+                    {label}
+                    <strong>{patchWeights[index] ?? 0}%</strong>
+                </span>
+                <span className="muted">
+                    {patch} · {rawMatches.toLocaleString("de-DE")} Games
+                </span>
+                <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={patchWeights[index] ?? 0}
+                    onChange={(event) => updatePatchWeight(index, Number(event.target.value))}
+                />
+            </label>
+        )
+    }
+
     function renderWeightSlider(key: WeightKey) {
         return (
             <label key={key} className="draft-weight-control">
@@ -2184,8 +2295,10 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 <div>
                     <h2>Draft Cockpit</h2>
                     <p>
-                        Empfehlungen nutzen nur die neuesten 4 Patches aus den aktuellen Filtern:{" "}
-                        {recentPatchData.patches.length > 0 ? recentPatchData.patches.join(", ") : "keine Patchdaten"}
+                        Empfehlungen nutzen eine gewichtete Patch-Auswahl: {formatPatchWindowSummary(recentPatchData)}
+                    </p>
+                    <p className="muted">
+                        Roh-Sample: {recentPatchData.rawSample.toLocaleString("de-DE")} Games · gewichtetes Sample: {recentPatchData.weightedSample.toLocaleString("de-DE")} Games
                     </p>
                 </div>
 
@@ -2358,6 +2471,45 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 >
                     Red Side
                 </button>
+            </div>
+
+            <div className="recommendation-section draft-weight-panel">
+                <div className="champion-picker-header">
+                    <div>
+                        <h3>Patch-Gewichtung</h3>
+                        <p>
+                            Steuert, wie stark neue und ältere Patches in Draft-Empfehlungen, Flex-Erkennung, Ban-AI und Draft Edge zählen.
+                        </p>
+                        <p className="muted">
+                            Ein neuer Patch bleibt wichtig, aber ältere Patches können kleine Samples stabilisieren.
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => setPatchWeights([...DEFAULT_PATCH_WEIGHTS])}
+                    >
+                        Patch-Gewichtung zurücksetzen
+                    </button>
+                </div>
+
+                <div className="role-filter-tabs" aria-label="Patch-Gewichtungs-Presets">
+                    {(Object.keys(PATCH_WEIGHT_PRESETS) as PatchWeightPresetKey[]).map((preset) => (
+                        <button
+                            key={preset}
+                            type="button"
+                            className="role-tab"
+                            onClick={() => applyPatchWeightPreset(preset)}
+                        >
+                            {PATCH_WEIGHT_PRESETS[preset].label}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="draft-weight-grid">
+                    {Array.from({ length: PATCH_WEIGHT_MAX_PATCHES }, (_, index) => renderPatchWeightSlider(index))}
+                </div>
             </div>
 
             <div className="recommendation-section draft-weight-panel">
@@ -2631,7 +2783,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         {activeSidePicks[role] ? (
                             <p className="muted">Rolle bereits besetzt: {activeSidePicks[role]}</p>
                         ) : recommendations.length === 0 ? (
-                            <p className="muted">Keine Kandidaten auf den letzten 4 Patches.</p>
+                            <p className="muted">Keine Kandidaten in der aktuellen gewichteten Patch-Auswahl.</p>
                         ) : (
                             <div style={{ display: "grid", gap: "0.45rem" }}>
                                 {recommendations.map((entry, index) => renderRecommendationButton(entry, index))}
