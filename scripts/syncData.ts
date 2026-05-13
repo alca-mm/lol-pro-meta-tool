@@ -12,6 +12,7 @@ import { parseCsvWithHeaders } from "../src/import/parseCsv.js"
 import { mapOracleElixirCsvToMatches } from "../src/import/oracleElixirMapper.js"
 import { validateMatches } from "../src/import/validateMatches.js"
 import { createEmptyReport, finishReport } from "../src/import/importReport.js"
+import { buildSyncStatusResult } from "./syncStatus.js"
 import type { SyncReport } from "../src/domain/types.js"
 
 const projectRoot = process.cwd()
@@ -109,6 +110,14 @@ async function run() {
   const done = finishReport(report)
   writeReport(done)
 
+  const status = buildSyncStatusResult({
+    sourcesSucceeded: done.sourcesSucceeded,
+    sourcesProcessed: done.sourcesProcessed,
+    sourcesFailed: done.sourcesFailed,
+    matchesImported: done.matchesImported,
+    errors: done.errors,
+  })
+
   console.log("\n─── Sync abgeschlossen ───────────────────────────────")
   console.log(`Quellen verarbeitet : ${done.sourcesProcessed}`)
   console.log(`Quellen erfolgreich : ${done.sourcesSucceeded}`)
@@ -119,7 +128,15 @@ async function run() {
   console.log(`Bericht             : ${join(reportsDir, "latest-sync-report.json")}`)
   console.log(`App-Bericht         : ${appReportFile}`)
 
-  if (done.errors.length > 0) {
+  for (const line of status.summaryLines) {
+    if (status.exitCode === 0) {
+      console.log(line)
+    } else {
+      console.error(line)
+    }
+  }
+
+  if (status.exitCode !== 0) {
     process.exit(1)
   }
 }
