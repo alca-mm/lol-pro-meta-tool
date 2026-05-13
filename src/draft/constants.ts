@@ -1,4 +1,15 @@
+import type { Role } from "../domain/types"
 import type { DraftFlowStep, DraftAiPresetKey, PatchWeightPresetKey, WeightConfig } from "./types"
+
+export const ROLES: Role[] = ["top", "jungle", "mid", "bot", "support"]
+
+export const ROLE_LABELS: Record<Role, string> = {
+    top: "TOP",
+    jungle: "JGL",
+    mid: "MID",
+    bot: "BOT",
+    support: "SUP",
+}
 
 export const DRAFT_FLOW: DraftFlowStep[] = [
     { type: "ban", visualSide: "blue", index: 0, label: "Blue Ban 1" },

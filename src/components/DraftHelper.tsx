@@ -6,9 +6,15 @@ import {
     type DraftState,
 } from "../analysis/draftHelper"
 import { ALL_CHAMPIONS } from "../analysis/championCatalog"
-import { ChampionPortraitGrid } from "./ChampionPortraitGrid"
-import { championIconUrl } from "../analysis/championAssets"
+import { SeriesPanel } from "./draft/SeriesPanel"
+import { DraftFlowPanel } from "./draft/DraftFlowPanel"
+import { RecommendationSideToggle } from "./draft/RecommendationSideToggle"
+import { DraftBoard } from "./draft/DraftBoard"
+import { PatchWeightPanel } from "./draft/PatchWeightPanel"
+import { ScoreWeightPanel } from "./draft/ScoreWeightPanel"
+import { iconFor, flexRoleLabel } from "./draft/utils"
 import { useTranslation } from "../i18n/LanguageContext"
+
 import type { TranslationKey } from "../i18n/types"
 import type {
     DraftVisualSide,
@@ -28,9 +34,10 @@ import type {
     TeamCompReport,
 } from "../draft/types"
 import {
+    ROLES,
+    ROLE_LABELS,
     DRAFT_FLOW,
     MAX_SERIES_GAMES,
-    PATCH_WEIGHT_MAX_PATCHES,
     DEFAULT_PATCH_WEIGHTS,
     PATCH_WEIGHT_PRESETS,
     DEFAULT_WEIGHTS,
@@ -58,7 +65,6 @@ import {
     oppositeSide,
     sideLabel,
     filledPickCount,
-    filledBanCount,
     slotsToDraftPicks,
     nextEmptyPickIndex,
     createEmptyPickSlots,
@@ -69,33 +75,6 @@ import {
 interface DraftHelperProps {
     matches: Match[]
 }
-
-const ROLES: Role[] = ["top", "jungle", "mid", "bot", "support"]
-
-const ROLE_LABELS: Record<Role, string> = {
-    top: "TOP",
-    jungle: "JGL",
-    mid: "MID",
-    bot: "BOT",
-    support: "SUP",
-}
-
-
-function iconFor(championName?: string) {
-    if (!championName) return null
-
-    return (
-        <img
-            src={championIconUrl(championName)}
-            alt={championName}
-            loading="lazy"
-            onError={(event) => {
-                event.currentTarget.style.visibility = "hidden"
-            }}
-        />
-    )
-}
-
 
 function getRoleRecommendations(
     recommendations: DraftRecommendation[],
@@ -123,7 +102,7 @@ function buildRoleChampionCatalog(matches: Match[]): Record<Role, Set<string>> {
     return catalog
 }
 
-function buildFlexChampionCatalog(matches: Match[]): Map<string, FlexChampionInfo> {
+export function buildFlexChampionCatalog(matches: Match[]): Map<string, FlexChampionInfo> {
     const raw = new Map<string, { championName: string; roles: Record<Role, { games: number; wins: number }> }>()
 
     for (const match of matches) {
@@ -177,19 +156,6 @@ function buildFlexChampionCatalog(matches: Match[]): Map<string, FlexChampionInf
     return catalog
 }
 
-function flexRoleLabel(info: FlexChampionInfo | undefined): string {
-    if (!info || info.roles.length === 0) return ""
-
-    const visibleRoles = info.roles
-        .filter((roleInfo) => roleInfo.games >= 2 || roleInfo.share >= 0.1)
-        .slice(0, 3)
-
-    if (visibleRoles.length === 0) return ""
-
-    return visibleRoles
-        .map((roleInfo) => `${ROLE_LABELS[roleInfo.role]} ${(roleInfo.share * 100).toFixed(0)}%`)
-        .join(" / ")
-}
 
 function getViableFlexRoles(info: FlexChampionInfo | undefined): Role[] {
     if (!info) return []
@@ -390,7 +356,7 @@ function calculateSinglePickDraftScore(input: {
     }
 }
 
-function calculateDraftEdgeSummary(input: {
+export function calculateDraftEdgeSummary(input: {
     matches: Match[]
     ownSlots: PickSlot[]
     enemySlots: PickSlot[]
@@ -458,7 +424,7 @@ function damageProfileLabel(profile: TeamCompReport["damageProfile"], t: (key: T
     return t("comp_damage_unknown")
 }
 
-function generateTeamCompReport(slots: PickSlot[], t: (key: TranslationKey) => string): TeamCompReport {
+export function generateTeamCompReport(slots: PickSlot[], t: (key: TranslationKey) => string): TeamCompReport {
     const warnings: TeamCompWarning[] = []
     const strengths: string[] = []
     const assignedCounts = getAssignedRoleCounts(slots)
@@ -615,7 +581,7 @@ function generateTeamCompReport(slots: PickSlot[], t: (key: TranslationKey) => s
     }
 }
 
-function generateBanRecommendations(input: {
+export function generateBanRecommendations(input: {
     opponentRecommendations: DraftRecommendation[]
     opponentSlots: PickSlot[]
     selectedChampionSet: Set<string>
@@ -825,11 +791,6 @@ function inferChampionRole(input: {
     return bestRecommendation?.role ?? null
 }
 
-function pickSlotRoleLabel(slot: PickSlot): string {
-    if (!slot.championName) return "Role?"
-    return slot.role ? ROLE_LABELS[slot.role] : "Role?"
-}
-
 
 function getFearlessChampionKeys(games: CompletedGameDraft[]): Set<string> {
     const keys = new Set<string>()
@@ -870,23 +831,7 @@ function formatSingleGameDraftForExport(game: CompletedGameDraft, labelSuffix = 
 }
 
 export function DraftHelper({ matches }: DraftHelperProps) {
-    const { t, lang } = useTranslation()
-
-    const WEIGHT_LABELS: Record<WeightKey, string> = {
-        draftPriority: t("dh_wLabel_draftPriority"),
-        roleStats: t("dh_wLabel_roleStats"),
-        synergy: t("dh_wLabel_synergy"),
-        matchup: t("dh_wLabel_matchup"),
-        winRate: t("dh_wLabel_winRate"),
-        sampleSize: t("dh_wLabel_sampleSize"),
-    }
-
-    const PATCH_PRESET_LABELS: Record<PatchWeightPresetKey, TranslationKey> = {
-        balanced: "dh_pPreset_balanced",
-        currentFocused: "dh_pPreset_currentFocused",
-        stable: "dh_pPreset_stable",
-        currentOnly: "dh_pPreset_currentOnly",
-    }
+    const { t } = useTranslation()
 
     const [bluePickSlots, setBluePickSlots] = useState<PickSlot[]>(createEmptyPickSlots)
     const [redPickSlots, setRedPickSlots] = useState<PickSlot[]>(createEmptyPickSlots)
@@ -1435,176 +1380,6 @@ export function DraftHelper({ matches }: DraftHelperProps) {
         }
     }
 
-    function renderBanSlot(visualSide: DraftVisualSide, index: number) {
-        const bans = visualSide === "blue" ? blueBans : redBans
-        const championName = bans[index]
-        const isActive =
-            activeDraftSlot?.type === "ban" &&
-            activeDraftSlot.visualSide === visualSide &&
-            activeDraftSlot.index === index
-
-        return (
-            <div key={`${visualSide}-ban-${index}`} className="draft-ban-slot-wrap">
-                <button
-                    type="button"
-                    className={[
-                        "draft-ban-slot",
-                        visualSide,
-                        isActive ? "is-active" : "",
-                        championName ? "has-champion" : "",
-                    ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    onClick={() => {
-                        setActiveDraftSlot({ type: "ban", visualSide, index })
-                        setRecommendationSide(visualSide)
-                    }}
-                    title={championName || `Ban ${index + 1}`}
-                >
-                    {championName ? iconFor(championName) : <span>B{index + 1}</span>}
-                </button>
-
-                {championName && (
-                    <button
-                        type="button"
-                        className="draft-mini-clear"
-                        onClick={() => clearBan(visualSide, index)}
-                        aria-label={`${t("dh_removeBan")} ${championName}`}
-                        title={t("dh_removeBan")}
-                    >
-                        ×
-                    </button>
-                )}
-            </div>
-        )
-    }
-
-    function renderPickSlot(visualSide: DraftVisualSide, index: number) {
-        const pickSlots = visualSide === "blue" ? bluePickSlots : redPickSlots
-        const slot = pickSlots[index]
-        const championName = slot.championName
-        const flexInfo = championName ? flexChampionCatalog.get(normalizeChampionName(championName)) : undefined
-        const isActive =
-            activeDraftSlot?.type === "pick" &&
-            activeDraftSlot.visualSide === visualSide &&
-            activeDraftSlot.index === index
-
-        return (
-            <div key={`${visualSide}-pick-${index}`} className="draft-pick-slot-wrap">
-                <button
-                    type="button"
-                    className={[
-                        "draft-pick-slot",
-                        visualSide,
-                        isActive ? "is-active" : "",
-                        championName ? "has-champion" : "",
-                    ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    onClick={() => {
-                        setActiveDraftSlot({
-                            type: "pick",
-                            visualSide,
-                            index,
-                        })
-                        setRecommendationSide(visualSide)
-                    }}
-                    title={championName || `Pick ${index + 1}`}
-                >
-                    <span className="draft-pick-role">P{index + 1}</span>
-
-                    <span className="draft-pick-icon">
-                        {championName ? iconFor(championName) : null}
-                    </span>
-
-                    <span className="draft-pick-name">
-                        {championName || t("dh_selectPickPlaceholder")}
-                        {championName ? (
-                            <span className="muted" style={{ display: "block", fontWeight: 600 }}>
-                                {pickSlotRoleLabel(slot)}
-                                {flexInfo?.isFlex ? ` · Flex ${flexRoleLabel(flexInfo)}` : ""}
-                            </span>
-                        ) : null}
-                    </span>
-                </button>
-
-                {championName && (
-                    <select
-                        value={slot.role ?? ""}
-                        onChange={(event) =>
-                            updatePickRole(
-                                visualSide,
-                                index,
-                                event.target.value ? (event.target.value as Role) : null,
-                            )
-                        }
-                        title={t("dh_assignRoleTitle")}
-                        style={{
-                            width: "100%",
-                            marginTop: "0.3rem",
-                            border: "1px solid var(--border)",
-                            borderRadius: "var(--radius)",
-                            background: "var(--surface2)",
-                            color: "var(--text)",
-                            padding: "0.35rem 0.45rem",
-                            fontSize: "0.75rem",
-                        }}
-                    >
-                        <option value="">Role?</option>
-                        {ROLES.map((role) => (
-                            <option key={role} value={role}>
-                                {ROLE_LABELS[role]}
-                            </option>
-                        ))}
-                    </select>
-                )}
-
-                {championName && (
-                    <button
-                        type="button"
-                        className="draft-mini-clear"
-                        onClick={() => clearPick(visualSide, index)}
-                        aria-label={`${t("dh_removePick")} ${championName}`}
-                        title={t("dh_removePick")}
-                    >
-                        ×
-                    </button>
-                )}
-            </div>
-        )
-    }
-
-    function renderSidePanel(visualSide: DraftVisualSide) {
-        const pickSlots = visualSide === "blue" ? bluePickSlots : redPickSlots
-        const bans = visualSide === "blue" ? blueBans : redBans
-
-        return (
-            <div className={`draft-team-panel ${visualSide}`}>
-                <div className="draft-team-header">
-                    <span>{visualSide === "blue" ? "BLUE SIDE" : "RED SIDE"}</span>
-                </div>
-
-                <div className="draft-ban-row">
-                    {bans.map((_, index) => renderBanSlot(visualSide, index))}
-                </div>
-
-                <div className="draft-pick-list">
-                    {pickSlots.map((_, index) => renderPickSlot(visualSide, index))}
-                </div>
-
-                <div className="recommendation-card" style={{ marginTop: "0.85rem", padding: "0.75rem" }}>
-                    <h3>Summary</h3>
-                    <p className="muted">
-                        {filledPickCount(pickSlots)}/5 Picks · {filledBanCount(bans)}/5 Bans
-                    </p>
-                    <p className="muted">
-                        {t("dh_assignedRoles")} {Object.keys(slotsToDraftPicks(pickSlots)).length}/5
-                    </p>
-                </div>
-            </div>
-        )
-    }
-
     function renderRecommendationButton(entry: DraftRecommendation, index: number) {
         const disabled = Boolean(activeSidePicks[entry.role])
         const flexInfo = flexChampionCatalog.get(normalizeChampionName(entry.championName))
@@ -1666,55 +1441,6 @@ export function DraftHelper({ matches }: DraftHelperProps) {
         })
     }
 
-    function renderPatchWeightSlider(index: number) {
-        const label = index === 0
-            ? t("dh_currentPatch")
-            : lang === "de"
-                ? `${index} Patch${index === 1 ? "" : "es"} alt`
-                : `${index} ${index === 1 ? t("dh_patchOld1") : t("dh_patchOldN")}`
-        const patch = recentPatchData.summaries[index]?.patch ?? "—"
-        const rawMatches = recentPatchData.summaries[index]?.rawMatches ?? 0
-
-        return (
-            <label key={index} className="draft-weight-control">
-                <span>
-                    {label}
-                    <strong>{patchWeights[index] ?? 0}%</strong>
-                </span>
-                <span className="muted">
-                    {patch} · {rawMatches.toLocaleString("de-DE")} {t("dh_games")}
-                </span>
-                <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={patchWeights[index] ?? 0}
-                    onChange={(event) => updatePatchWeight(index, Number(event.target.value))}
-                />
-            </label>
-        )
-    }
-
-    function renderWeightSlider(key: WeightKey) {
-        return (
-            <label key={key} className="draft-weight-control">
-                <span>
-                    {WEIGHT_LABELS[key]}
-                    <strong>{weights[key]}</strong>
-                </span>
-                <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={weights[key]}
-                    onChange={(event) => updateWeight(key, Number(event.target.value))}
-                />
-            </label>
-        )
-    }
-
     return (
         <section className="draft-helper">
             <div className="section-header">
@@ -1755,218 +1481,48 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 </label>
             </div>
 
-            <div className="recommendation-section series-panel">
-                <div className="champion-picker-header">
-                    <div>
-                        <h3>{t("dh_seriesTitle")}</h3>
-                        <p className="muted">
-                            Game {seriesGameNumber}/{MAX_SERIES_GAMES} · {t("dh_savedGames")} {seriesHistory.length}
-                            {fearlessEnabled ? ` · ${t("dh_fearlessLocked")} ${fearlessChampionSet.size}` : ""}
-                        </p>
-                    </div>
+            <SeriesPanel
+                seriesGameNumber={seriesGameNumber}
+                seriesHistory={seriesHistory}
+                fearlessEnabled={fearlessEnabled}
+                fearlessChampionSet={fearlessChampionSet}
+                currentGameHasContent={currentGameHasContent}
+                copyStatus={copyStatus}
+                onToggleFearless={() => setFearlessEnabled((current) => !current)}
+                onSaveGame={saveCurrentGameToSeries}
+                onNextGame={goToNextSeriesGame}
+                onCopyDraft={copyDraftToClipboard}
+                onResetSeries={resetSeries}
+            />
 
-                    <div className="series-actions">
-                        <button
-                            type="button"
-                            className={["role-tab", fearlessEnabled ? "role-tab-active" : ""].filter(Boolean).join(" ")}
-                            onClick={() => setFearlessEnabled((current) => !current)}
-                        >
-                            {fearlessEnabled ? t("dh_fearlessOn") : t("dh_fearlessOff")}
-                        </button>
+            <DraftFlowPanel
+                draftFlowEnabled={draftFlowEnabled}
+                historyLength={history.length}
+                flowSlotLabel={flowLabelForSlot(activeDraftSlot, flowStepIndex)}
+                onActivate={activateDraftFlow}
+                onDeactivate={deactivateDraftFlow}
+                onStepBack={restorePreviousStep}
+            />
 
-                        <button
-                            type="button"
-                            className="role-tab"
-                            onClick={saveCurrentGameToSeries}
-                            disabled={!currentGameHasContent}
-                        >
-                            {t("dh_saveGame")}
-                        </button>
+            <RecommendationSideToggle
+                recommendationSide={recommendationSide}
+                onChange={setRecommendationSide}
+            />
 
-                        <button
-                            type="button"
-                            className="role-tab"
-                            onClick={goToNextSeriesGame}
-                            disabled={seriesGameNumber >= MAX_SERIES_GAMES}
-                        >
-                            {t("dh_nextGame")}
-                        </button>
+            <PatchWeightPanel
+                patchWeights={patchWeights}
+                summaries={recentPatchData.summaries}
+                onUpdateWeight={updatePatchWeight}
+                onApplyPreset={applyPatchWeightPreset}
+                onReset={() => setPatchWeights([...DEFAULT_PATCH_WEIGHTS])}
+            />
 
-                        <button type="button" className="role-tab" onClick={copyDraftToClipboard}>
-                            {t("dh_copyDraft")}
-                        </button>
-
-                        <button type="button" className="role-tab" onClick={resetSeries}>
-                            {t("dh_resetSeries")}
-                        </button>
-                    </div>
-                </div>
-
-                {copyStatus ? <p className="muted">{copyStatus}</p> : null}
-
-                <div className="series-game-row">
-                    {Array.from({ length: MAX_SERIES_GAMES }, (_, index) => {
-                        const gameNumber = index + 1
-                        const isCurrent = gameNumber === seriesGameNumber
-                        const isSaved = seriesHistory.some((game) => game.gameNumber === gameNumber)
-
-                        return (
-                            <span
-                                key={gameNumber}
-                                className={[
-                                    "series-game-pill",
-                                    isCurrent ? "is-current" : "",
-                                    isSaved ? "is-saved" : "",
-                                ]
-                                    .filter(Boolean)
-                                    .join(" ")}
-                            >
-                                G{gameNumber}{isCurrent ? " · Live" : isSaved ? " · saved" : ""}
-                            </span>
-                        )
-                    })}
-                </div>
-
-                {fearlessEnabled && fearlessChampionSet.size > 0 ? (
-                    <p className="muted">
-                        {t("dh_fearlessPool")} {[...fearlessChampionSet].slice(0, 18).join(", ")}
-                        {fearlessChampionSet.size > 18 ? " …" : ""}
-                    </p>
-                ) : null}
-            </div>
-
-            <div className="role-filter-tabs" aria-label="Draft-Flow">
-                <span className="muted" style={{ alignSelf: "center", marginRight: "0.35rem" }}>
-                    {t("dh_draftFlow")}
-                </span>
-
-                {draftFlowEnabled ? (
-                    <button type="button" className="role-tab role-tab-active" onClick={deactivateDraftFlow}>
-                        {t("dh_flowActive")}
-                    </button>
-                ) : (
-                    <button type="button" className="role-tab" onClick={activateDraftFlow}>
-                        {t("dh_flowEnable")}
-                    </button>
-                )}
-
-                <button
-                    type="button"
-                    className="role-tab"
-                    onClick={restorePreviousStep}
-                    disabled={history.length === 0}
-                    style={{ opacity: history.length === 0 ? 0.5 : 1 }}
-                >
-                    {t("dh_stepBack")}
-                </button>
-
-                <span className="muted" style={{ alignSelf: "center" }}>
-                    {draftFlowEnabled
-                        ? `${t("dh_flowUpNext")} ${flowLabelForSlot(activeDraftSlot, flowStepIndex)}`
-                        : t("dh_manualMode")}
-                </span>
-            </div>
-
-            <div className="role-filter-tabs" aria-label="Empfehlungsseite">
-                <span className="muted" style={{ alignSelf: "center", marginRight: "0.35rem" }}>
-                    {t("dh_liveRecsFor")}
-                </span>
-
-                <button
-                    type="button"
-                    className={[
-                        "role-tab",
-                        recommendationSide === "blue" ? "role-tab-active" : "",
-                    ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    onClick={() => setRecommendationSide("blue")}
-                >
-                    Blue Side
-                </button>
-
-                <button
-                    type="button"
-                    className={[
-                        "role-tab",
-                        recommendationSide === "red" ? "role-tab-active" : "",
-                    ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    onClick={() => setRecommendationSide("red")}
-                >
-                    Red Side
-                </button>
-            </div>
-
-            <div className="recommendation-section draft-weight-panel">
-                <div className="champion-picker-header">
-                    <div>
-                        <h3>{t("dh_patchWeightTitle")}</h3>
-                        <p>{t("dh_patchWeightDesc")}</p>
-                        <p className="muted">{t("dh_patchWeightNote")}</p>
-                    </div>
-
-                    <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => setPatchWeights([...DEFAULT_PATCH_WEIGHTS])}
-                    >
-                        {t("dh_resetPatchWeight")}
-                    </button>
-                </div>
-
-                <div className="role-filter-tabs" aria-label="Patch-Gewichtungs-Presets">
-                    {(Object.keys(PATCH_WEIGHT_PRESETS) as PatchWeightPresetKey[]).map((preset) => (
-                        <button
-                            key={preset}
-                            type="button"
-                            className="role-tab"
-                            onClick={() => applyPatchWeightPreset(preset)}
-                        >
-                            {t(PATCH_PRESET_LABELS[preset])}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="draft-weight-grid">
-                    {Array.from({ length: PATCH_WEIGHT_MAX_PATCHES }, (_, index) => renderPatchWeightSlider(index))}
-                </div>
-            </div>
-
-            <div className="recommendation-section draft-weight-panel">
-                <div className="champion-picker-header">
-                    <div>
-                        <h3>{t("dh_weightTitle")}</h3>
-                        <p>{t("dh_weightDesc")}</p>
-                    </div>
-
-                    <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => setWeights(DEFAULT_WEIGHTS)}
-                    >
-                        {t("dh_resetWeight")}
-                    </button>
-                </div>
-
-                <div className="role-filter-tabs" aria-label="Wichtungs-Presets">
-                    {(Object.keys(WEIGHT_PRESETS) as DraftAiPresetKey[]).map((preset) => (
-                        <button
-                            key={preset}
-                            type="button"
-                            className="role-tab"
-                            onClick={() => applyWeightPreset(preset)}
-                        >
-                            {WEIGHT_PRESETS[preset].label}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="draft-weight-grid">
-                    {(Object.keys(DEFAULT_WEIGHTS) as WeightKey[]).map((key) => renderWeightSlider(key))}
-                </div>
-            </div>
+            <ScoreWeightPanel
+                weights={weights}
+                onUpdateWeight={updateWeight}
+                onApplyPreset={applyWeightPreset}
+                onReset={() => setWeights(DEFAULT_WEIGHTS)}
+            />
 
             <div className="recommendation-section">
                 <div className="champion-picker-header">
@@ -2134,59 +1690,33 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 </div>
             </div>
 
-            <div className="draft-layout">
-                {renderSidePanel("blue")}
-
-                <div className="champion-picker-panel draft-center-panel">
-                    <div className="champion-picker-header">
-                        <div>
-                            <h3>{t("dh_poolTitle")}</h3>
-                            <p>
-                                {activeDraftSlot
-                                    ? activeDraftSlot.type === "ban"
-                                        ? `${t("dh_selectBanFor")} ${sideLabel(activeDraftSlot.visualSide)}${t("dh_selectBanSuffix") ? ` ${t("dh_selectBanSuffix")}` : "."}`
-                                        : `${t("dh_selectPickFor")} ${sideLabel(activeDraftSlot.visualSide)} ${t("dh_selectPickSlot")} ${activeDraftSlot.index + 1}${t("dh_selectPickSuffix") ? ` ${t("dh_selectPickSuffix")}` : "."}`
-                                    : t("dh_selectSlotFirst")}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="role-filter-tabs">
-                        <button
-                            type="button"
-                            className={["role-tab", poolRoleFilter === null ? "role-tab-active" : ""]
-                                .filter(Boolean)
-                                .join(" ")}
-                            onClick={() => setPoolRoleFilter(null)}
-                        >
-                            {t("filter_all")}
-                        </button>
-                        {ROLES.map((role) => (
-                            <button
-                                key={role}
-                                type="button"
-                                className={["role-tab", poolRoleFilter === role ? "role-tab-active" : ""]
-                                    .filter(Boolean)
-                                    .join(" ")}
-                                onClick={() => setPoolRoleFilter(role)}
-                            >
-                                {ROLE_LABELS[role]}
-                            </button>
-                        ))}
-                    </div>
-
-                    <ChampionPortraitGrid
-                        champions={championPool}
-                        selectedChampions={selectedChampionSet}
-                        bannedChampions={bannedChampionSet}
-                        searchQuery={championSearch}
-                        onSearchQueryChange={setChampionSearch}
-                        onSelectChampion={handleChampionGridSelect}
-                    />
-                </div>
-
-                {renderSidePanel("red")}
-            </div>
+            <DraftBoard
+                bluePickSlots={bluePickSlots}
+                blueBans={blueBans}
+                redPickSlots={redPickSlots}
+                redBans={redBans}
+                activeDraftSlot={activeDraftSlot}
+                flexChampionCatalog={flexChampionCatalog}
+                championPool={championPool}
+                selectedChampionSet={selectedChampionSet}
+                bannedChampionSet={bannedChampionSet}
+                championSearch={championSearch}
+                poolRoleFilter={poolRoleFilter}
+                onActivateBanSlot={(visualSide, index) => {
+                    setActiveDraftSlot({ type: "ban", visualSide, index })
+                    setRecommendationSide(visualSide)
+                }}
+                onActivatePickSlot={(visualSide, index) => {
+                    setActiveDraftSlot({ type: "pick", visualSide, index })
+                    setRecommendationSide(visualSide)
+                }}
+                onClearBan={clearBan}
+                onClearPick={clearPick}
+                onUpdatePickRole={updatePickRole}
+                onSetPoolRoleFilter={setPoolRoleFilter}
+                onChampionSearchChange={setChampionSearch}
+                onSelectChampion={handleChampionGridSelect}
+            />
 
             <div className="recommendation-grid">
                 {recommendationsByRole.map(({ role, recommendations }) => (
