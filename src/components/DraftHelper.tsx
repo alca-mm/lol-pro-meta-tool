@@ -8,6 +8,8 @@ import {
 import { ALL_CHAMPIONS } from "../analysis/championCatalog"
 import { ChampionPortraitGrid } from "./ChampionPortraitGrid"
 import { championIconUrl } from "../analysis/championAssets"
+import { useTranslation } from "../i18n/LanguageContext"
+import type { TranslationKey } from "../i18n/types"
 
 interface DraftHelperProps {
     matches: Match[]
@@ -271,14 +273,7 @@ const WEIGHT_PRESETS: Record<DraftAiPresetKey, { label: string; weights: WeightC
     },
 }
 
-const WEIGHT_LABELS: Record<WeightKey, string> = {
-    draftPriority: "Champion-Priorität",
-    roleStats: "Rollenstärke",
-    synergy: "Synergie",
-    matchup: "Matchup / Counter",
-    winRate: "Winrate",
-    sampleSize: "Sample Size",
-}
+// WEIGHT_LABELS is defined inside the component to support i18n
 
 const FRONTLINE_CHAMPIONS = new Set([
     "aatrox",
@@ -1039,18 +1034,18 @@ function createMetric(label: string, value: number, max: number, description: st
     }
 }
 
-function damageProfileLabel(profile: TeamCompReport["damageProfile"]): string {
+function damageProfileLabel(profile: TeamCompReport["damageProfile"], t: (key: TranslationKey) => string): string {
     const knownDamage = profile.ap + profile.ad + profile.mixed
 
-    if (knownDamage === 0) return "Unklar"
-    if (profile.ad >= knownDamage - 1 && profile.ap <= 1) return "AD-lastig"
-    if (profile.ap >= knownDamage - 1 && profile.ad <= 1) return "AP-lastig"
-    if (profile.mixed > 0 || (profile.ap >= 1 && profile.ad >= 1)) return "Gemischt"
+    if (knownDamage === 0) return t("comp_damage_unknown")
+    if (profile.ad >= knownDamage - 1 && profile.ap <= 1) return t("comp_damage_adHeavy")
+    if (profile.ap >= knownDamage - 1 && profile.ad <= 1) return t("comp_damage_apHeavy")
+    if (profile.mixed > 0 || (profile.ap >= 1 && profile.ad >= 1)) return t("comp_damage_mixed")
 
-    return "Unklar"
+    return t("comp_damage_unknown")
 }
 
-function generateTeamCompReport(slots: PickSlot[]): TeamCompReport {
+function generateTeamCompReport(slots: PickSlot[], t: (key: TranslationKey) => string): TeamCompReport {
     const warnings: TeamCompWarning[] = []
     const strengths: string[] = []
     const assignedCounts = getAssignedRoleCounts(slots)
@@ -1087,7 +1082,7 @@ function generateTeamCompReport(slots: PickSlot[]): TeamCompReport {
         },
         { ap: 0, ad: 0, mixed: 0, unknown: 0, label: "Unklar" },
     )
-    damageProfile.label = damageProfileLabel(damageProfile)
+    damageProfile.label = damageProfileLabel(damageProfile, t)
 
     const identityScores = [
         { label: "Front-to-back", value: frontlineCount * 2 + peelCount + scalingCount },
@@ -1098,103 +1093,103 @@ function generateTeamCompReport(slots: PickSlot[]): TeamCompReport {
         { label: "Splitpush", value: splitpushCount * 2 + pickCount },
     ].sort((a, b) => b.value - a.value)
 
-    const identity = identityScores[0]?.value > 0 ? identityScores[0].label : "Hybrid / offen"
+    const identity = identityScores[0]?.value > 0 ? identityScores[0].label : t("comp_identity_hybrid")
     const primaryTags = identityScores
         .filter((entry) => entry.value > 0)
         .slice(0, 3)
         .map((entry) => entry.label)
 
     const metrics: TeamCompMetric[] = [
-        createMetric("Frontline", frontlineCount, 2, "Wie zuverlässig kann die Comp Raum nehmen und Schaden tanken?"),
-        createMetric("Engage", engageCount, 2, "Wie gut kann die Comp Kämpfe starten?"),
-        createMetric("Peel", peelCount, 2, "Wie gut schützt die Comp Carries?"),
-        createMetric("Poke", pokeCount, 2, "Wie gut kann die Comp vor Objectives chippen?"),
-        createMetric("Pick", pickCount, 2, "Wie gut kann die Comp einzelne Ziele bestrafen?"),
-        createMetric("Scaling", scalingCount, 2, "Wie gut wird die Comp in späteren Teamfights?"),
+        createMetric("Frontline", frontlineCount, 2, t("comp_metricDesc_frontline")),
+        createMetric("Engage", engageCount, 2, t("comp_metricDesc_engage")),
+        createMetric("Peel", peelCount, 2, t("comp_metricDesc_peel")),
+        createMetric("Poke", pokeCount, 2, t("comp_metricDesc_poke")),
+        createMetric("Pick", pickCount, 2, t("comp_metricDesc_pick")),
+        createMetric("Scaling", scalingCount, 2, t("comp_metricDesc_scaling")),
     ]
 
     if (missingRoles.length > 0) {
         warnings.push({
             severity: "info",
-            title: "Rollen noch offen",
-            description: `Noch nicht gesetzt: ${missingRoles.map((role) => ROLE_LABELS[role]).join(", ")}.`,
+            title: t("comp_warnTitle_rolesOpen"),
+            description: `${t("comp_warnDesc_rolesOpen")} ${missingRoles.map((role) => ROLE_LABELS[role]).join(", ")}.`,
         })
     }
 
     if (duplicatedRoles.length > 0) {
         warnings.push({
             severity: "warning",
-            title: "Doppelte Rollenzuweisung",
-            description: `Prüfe: ${duplicatedRoles.map((role) => ROLE_LABELS[role]).join(", ")}.`,
+            title: t("comp_warnTitle_dupRole"),
+            description: `${t("comp_warnDesc_dupRole")} ${duplicatedRoles.map((role) => ROLE_LABELS[role]).join(", ")}.`,
         })
     }
 
     if (pickedChampionCount >= 3 && frontlineCount === 0) {
         warnings.push({
             severity: "warning",
-            title: "Wenig Frontline",
-            description: "Die Comp hat noch keinen klaren Champion, der zuverlässig Raum nehmen kann.",
+            title: t("comp_warnTitle_lowFrontline"),
+            description: t("comp_warnDesc_lowFrontline"),
         })
     }
 
     if (pickedChampionCount >= 3 && engageCount === 0 && pickCount === 0) {
         warnings.push({
             severity: "warning",
-            title: "Wenig Start-Tools",
-            description: "Es fehlt Engage oder Pick-Potential, um Kämpfe kontrolliert zu eröffnen.",
+            title: t("comp_warnTitle_lowEngage"),
+            description: t("comp_warnDesc_lowEngage"),
         })
     }
 
-    if (pickedChampionCount >= 4 && damageProfile.label === "AD-lastig") {
+    if (pickedChampionCount >= 4 && damageProfile.label === t("comp_damage_adHeavy")) {
         warnings.push({
             severity: "info",
-            title: "AD-lastig",
-            description: "Gegner kann leichter Armor stacken. Prüfe AP/Magic-Damage-Ergänzung.",
+            title: t("comp_warnTitle_adHeavy"),
+            description: t("comp_warnDesc_adHeavy"),
         })
     }
 
-    if (pickedChampionCount >= 4 && damageProfile.label === "AP-lastig") {
+    if (pickedChampionCount >= 4 && damageProfile.label === t("comp_damage_apHeavy")) {
         warnings.push({
             severity: "info",
-            title: "AP-lastig",
-            description: "Gegner kann leichter Magic Resist stacken. Prüfe AD-Damage-Ergänzung.",
+            title: t("comp_warnTitle_apHeavy"),
+            description: t("comp_warnDesc_apHeavy"),
         })
     }
 
     if (pickedChampionCount >= 4 && scalingCount === 0) {
         warnings.push({
             severity: "info",
-            title: "Wenig Scaling",
-            description: "Die Comp wirkt eher early/mid-game fokussiert. Snowball-Plan beachten.",
+            title: t("comp_warnTitle_lowScaling"),
+            description: t("comp_warnDesc_lowScaling"),
         })
     }
 
     if (frontlineCount > 0 && scalingCount > 0) {
-        strengths.push("Front-to-back Kern vorhanden: Frontline plus Scaling-Damage.")
+        strengths.push(t("comp_strength_frontline"))
     }
 
     if (engageCount > 0 && diveCount > 0) {
-        strengths.push("Gute Fight-Eröffnung: Engage- und Dive-Tools vorhanden.")
+        strengths.push(t("comp_strength_engage"))
     }
 
     if (pokeCount >= 2) {
-        strengths.push("Starke Objective-Vorbereitung: mehrere Poke-Quellen.")
+        strengths.push(t("comp_strength_poke"))
     }
 
     if (pickCount >= 2) {
-        strengths.push("Hohes Catch-Potential: mehrere Pick-Tools.")
+        strengths.push(t("comp_strength_pick"))
     }
 
     if (peelCount > 0 && scalingCount > 0) {
-        strengths.push("Carry-Schutz erkennbar: Peel unterstützt Scaling-Champions.")
+        strengths.push(t("comp_strength_peel"))
     }
 
-    if (damageProfile.label === "Gemischt") {
-        strengths.push("Gemischtes Damage-Profil erschwert defensive Itemisierung.")
+    if (damageProfile.label === t("comp_damage_mixed")) {
+        strengths.push(t("comp_strength_mixed"))
     }
 
     if (assignedRoleCount === 5 && strengths.length === 0 && warnings.length <= 1) {
-        strengths.push("Keine großen strukturellen Schwächen erkannt.")
+        strengths.push(t("comp_strength_clean"))
     }
 
     return {
@@ -1214,7 +1209,7 @@ function generateBanRecommendations(input: {
     bannedChampionSet: Set<string>
     flexChampionCatalog: Map<string, FlexChampionInfo>
     limit: number
-}): BanRecommendation[] {
+}, t: (key: TranslationKey) => string): BanRecommendation[] {
     const grouped = new Map<string, { championName: string; entries: DraftRecommendation[] }>()
     const opponentAssignedRoles = new Set(
         input.opponentSlots
@@ -1249,11 +1244,14 @@ function generateBanRecommendations(input: {
             const score = roleEntry.totalScore + flexBonus + openRoleBonus + sampleBonus
             const reasonParts: string[] = []
 
-            if (hitsOpenRole) reasonParts.push(`blockt offene ${ROLE_LABELS[roleEntry.role]}-Option`)
+            if (hitsOpenRole) reasonParts.push(`${t("ban_blocksOpenRole")} ${ROLE_LABELS[roleEntry.role]}`)
             if (flexRoles.length >= 2) reasonParts.push(`Flex: ${flexRoles.map((role) => ROLE_LABELS[role]).join("/")}`)
-            if (roleEntry.matchupScore > 0.08) reasonParts.push("starker Counter-Wert")
-            if (roleEntry.synergyScore > 0.08) reasonParts.push("starke Synergy-Option")
-            if (reasonParts.length === 0) reasonParts.push(roleEntry.reasons[0] ?? "hoher gegnerischer Draft-Wert")
+            if (roleEntry.matchupScore > 0.08) reasonParts.push(t("ban_strongCounter"))
+            if (roleEntry.synergyScore > 0.08) reasonParts.push(t("ban_strongSynergy"))
+            if (reasonParts.length === 0) {
+                const fallbackKey = (roleEntry.reasons[0] ?? "ban_highDraftValue") as TranslationKey
+                reasonParts.push(t(fallbackKey))
+            }
 
             return {
                 championName: group.championName,
@@ -1467,6 +1465,24 @@ function formatSingleGameDraftForExport(game: CompletedGameDraft, labelSuffix = 
 }
 
 export function DraftHelper({ matches }: DraftHelperProps) {
+    const { t, lang } = useTranslation()
+
+    const WEIGHT_LABELS: Record<WeightKey, string> = {
+        draftPriority: t("dh_wLabel_draftPriority"),
+        roleStats: t("dh_wLabel_roleStats"),
+        synergy: t("dh_wLabel_synergy"),
+        matchup: t("dh_wLabel_matchup"),
+        winRate: t("dh_wLabel_winRate"),
+        sampleSize: t("dh_wLabel_sampleSize"),
+    }
+
+    const PATCH_PRESET_LABELS: Record<PatchWeightPresetKey, TranslationKey> = {
+        balanced: "dh_pPreset_balanced",
+        currentFocused: "dh_pPreset_currentFocused",
+        stable: "dh_pPreset_stable",
+        currentOnly: "dh_pPreset_currentOnly",
+    }
+
     const [bluePickSlots, setBluePickSlots] = useState<PickSlot[]>(createEmptyPickSlots)
     const [redPickSlots, setRedPickSlots] = useState<PickSlot[]>(createEmptyPickSlots)
     const [blueBans, setBlueBans] = useState<string[]>(["", "", "", "", ""])
@@ -1624,8 +1640,8 @@ export function DraftHelper({ matches }: DraftHelperProps) {
     const draftEdgeDelta = activeDraftEdge.score - enemyDraftEdge.score
 
     const activeTeamCompReport = useMemo(
-        () => generateTeamCompReport(activeSidePickSlots),
-        [activeSidePickSlots],
+        () => generateTeamCompReport(activeSidePickSlots, t),
+        [activeSidePickSlots, t],
     )
 
     const opponentRecommendations = recommendationSide === "blue" ? redWeightedRecommendations : blueWeightedRecommendations
@@ -1639,7 +1655,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 bannedChampionSet,
                 flexChampionCatalog,
                 limit: 8,
-            }),
+            }, t),
         [
             opponentRecommendations,
             recommendationSide,
@@ -1648,6 +1664,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
             selectedChampionSet,
             bannedChampionSet,
             flexChampionCatalog,
+            t,
         ],
     )
 
@@ -1813,7 +1830,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
 
         const body = gamesToExport.length > 0
             ? gamesToExport.map((game) => formatSingleGameDraftForExport(game, game.gameNumber === seriesGameNumber ? " (current)" : ""))
-            : ["Noch kein Draft erfasst."]
+            : [t("dh_noDraftYet")]
 
         return [...header, "", ...body].join("\n\n")
     }
@@ -1823,9 +1840,9 @@ export function DraftHelper({ matches }: DraftHelperProps) {
 
         try {
             await navigator.clipboard.writeText(exportText)
-            setCopyStatus("Draft kopiert")
+            setCopyStatus(t("dh_draftCopied"))
         } catch {
-            setCopyStatus("Kopieren nicht möglich")
+            setCopyStatus(t("dh_copyFailed"))
         }
 
         window.setTimeout(() => setCopyStatus(""), 1800)
@@ -2047,8 +2064,8 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         type="button"
                         className="draft-mini-clear"
                         onClick={() => clearBan(visualSide, index)}
-                        aria-label={`${championName} aus Ban ${index + 1} entfernen`}
-                        title="Ban entfernen"
+                        aria-label={`${t("dh_removeBan")} ${championName}`}
+                        title={t("dh_removeBan")}
                     >
                         ×
                     </button>
@@ -2096,7 +2113,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     </span>
 
                     <span className="draft-pick-name">
-                        {championName || "Pick auswählen"}
+                        {championName || t("dh_selectPickPlaceholder")}
                         {championName ? (
                             <span className="muted" style={{ display: "block", fontWeight: 600 }}>
                                 {pickSlotRoleLabel(slot)}
@@ -2116,7 +2133,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                                 event.target.value ? (event.target.value as Role) : null,
                             )
                         }
-                        title="Rolle zuweisen"
+                        title={t("dh_assignRoleTitle")}
                         style={{
                             width: "100%",
                             marginTop: "0.3rem",
@@ -2142,8 +2159,8 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         type="button"
                         className="draft-mini-clear"
                         onClick={() => clearPick(visualSide, index)}
-                        aria-label={`${championName} aus Pick ${index + 1} entfernen`}
-                        title="Pick entfernen"
+                        aria-label={`${t("dh_removePick")} ${championName}`}
+                        title={t("dh_removePick")}
                     >
                         ×
                     </button>
@@ -2176,7 +2193,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         {filledPickCount(pickSlots)}/5 Picks · {filledBanCount(bans)}/5 Bans
                     </p>
                     <p className="muted">
-                        Zugewiesene Rollen: {Object.keys(slotsToDraftPicks(pickSlots)).length}/5
+                        {t("dh_assignedRoles")} {Object.keys(slotsToDraftPicks(pickSlots)).length}/5
                     </p>
                 </div>
             </div>
@@ -2194,7 +2211,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 className="secondary-button"
                 onClick={() => handleRecommendationPick(entry)}
                 disabled={disabled}
-                title={disabled ? `${ROLE_LABELS[entry.role]} ist bereits besetzt` : "Direkt eintragen"}
+                title={disabled ? `${ROLE_LABELS[entry.role]}: ${t("dh_roleOccupied")}` : t("dh_applyPick")}
                 style={{
                     display: "grid",
                     gridTemplateColumns: "24px minmax(0, 1fr)",
@@ -2245,7 +2262,11 @@ export function DraftHelper({ matches }: DraftHelperProps) {
     }
 
     function renderPatchWeightSlider(index: number) {
-        const label = index === 0 ? "Aktuellster Patch" : `${index} Patch${index === 1 ? "" : "es"} alt`
+        const label = index === 0
+            ? t("dh_currentPatch")
+            : lang === "de"
+                ? `${index} Patch${index === 1 ? "" : "es"} alt`
+                : `${index} ${index === 1 ? t("dh_patchOld1") : t("dh_patchOldN")}`
         const patch = recentPatchData.summaries[index]?.patch ?? "—"
         const rawMatches = recentPatchData.summaries[index]?.rawMatches ?? 0
 
@@ -2256,7 +2277,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     <strong>{patchWeights[index] ?? 0}%</strong>
                 </span>
                 <span className="muted">
-                    {patch} · {rawMatches.toLocaleString("de-DE")} Games
+                    {patch} · {rawMatches.toLocaleString("de-DE")} {t("dh_games")}
                 </span>
                 <input
                     type="range"
@@ -2295,21 +2316,21 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 <div>
                     <h2>Draft Cockpit</h2>
                     <p>
-                        Empfehlungen nutzen eine gewichtete Patch-Auswahl: {formatPatchWindowSummary(recentPatchData)}
+                        {t("dh_patchInfo")} {formatPatchWindowSummary(recentPatchData)}
                     </p>
                     <p className="muted">
-                        Roh-Sample: {recentPatchData.rawSample.toLocaleString("de-DE")} Games · gewichtetes Sample: {recentPatchData.weightedSample.toLocaleString("de-DE")} Games
+                        {t("dh_rawSample")} {recentPatchData.rawSample.toLocaleString("de-DE")} {t("dh_games")} · {t("dh_weightedSample")} {recentPatchData.weightedSample.toLocaleString("de-DE")} {t("dh_games")}
                     </p>
                 </div>
 
                 <button type="button" className="secondary-button" onClick={resetDraft}>
-                    Draft zurücksetzen
+                    {t("dh_resetDraft")}
                 </button>
             </div>
 
             <div className="draft-controls draft-controls-compact">
                 <label>
-                    Mindest-Picks pro Rolle
+                    {t("dh_minPicksLabel")}
                     <input
                         type="number"
                         min={1}
@@ -2325,17 +2346,17 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         checked={excludeBans}
                         onChange={(event) => setExcludeBans(event.target.checked)}
                     />
-                    Gebannte Champions aus Empfehlungen ausschließen
+                    {t("dh_excludeBans")}
                 </label>
             </div>
 
             <div className="recommendation-section series-panel">
                 <div className="champion-picker-header">
                     <div>
-                        <h3>Series / Fearless Draft</h3>
+                        <h3>{t("dh_seriesTitle")}</h3>
                         <p className="muted">
-                            Game {seriesGameNumber}/{MAX_SERIES_GAMES} · gespeicherte Games: {seriesHistory.length}
-                            {fearlessEnabled ? ` · Fearless gesperrt: ${fearlessChampionSet.size}` : ""}
+                            Game {seriesGameNumber}/{MAX_SERIES_GAMES} · {t("dh_savedGames")} {seriesHistory.length}
+                            {fearlessEnabled ? ` · ${t("dh_fearlessLocked")} ${fearlessChampionSet.size}` : ""}
                         </p>
                     </div>
 
@@ -2345,7 +2366,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                             className={["role-tab", fearlessEnabled ? "role-tab-active" : ""].filter(Boolean).join(" ")}
                             onClick={() => setFearlessEnabled((current) => !current)}
                         >
-                            Fearless {fearlessEnabled ? "ON" : "OFF"}
+                            {fearlessEnabled ? t("dh_fearlessOn") : t("dh_fearlessOff")}
                         </button>
 
                         <button
@@ -2354,7 +2375,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                             onClick={saveCurrentGameToSeries}
                             disabled={!currentGameHasContent}
                         >
-                            Game speichern
+                            {t("dh_saveGame")}
                         </button>
 
                         <button
@@ -2363,15 +2384,15 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                             onClick={goToNextSeriesGame}
                             disabled={seriesGameNumber >= MAX_SERIES_GAMES}
                         >
-                            Nächstes Game
+                            {t("dh_nextGame")}
                         </button>
 
                         <button type="button" className="role-tab" onClick={copyDraftToClipboard}>
-                            Draft kopieren
+                            {t("dh_copyDraft")}
                         </button>
 
                         <button type="button" className="role-tab" onClick={resetSeries}>
-                            Series reset
+                            {t("dh_resetSeries")}
                         </button>
                     </div>
                 </div>
@@ -2403,7 +2424,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
 
                 {fearlessEnabled && fearlessChampionSet.size > 0 ? (
                     <p className="muted">
-                        Fearless Pool: {[...fearlessChampionSet].slice(0, 18).join(", ")}
+                        {t("dh_fearlessPool")} {[...fearlessChampionSet].slice(0, 18).join(", ")}
                         {fearlessChampionSet.size > 18 ? " …" : ""}
                     </p>
                 ) : null}
@@ -2411,16 +2432,16 @@ export function DraftHelper({ matches }: DraftHelperProps) {
 
             <div className="role-filter-tabs" aria-label="Draft-Flow">
                 <span className="muted" style={{ alignSelf: "center", marginRight: "0.35rem" }}>
-                    Draft-Flow:
+                    {t("dh_draftFlow")}
                 </span>
 
                 {draftFlowEnabled ? (
                     <button type="button" className="role-tab role-tab-active" onClick={deactivateDraftFlow}>
-                        Aktiv
+                        {t("dh_flowActive")}
                     </button>
                 ) : (
                     <button type="button" className="role-tab" onClick={activateDraftFlow}>
-                        Aktivieren
+                        {t("dh_flowEnable")}
                     </button>
                 )}
 
@@ -2431,19 +2452,19 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     disabled={history.length === 0}
                     style={{ opacity: history.length === 0 ? 0.5 : 1 }}
                 >
-                    Einen Schritt zurück
+                    {t("dh_stepBack")}
                 </button>
 
                 <span className="muted" style={{ alignSelf: "center" }}>
                     {draftFlowEnabled
-                        ? `Jetzt dran: ${flowLabelForSlot(activeDraftSlot, flowStepIndex)}`
-                        : "Manueller Modus"}
+                        ? `${t("dh_flowUpNext")} ${flowLabelForSlot(activeDraftSlot, flowStepIndex)}`
+                        : t("dh_manualMode")}
                 </span>
             </div>
 
             <div className="role-filter-tabs" aria-label="Empfehlungsseite">
                 <span className="muted" style={{ alignSelf: "center", marginRight: "0.35rem" }}>
-                    Live-Empfehlungen für:
+                    {t("dh_liveRecsFor")}
                 </span>
 
                 <button
@@ -2476,13 +2497,9 @@ export function DraftHelper({ matches }: DraftHelperProps) {
             <div className="recommendation-section draft-weight-panel">
                 <div className="champion-picker-header">
                     <div>
-                        <h3>Patch-Gewichtung</h3>
-                        <p>
-                            Steuert, wie stark neue und ältere Patches in Draft-Empfehlungen, Flex-Erkennung, Ban-AI und Draft Edge zählen.
-                        </p>
-                        <p className="muted">
-                            Ein neuer Patch bleibt wichtig, aber ältere Patches können kleine Samples stabilisieren.
-                        </p>
+                        <h3>{t("dh_patchWeightTitle")}</h3>
+                        <p>{t("dh_patchWeightDesc")}</p>
+                        <p className="muted">{t("dh_patchWeightNote")}</p>
                     </div>
 
                     <button
@@ -2490,7 +2507,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         className="secondary-button"
                         onClick={() => setPatchWeights([...DEFAULT_PATCH_WEIGHTS])}
                     >
-                        Patch-Gewichtung zurücksetzen
+                        {t("dh_resetPatchWeight")}
                     </button>
                 </div>
 
@@ -2502,7 +2519,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                             className="role-tab"
                             onClick={() => applyPatchWeightPreset(preset)}
                         >
-                            {PATCH_WEIGHT_PRESETS[preset].label}
+                            {t(PATCH_PRESET_LABELS[preset])}
                         </button>
                     ))}
                 </div>
@@ -2515,12 +2532,8 @@ export function DraftHelper({ matches }: DraftHelperProps) {
             <div className="recommendation-section draft-weight-panel">
                 <div className="champion-picker-header">
                     <div>
-                        <h3>Wichtung</h3>
-                        <p>
-                            Steuert, wie die Empfehlungen sortiert werden. Das ist keine Neural-Network-Kopie wie
-                            LoLDraftAI, aber es gibt dir dieselbe Idee: der ganze Draft wird nach Priorität, Synergie,
-                            Matchups und Rollenstärke neu bewertet.
-                        </p>
+                        <h3>{t("dh_weightTitle")}</h3>
+                        <p>{t("dh_weightDesc")}</p>
                     </div>
 
                     <button
@@ -2528,7 +2541,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         className="secondary-button"
                         onClick={() => setWeights(DEFAULT_WEIGHTS)}
                     >
-                        Wichtung zurücksetzen
+                        {t("dh_resetWeight")}
                     </button>
                 </div>
 
@@ -2554,9 +2567,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 <div className="champion-picker-header">
                     <div>
                         <h3>Draft Edge</h3>
-                        <p className="muted">
-                            Heuristische Draft-Bewertung auf Basis deiner Pro-Play-Daten. Nicht als echte Winrate kalibriert.
-                        </p>
+                        <p className="muted">{t("dh_edgeDesc")}</p>
                     </div>
                     <strong className={draftEdgeDelta >= 0 ? "score-pos" : "score-neg"}>
                         {sideLabel(recommendationSide)} {draftEdgeDelta >= 0 ? "+" : ""}
@@ -2579,13 +2590,13 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{activeDraftEdge.assignedRoles}/5</span>
-                        <span className="stat-label">Rollen gesetzt</span>
+                        <span className="stat-label">{t("dh_rolesSet")}</span>
                     </div>
                 </div>
 
                 <div className="recommendation-grid" style={{ marginTop: "0.85rem" }}>
                     <div className="recommendation-card">
-                        <h3>Stärken / Datenpunkte</h3>
+                        <h3>{t("dh_strengthsData")}</h3>
                         {activeDraftEdge.notes.map((note) => (
                             <p key={note} className="muted">
                                 {note}
@@ -2594,10 +2605,11 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     </div>
                     <div className="recommendation-card">
                         <h3>Team Identity</h3>
+
                         <p className="draft-comp-identity">{activeTeamCompReport.identity}</p>
                         <div className="draft-comp-pills">
                             {activeTeamCompReport.primaryTags.length === 0 ? (
-                                <span className="draft-comp-pill">Noch offen</span>
+                                <span className="draft-comp-pill">{t("dh_tagsOpen")}</span>
                             ) : (
                                 activeTeamCompReport.primaryTags.map((tag) => (
                                     <span key={tag} className="draft-comp-pill">
@@ -2613,7 +2625,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     <div className="recommendation-card">
                         <h3>Comp Checks</h3>
                         {activeTeamCompReport.warnings.length === 0 ? (
-                            <p className="muted">Keine auffälligen Warnungen gefunden.</p>
+                            <p className="muted">{t("dh_noWarnings")}</p>
                         ) : (
                             activeTeamCompReport.warnings.map((warning) => (
                                 <p key={`${warning.title}-${warning.description}`} className="muted">
@@ -2634,7 +2646,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         )}
                     </div>
                     <div className="recommendation-card draft-comp-wide">
-                        <h3>Comp Profil</h3>
+                        <h3>{t("dh_compProfile")}</h3>
                         <div className="draft-comp-metric-grid">
                             {activeTeamCompReport.metrics.map((metric) => (
                                 <div key={metric.label} className="draft-comp-metric" title={metric.description}>
@@ -2653,9 +2665,9 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         </div>
                     </div>
                     <div className="recommendation-card draft-comp-wide">
-                        <h3>Stärken</h3>
+                        <h3>{t("dh_compStrengths")}</h3>
                         {activeTeamCompReport.strengths.length === 0 ? (
-                            <p className="muted">Noch keine klare Comp-Stärke erkannt.</p>
+                            <p className="muted">{t("dh_noStrengths")}</p>
                         ) : (
                             activeTeamCompReport.strengths.map((strength) => (
                                 <p key={strength} className="muted">
@@ -2670,17 +2682,15 @@ export function DraftHelper({ matches }: DraftHelperProps) {
             <div className="recommendation-section">
                 <div className="champion-picker-header">
                     <div>
-                        <h3>Nächste Entscheidung</h3>
+                        <h3>{t("dh_nextDecision")}</h3>
                         <p>
                             {draftFlowEnabled
-                                ? `Flow: ${flowLabelForSlot(activeDraftSlot, flowStepIndex)}`
+                                ? `${t("dh_flowLabel")} ${flowLabelForSlot(activeDraftSlot, flowStepIndex)}`
                                 : activeDraftSlot
-                                    ? `Aktiver Slot: ${describeActiveSlot(activeDraftSlot)}`
-                                    : `${sideLabel(recommendationSide)} · wähle einen Pick- oder Ban-Slot.`}
+                                    ? `${t("dh_activeSlot")} ${describeActiveSlot(activeDraftSlot)}`
+                                    : `${sideLabel(recommendationSide)} ${t("dh_selectSlotHint")}`}
                         </p>
-                        <p className="muted">
-                            Picks sind jetzt Champion-Priorität zuerst. Rolle danach über das Dropdown setzen.
-                        </p>
+                        <p className="muted">{t("dh_picksNote")}</p>
                     </div>
 
                     {heroRecommendation ? (
@@ -2698,11 +2708,11 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 <div className="dashboard-stats">
                     <div className="stat-card">
                         <span className="stat-value">{filledPickCount(activeSidePickSlots)}/5</span>
-                        <span className="stat-label">Eigene Picks</span>
+                        <span className="stat-label">{t("dh_ownPicks")}</span>
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{filledPickCount(enemySidePickSlots)}/5</span>
-                        <span className="stat-label">Gegner Picks</span>
+                        <span className="stat-label">{t("dh_enemyPicks")}</span>
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{allBans.length}/10</span>
@@ -2710,11 +2720,11 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{recommendations.length}</span>
-                        <span className="stat-label">Kandidaten</span>
+                        <span className="stat-label">{t("dh_candidates")}</span>
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{Object.keys(activeSidePicks).length}/5</span>
-                        <span className="stat-label">Rollen gesetzt</span>
+                        <span className="stat-label">{t("dh_rolesSet")}</span>
                     </div>
                 </div>
             </div>
@@ -2725,15 +2735,13 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 <div className="champion-picker-panel draft-center-panel">
                     <div className="champion-picker-header">
                         <div>
-                            <h3>Champion Pool</h3>
+                            <h3>{t("dh_poolTitle")}</h3>
                             <p>
                                 {activeDraftSlot
                                     ? activeDraftSlot.type === "ban"
-                                        ? `Champion als Ban für ${sideLabel(activeDraftSlot.visualSide)} wählen.`
-                                        : `Champion für ${sideLabel(activeDraftSlot.visualSide)} Pick ${
-                                            activeDraftSlot.index + 1
-                                        } wählen.`
-                                    : "Wähle zuerst einen Pick- oder Ban-Slot aus."}
+                                        ? `${t("dh_selectBanFor")} ${sideLabel(activeDraftSlot.visualSide)}${t("dh_selectBanSuffix") ? ` ${t("dh_selectBanSuffix")}` : "."}`
+                                        : `${t("dh_selectPickFor")} ${sideLabel(activeDraftSlot.visualSide)} ${t("dh_selectPickSlot")} ${activeDraftSlot.index + 1}${t("dh_selectPickSuffix") ? ` ${t("dh_selectPickSuffix")}` : "."}`
+                                    : t("dh_selectSlotFirst")}
                             </p>
                         </div>
                     </div>
@@ -2746,7 +2754,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                                 .join(" ")}
                             onClick={() => setPoolRoleFilter(null)}
                         >
-                            Alle
+                            {t("filter_all")}
                         </button>
                         {ROLES.map((role) => (
                             <button
@@ -2781,9 +2789,9 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         <h3>{ROLE_LABELS[role]}</h3>
 
                         {activeSidePicks[role] ? (
-                            <p className="muted">Rolle bereits besetzt: {activeSidePicks[role]}</p>
+                            <p className="muted">{t("dh_roleAlreadyFilled")} {activeSidePicks[role]}</p>
                         ) : recommendations.length === 0 ? (
-                            <p className="muted">Keine Kandidaten in der aktuellen gewichteten Patch-Auswahl.</p>
+                            <p className="muted">{t("dh_noCandidates")}</p>
                         ) : (
                             <div style={{ display: "grid", gap: "0.45rem" }}>
                                 {recommendations.map((entry, index) => renderRecommendationButton(entry, index))}
@@ -2796,15 +2804,13 @@ export function DraftHelper({ matches }: DraftHelperProps) {
             <div className="recommendation-section">
                 <div className="champion-picker-header">
                     <div>
-                        <h3>Best Bans gegen {sideLabel(oppositeSide(recommendationSide))}</h3>
-                        <p className="muted">
-                            Bans blocken die besten noch verfügbaren Empfehlungen für die gegnerische Seite.
-                        </p>
+                        <h3>{t("dh_bestBansTitle")} {sideLabel(oppositeSide(recommendationSide))}</h3>
+                        <p className="muted">{t("dh_banRecsDesc")}</p>
                     </div>
                 </div>
 
                 {banRecommendations.length === 0 ? (
-                    <p className="empty-state">Keine Ban-Empfehlungen verfügbar.</p>
+                    <p className="empty-state">{t("dh_noBanRecs")}</p>
                 ) : (
                     <div className="recommendation-grid">
                         {banRecommendations.map((entry, index) => (
@@ -2844,12 +2850,10 @@ export function DraftHelper({ matches }: DraftHelperProps) {
             </div>
 
             <div className="recommendation-section">
-                <h3>Beste nächste Picks für {sideLabel(recommendationSide)}</h3>
+                <h3>{t("dh_bestPicksTitle")} {sideLabel(recommendationSide)}</h3>
 
                 {topRecommendations.length === 0 ? (
-                    <p className="empty-state">
-                        Keine Empfehlungen gefunden. Reduziere die Mindest-Picks oder prüfe deine Filter.
-                    </p>
+                    <p className="empty-state">{t("dh_noRecs")}</p>
                 ) : (
                     <div className="table-scroll">
                         <table>
@@ -2865,7 +2869,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                                 <th>Picks</th>
                                 <th>Winrate</th>
                                 <th>Sample</th>
-                                <th>Gründe</th>
+                                <th>{t("dh_tableReasons")}</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -2881,7 +2885,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                                     <td>{entry.games}</td>
                                     <td>{formatPercent(entry.winRate)}</td>
                                     <td className="muted">{entry.sampleSizeLabel}</td>
-                                    <td>{entry.reasons.join(", ")}</td>
+                                    <td>{entry.reasons.map((r) => t(r as TranslationKey)).join(", ")}</td>
                                 </tr>
                             ))}
                             </tbody>

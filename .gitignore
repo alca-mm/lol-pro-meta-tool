@@ -8,6 +8,9 @@ dist/
 data/raw/
 data/reports/
 
+# generated app data (written by sync:data, served as static assets)
+public/data/
+
 # IDE
 .idea/
 *.iml

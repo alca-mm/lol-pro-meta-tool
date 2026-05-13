@@ -1,4 +1,5 @@
 import { useFilters } from "../context/FilterContext"
+import { useTranslation } from "../i18n/LanguageContext"
 import type { Match, Role } from "../domain/types"
 
 interface FiltersProps {
@@ -29,6 +30,7 @@ function comparePatchNewestFirst(a: string, b: string): number {
 
 export function Filters({ matches }: FiltersProps) {
   const { filters, setFilter, resetFilters } = useFilters()
+  const { t } = useTranslation()
 
   const patches = [...new Set(matches.map((m) => m.patch).filter(Boolean))].sort(comparePatchNewestFirst)
   const regions = [...new Set(matches.map((m) => m.region))].sort()
@@ -37,51 +39,51 @@ export function Filters({ matches }: FiltersProps) {
   return (
     <aside className="filters">
       <div className="filters-header">
-        <h2>Filter</h2>
-        <button onClick={resetFilters} className="btn-reset">Zurücksetzen</button>
+        <h2>{t("filter_title")}</h2>
+        <button onClick={resetFilters} className="btn-reset">{t("filter_reset")}</button>
       </div>
 
-      <label htmlFor="filter-patch">Patch</label>
+      <label htmlFor="filter-patch">{t("filter_patch")}</label>
       <select
         id="filter-patch"
         value={filters.patch ?? ""}
         onChange={(e) => setFilter("patch", e.target.value || null)}
       >
-        <option value="">Alle</option>
+        <option value="">{t("filter_all")}</option>
         {patches.map((p) => <option key={p} value={p}>{p}</option>)}
       </select>
 
-      <label htmlFor="filter-region">Region</label>
+      <label htmlFor="filter-region">{t("filter_region")}</label>
       <select
         id="filter-region"
         value={filters.region ?? ""}
         onChange={(e) => setFilter("region", e.target.value || null)}
       >
-        <option value="">Alle</option>
+        <option value="">{t("filter_all")}</option>
         {regions.map((r) => <option key={r} value={r}>{r}</option>)}
       </select>
 
-      <label htmlFor="filter-tournament">Turnier</label>
+      <label htmlFor="filter-tournament">{t("filter_tournament")}</label>
       <select
         id="filter-tournament"
         value={filters.tournament ?? ""}
         onChange={(e) => setFilter("tournament", e.target.value || null)}
       >
-        <option value="">Alle</option>
-        {tournaments.map((t) => <option key={t} value={t}>{t}</option>)}
+        <option value="">{t("filter_all")}</option>
+        {tournaments.map((tournament) => <option key={tournament} value={tournament}>{tournament}</option>)}
       </select>
 
-      <label htmlFor="filter-role">Rolle</label>
+      <label htmlFor="filter-role">{t("filter_role")}</label>
       <select
         id="filter-role"
         value={filters.role ?? ""}
         onChange={(e) => setFilter("role", (e.target.value as Role) || null)}
       >
-        <option value="">Alle</option>
+        <option value="">{t("filter_all")}</option>
         {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
       </select>
 
-      <label htmlFor="filter-minpicks">Min. Picks</label>
+      <label htmlFor="filter-minpicks">{t("filter_minPicks")}</label>
       <input
         id="filter-minpicks"
         type="number"

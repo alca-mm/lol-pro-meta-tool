@@ -167,29 +167,29 @@ function buildReasons(input: {
     const reasons: string[] = []
 
     if (input.draftPriorityScore >= 0.65) {
-        reasons.push("Hohe Meta-Priorität")
+        reasons.push("reason_highMetaPriority")
     }
 
     if (input.roleStatsScore >= 0.65) {
-        reasons.push("Starke rollenbezogene Daten")
+        reasons.push("reason_strongRoleData")
     }
 
     if (input.synergyScore >= 0.6) {
-        reasons.push("Gute Synergie mit eigener Comp")
+        reasons.push("reason_goodSynergy")
     }
 
     if (input.matchupScore >= 0.6) {
-        reasons.push("Gutes Matchup gegen Gegnerpick")
+        reasons.push("reason_goodMatchup")
     }
 
     if (input.games < 5) {
-        reasons.push("Sehr kleine Sample Size")
+        reasons.push("reason_verySmallSample")
     } else if (input.games < 10) {
-        reasons.push("Kleine Sample Size")
+        reasons.push("reason_smallSample")
     }
 
     if (reasons.length === 0) {
-        reasons.push("Solider datenbasierter Kandidat")
+        reasons.push("reason_solidCandidate")
     }
 
     return reasons

@@ -1,4 +1,5 @@
 import { championIconUrl } from "../analysis/championAssets"
+import { useTranslation } from "../i18n/LanguageContext"
 
 interface ChampionPortraitGridProps {
     champions: string[]
@@ -21,6 +22,7 @@ export function ChampionPortraitGrid({
                                          onSearchQueryChange,
                                          onSelectChampion,
                                      }: ChampionPortraitGridProps) {
+    const { t } = useTranslation()
     const normalizedSearch = searchQuery.trim().toLowerCase()
 
     const filteredChampions = champions.filter((champion) =>
@@ -33,7 +35,7 @@ export function ChampionPortraitGrid({
                 type="search"
                 className="champion-search"
                 value={searchQuery}
-                placeholder="Champion suchen..."
+                placeholder={t("pool_searchPlaceholder")}
                 onChange={(event) => onSearchQueryChange(event.target.value)}
             />
 
@@ -74,7 +76,7 @@ export function ChampionPortraitGrid({
             </div>
 
             {filteredChampions.length === 0 && (
-                <p className="empty-state">Kein Champion gefunden.</p>
+                <p className="empty-state">{t("pool_noChampion")}</p>
             )}
         </div>
     )

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useTranslation } from "../i18n/LanguageContext"
 import type { Match } from "../domain/types"
 
 type SyncReportInfo = {
@@ -7,7 +8,7 @@ type SyncReportInfo = {
     dateRange?: {
         from?: string | null
         to?: string | null
-    }
+    } | null
 }
 
 interface DataSourceInfoProps {
@@ -141,6 +142,7 @@ export function DataSourceInfo({
                                    matches,
                                    syncReport,
                                }: DataSourceInfoProps) {
+    const { t } = useTranslation()
     const [isVisible, setIsVisible] = useState(true)
 
     const dataSummary = useMemo(() => {
@@ -170,16 +172,14 @@ export function DataSourceInfo({
     if (isUsingSampleData) {
         return (
             <div className="datasource-badge sample">
-                <span>Sample-Daten aktiv</span>
-                <span className="datasource-meta">
-                    Keine importierten Oracle&apos;s-Elixir-Daten gefunden.
-                </span>
+                <span>{t("ds_sampleActive")}</span>
+                <span className="datasource-meta">{t("ds_sampleNote")}</span>
                 <button
                     type="button"
                     className="datasource-close"
                     onClick={() => setIsVisible(false)}
-                    aria-label="Datenhinweis ausblenden"
-                    title="Ausblenden"
+                    aria-label={t("ds_dismiss")}
+                    title={t("ds_dismiss")}
                 >
                     ×
                 </button>
@@ -189,36 +189,36 @@ export function DataSourceInfo({
 
     return (
         <div className="datasource-badge synced">
-            <span>Oracle&apos;s Elixir Daten geladen</span>
+            <span>{t("ds_synced")}</span>
 
             <span className="datasource-meta">
-                Letzter Sync: {formatDateTime(lastSyncDate)}
+                {t("ds_lastSync")} {formatDateTime(lastSyncDate)}
             </span>
 
             <span className="datasource-meta">
-                Matchdaten bis: {formatDate(latestMatchDate)}
+                {t("ds_dataUpTo")} {formatDate(latestMatchDate)}
             </span>
 
             <span className="datasource-meta">
-                Zeitraum: {formatDate(oldestMatchDate)} – {formatDate(latestMatchDate)}
+                {t("ds_dateRange")} {formatDate(oldestMatchDate)} – {formatDate(latestMatchDate)}
             </span>
 
             {dataSummary.latestPatch && (
                 <span className="datasource-meta">
-                    Neuester Patch: {dataSummary.latestPatch}
+                    {t("ds_latestPatch")} {dataSummary.latestPatch}
                 </span>
             )}
 
             <span className="datasource-meta">
-                Matches: {dataSummary.matchCount.toLocaleString("de-DE")}
+                {t("ds_matches")} {dataSummary.matchCount.toLocaleString("de-DE")}
             </span>
 
             <button
                 type="button"
                 className="datasource-close"
                 onClick={() => setIsVisible(false)}
-                aria-label="Datenhinweis ausblenden"
-                title="Ausblenden"
+                aria-label={t("ds_dismiss")}
+                title={t("ds_dismiss")}
             >
                 ×
             </button>

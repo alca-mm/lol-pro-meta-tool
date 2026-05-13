@@ -15,11 +15,11 @@ import { createEmptyReport, finishReport } from "../src/import/importReport.js"
 import type { SyncReport } from "../src/domain/types.js"
 
 const projectRoot = process.cwd()
-const outputFile = resolve(projectRoot, "src", "data", "importedMatches.json")
-const appReportFile = resolve(projectRoot, "src", "data", "latest-sync-report.json")
+const outputFile = resolve(projectRoot, "public", "data", "importedMatches.json")
+const appReportFile = resolve(projectRoot, "public", "data", "latest-sync-report.json")
 const rawDataDir = resolve(projectRoot, "data", "raw")
 const reportsDir = resolve(projectRoot, "data", "reports")
-const appDataDir = resolve(projectRoot, "src", "data")
+const appDataDir = resolve(projectRoot, "public", "data")
 
 mkdirSync(rawDataDir, { recursive: true })
 mkdirSync(reportsDir, { recursive: true })
