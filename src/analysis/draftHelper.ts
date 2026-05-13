@@ -83,16 +83,29 @@ function draftPriorityScore(stats: {
     )
 }
 
+// TARGET_SAMPLE = 25: at this many picks sampleConfidence reaches 1.0 (no dampening).
+// Below this threshold, extreme win rates are pulled toward neutral 0.5 proportionally.
+const TARGET_SAMPLE = 25
+
+// Exported so calculateWeightedScore in DraftHelper.tsx can apply the same penalty.
+export function sampleConfidence(games: number, targetGames = 50): number {
+    if (games <= 0) return 0
+    return Math.min(1, Math.log(1 + games) / Math.log(1 + targetGames))
+}
+
 function roleStatsScore(stats: {
     picks: number
     winRate: number | null
 }): number {
     if (stats.picks <= 0) return 0
 
-    const sampleWeight = Math.min(1, Math.log(1 + stats.picks) / Math.log(26))
+    const sampleConfidence = Math.min(1, Math.log(1 + stats.picks) / Math.log(1 + TARGET_SAMPLE))
     const winRate = stats.winRate ?? 0.5
+    // Dampen extreme win rates toward neutral when sample is small.
+    // Without this, a 7/7 100% WR champion outscores 3000-game picks with 52% WR.
+    const dampedWinRate = 0.5 + (winRate - 0.5) * sampleConfidence
 
-    return clamp01(0.5 * sampleWeight + winRate * 0.5)
+    return clamp01(0.5 * sampleConfidence + dampedWinRate * 0.5)
 }
 
 function findSynergyScore(
@@ -297,12 +310,13 @@ export function calculateDraftRecommendations(
             roleMatchups,
         )
 
-        const totalScore = clamp01(
+        const rawScore = clamp01(
             priority * 0.35 +
             roleScore * 0.25 +
             synergyScore * 0.2 +
             matchupScore * 0.2,
         )
+        const totalScore = rawScore * sampleConfidence(roleStat.picks)
 
         recommendations.push({
             championName,

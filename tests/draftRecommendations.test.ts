@@ -123,6 +123,82 @@ describe("calculateDraftRecommendations", () => {
         expect(ahriRec?.matchupScore).toBeGreaterThan(0.5)
     })
 
+    it("large sample with moderate WR scores higher roleStatsScore than small sample with extreme WR", () => {
+        // Without confidence dampening: 6/6 (100% WR) outscored 25 games at 52% WR.
+        // With dampening: small-sample extreme WR is pulled toward neutral 0.5.
+        const smallSampleMatches = Array.from({ length: 6 }, (_, i) =>
+            makeMatch(`s${i}`, [bluePick("Xayah", "bot"), redPick("Draven", "bot")]),
+        )
+        const largeSampleMatches = Array.from({ length: 25 }, (_, i) =>
+            makeMatch(`l${i}`, [
+                bluePick("Kaisa", "bot", i < 13),   // 13/25 wins = 52% WR
+                redPick("Jinx", "bot", i >= 13),
+            ]),
+        )
+        const allMatches = [...smallSampleMatches, ...largeSampleMatches]
+        const draft = { ...createEmptyDraftState(), minGames: 5 }
+        const recs = calculateDraftRecommendations(allMatches, draft)
+
+        const xayahRec = recs.find((r) => r.championName === "Xayah")!
+        const kaisaRec = recs.find((r) => r.championName === "Kaisa")!
+
+        expect(xayahRec).toBeDefined()
+        expect(kaisaRec).toBeDefined()
+        // 25-game stable pick outscores 6-game perfect outlier on role-specific data
+        expect(kaisaRec.roleStatsScore).toBeGreaterThan(xayahRec.roleStatsScore)
+    })
+
+    it("champion with 25+ games is unaffected by dampening (sampleConfidence = 1)", () => {
+        // At exactly 25 games sampleConfidence caps at 1.0 → no dampening
+        const fullSampleMatches = Array.from({ length: 25 }, (_, i) =>
+            makeMatch(`f${i}`, [
+                bluePick("Azir", "mid", i < 14),
+                redPick("Orianna", "mid", i >= 14),
+            ]),
+        )
+        const recs25 = calculateDraftRecommendations(fullSampleMatches, createEmptyDraftState())
+        // Adding more matches should not change the roleStatsScore (confidence already maxed)
+        const moreMatches = [
+            ...fullSampleMatches,
+            ...Array.from({ length: 25 }, (_, i) =>
+                makeMatch(`x${i}`, [
+                    bluePick("Azir", "mid", i < 14),
+                    redPick("Orianna", "mid", i >= 14),
+                ]),
+            ),
+        ]
+        const recs50 = calculateDraftRecommendations(moreMatches, createEmptyDraftState())
+        const azir25 = recs25.find((r) => r.championName === "Azir")!
+        const azir50 = recs50.find((r) => r.championName === "Azir")!
+        // Both have win rate ~56%. With 25 games confidence is maxed in both cases.
+        // roleStatsScore should be the same formula result regardless of games beyond 25.
+        expect(azir25.roleStatsScore).toBeCloseTo(azir50.roleStatsScore, 2)
+    })
+
+    it("large-sample totalScore exceeds tiny-sample totalScore despite perfect WR", () => {
+        // 7-game perfect record vs 50-game moderate record.
+        // The multiplicative sampleConfidence penalty should ensure the 50-game pick wins.
+        const tinyMatches = Array.from({ length: 7 }, (_, i) =>
+            makeMatch(`t${i}`, [bluePick("Xayah", "bot"), redPick("Draven", "bot")]),
+        )
+        const largeMatches = Array.from({ length: 50 }, (_, i) =>
+            makeMatch(`lg${i}`, [
+                bluePick("Kaisa", "bot", i < 26), // 26/50 = 52% WR
+                redPick("Jinx", "bot", i >= 26),
+            ]),
+        )
+        const allMatches = [...tinyMatches, ...largeMatches]
+        const draft = { ...createEmptyDraftState(), minGames: 5 }
+        const recs = calculateDraftRecommendations(allMatches, draft)
+
+        const xayahRec = recs.find((r) => r.championName === "Xayah")!
+        const kaisaRec = recs.find((r) => r.championName === "Kaisa")!
+
+        expect(xayahRec).toBeDefined()
+        expect(kaisaRec).toBeDefined()
+        expect(kaisaRec.totalScore).toBeGreaterThan(xayahRec.totalScore)
+    })
+
     it("known good synergy increases synergyScore above 0.5", () => {
         // Ahri and Ornn always on the same team, always winning
         const synergyMatches = Array.from({ length: 10 }, (_, i) =>

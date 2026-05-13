@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import type { Match, Role } from "../domain/types"
 import {
     calculateDraftRecommendations,
+    sampleConfidence,
     type DraftRecommendation,
     type DraftState,
 } from "../analysis/draftHelper"
@@ -181,7 +182,7 @@ function calculateWeightedScore(entry: DraftRecommendation, weights: WeightConfi
         winRateScore * weights.winRate +
         sampleSizeScore * weights.sampleSize
 
-    return weightedSum / totalWeight
+    return (weightedSum / totalWeight) * sampleConfidence(entry.games)
 }
 
 
@@ -1411,6 +1412,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     </strong>
                     <span className="muted" style={{ display: "block" }}>
                         {ROLE_LABELS[entry.role]} · Score {formatScore(entry.totalScore)} · {entry.games} Picks
+                        {entry.games < 50 ? ` · ${entry.sampleSizeLabel}` : ""}
                         {flexInfo?.isFlex ? ` · Flex ${flexRoleLabel(flexInfo)}` : ""}
                     </span>
                 </span>
