@@ -219,4 +219,12 @@ export const de = {
     // Champion pool
     pool_searchPlaceholder: "Champion suchen...",
     pool_noChampion: "Kein Champion gefunden.",
+
+    // Similar Pro Play Drafts
+    similarDrafts_title: "Ähnliche Pro-Play-Drafts",
+    similarDrafts_needMoreInput: "Mindestens 1 Pick eingeben, um ähnliche Drafts zu suchen.",
+    similarDrafts_noResults: "Keine ähnlichen Drafts gefunden.",
+    similarDrafts_similarity: "Ähnlichkeit",
+    similarDrafts_winner: "Sieger",
+    similarDrafts_matchedBans: "Gemeinsame Bans",
 } as const

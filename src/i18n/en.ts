@@ -221,4 +221,12 @@ export const en: Translations = {
     // Champion pool
     pool_searchPlaceholder: "Search champion...",
     pool_noChampion: "No champion found.",
+
+    // Similar Pro Play Drafts
+    similarDrafts_title: "Similar Pro Play Drafts",
+    similarDrafts_needMoreInput: "Enter at least 1 pick to find similar drafts.",
+    similarDrafts_noResults: "No similar drafts found.",
+    similarDrafts_similarity: "Similarity",
+    similarDrafts_winner: "Winner",
+    similarDrafts_matchedBans: "Matched bans",
 }

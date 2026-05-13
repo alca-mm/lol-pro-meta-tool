@@ -14,6 +14,8 @@ import { DraftBoard } from "./draft/DraftBoard"
 import { PatchWeightPanel } from "./draft/PatchWeightPanel"
 import { ScoreWeightPanel } from "./draft/ScoreWeightPanel"
 import { iconFor, flexRoleLabel } from "./draft/utils"
+import { SimilarDraftsPanel } from "./draft/SimilarDraftsPanel"
+import { findSimilarDrafts } from "../draft/similarDrafts"
 import { useTranslation } from "../i18n/LanguageContext"
 
 import type { TranslationKey } from "../i18n/types"
@@ -937,6 +939,26 @@ export function DraftHelper({ matches }: DraftHelperProps) {
         [recentPatchData.matches],
     )
 
+    const similarDrafts = useMemo(
+        () =>
+            findSimilarDrafts({
+                matches: recentPatchData.rawMatches,
+                bluePicks: bluePickSlots,
+                redPicks: redPickSlots,
+                blueBans,
+                redBans,
+                limit: 5,
+            }),
+        [recentPatchData.rawMatches, bluePickSlots, redPickSlots, blueBans, redBans],
+    )
+
+    const hasSimilarDraftInput = useMemo(
+        () =>
+            bluePickSlots.some((s) => s.championName.trim() !== "") ||
+            redPickSlots.some((s) => s.championName.trim() !== ""),
+        [bluePickSlots, redPickSlots],
+    )
+
     const selectedChampionSet = useMemo(() => {
         return new Set(
             [...bluePickSlots, ...redPickSlots]
@@ -1830,6 +1852,11 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     </div>
                 )}
             </div>
+            <SimilarDraftsPanel
+                results={similarDrafts}
+                hasInput={hasSimilarDraftInput}
+                t={t}
+            />
         </section>
     )
 }
