@@ -1,9 +1,14 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "../../i18n/LanguageContext"
 import type { TranslationKey } from "../../i18n/types"
 import { ALL_CHAMPIONS } from "../../analysis/championCatalog"
-import type { ChampionNoteRating } from "../../notes/types"
+import type { ChampionNote, ChampionNoteRating } from "../../notes/types"
 import { loadNotes, saveNote, deleteNote } from "../../notes/storage"
+import { loadTeamNotes, saveTeamNote, deleteTeamNote } from "../../notes/teamNotesService"
+import { isTeamModeActive } from "../../notes/notesMode"
+import { useAuth } from "../../auth/AuthContext"
+import { useTeam } from "../../teams/TeamContext"
+import { isSupabaseConfigured } from "../../lib/supabase"
 
 const RATINGS: ChampionNoteRating[] = ["comfort", "blind", "pocket", "situational", "avoid"]
 
@@ -13,16 +18,46 @@ interface ChampionNotesPanelProps {
 
 export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps) {
     const { t } = useTranslation()
-    const [notes, setNotes] = useState(() => loadNotes())
+    const { user } = useAuth()
+    const { activeTeam } = useTeam()
+
+    const teamMode = isTeamModeActive(
+        isSupabaseConfigured,
+        user?.id ?? null,
+        activeTeam?.id ?? null,
+    )
+
+    const [notes, setNotes] = useState<Record<string, ChampionNote>>({})
+    const [loadingNotes, setLoadingNotes] = useState(false)
+    const [notesError, setNotesError] = useState<string | null>(null)
     const [selectedChampion, setSelectedChampion] = useState("")
     const [editNote, setEditNote] = useState("")
     const [editTags, setEditTags] = useState("")
     const [editRating, setEditRating] = useState<ChampionNoteRating | "">("")
     const [savedFlash, setSavedFlash] = useState(false)
 
+    const loadAllNotes = useCallback(async () => {
+        setLoadingNotes(true)
+        setNotesError(null)
+        try {
+            const loaded = teamMode && activeTeam
+                ? await loadTeamNotes(activeTeam.id)
+                : loadNotes()
+            setNotes(loaded)
+        } catch (err) {
+            setNotesError(err instanceof Error ? err.message : "Load error")
+        } finally {
+            setLoadingNotes(false)
+        }
+    }, [teamMode, activeTeam])
+
+    useEffect(() => {
+        void loadAllNotes()
+    }, [loadAllNotes])
+
     useEffect(() => {
         if (!selectedChampion) return
-        const existing = loadNotes()[selectedChampion]
+        const existing = notes[selectedChampion]
         if (existing) {
             setEditNote(existing.note)
             setEditTags(existing.tags.join(", "))
@@ -32,27 +67,37 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
             setEditTags("")
             setEditRating("")
         }
-    }, [selectedChampion])
+    }, [selectedChampion, notes])
 
-    function handleSave() {
+    async function handleSave() {
         if (!selectedChampion) return
-        const entry = {
+        const entry: ChampionNote = {
             championName: selectedChampion,
             note: editNote.trim(),
             tags: editTags.split(",").map((tag) => tag.trim()).filter(Boolean),
             rating: (editRating || null) as ChampionNoteRating | null,
             updatedAt: new Date().toISOString(),
         }
-        saveNote(entry)
-        setNotes(loadNotes())
+        if (teamMode && activeTeam && user) {
+            const err = await saveTeamNote(activeTeam.id, entry, user.id)
+            if (err) { setNotesError(err); return }
+        } else {
+            saveNote(entry)
+        }
+        await loadAllNotes()
         setSavedFlash(true)
         window.setTimeout(() => setSavedFlash(false), 1500)
     }
 
-    function handleDelete() {
+    async function handleDelete() {
         if (!selectedChampion) return
-        deleteNote(selectedChampion)
-        setNotes(loadNotes())
+        if (teamMode && activeTeam) {
+            const err = await deleteTeamNote(activeTeam.id, selectedChampion)
+            if (err) { setNotesError(err); return }
+        } else {
+            deleteNote(selectedChampion)
+        }
+        await loadAllNotes()
         setEditNote("")
         setEditTags("")
         setEditRating("")
@@ -60,11 +105,22 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
 
     const relevantNotes = pickedChampions.map((name) => notes[name]).filter(Boolean)
 
+    const modeLabel = teamMode && activeTeam
+        ? `${t("cn_modeTeam")} ${activeTeam.name}`
+        : t("cn_modeLocal")
+
     return (
         <div className="recommendation-section">
             <div className="champion-picker-header">
                 <h3>{t("cn_title")}</h3>
+                <span className="muted" style={{ fontSize: "0.8rem" }}>{modeLabel}</span>
             </div>
+
+            {notesError && (
+                <p className="muted" style={{ color: "var(--score-neg, #f87171)" }}>
+                    {t("auth_error")}: {notesError}
+                </p>
+            )}
 
             {pickedChampions.length > 0 && (
                 <div style={{ marginBottom: "1rem" }}>
@@ -108,6 +164,7 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
                     <select
                         value={selectedChampion}
                         onChange={(e) => setSelectedChampion(e.target.value)}
+                        disabled={loadingNotes}
                     >
                         <option value="">—</option>
                         {ALL_CHAMPIONS.map((name) => (
@@ -124,7 +181,7 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
                         value={editNote}
                         onChange={(e) => setEditNote(e.target.value)}
                         rows={3}
-                        disabled={!selectedChampion}
+                        disabled={!selectedChampion || loadingNotes}
                         style={{ resize: "vertical" }}
                     />
                 </label>
@@ -135,7 +192,7 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
                         type="text"
                         value={editTags}
                         onChange={(e) => setEditTags(e.target.value)}
-                        disabled={!selectedChampion}
+                        disabled={!selectedChampion || loadingNotes}
                         placeholder="e.g. top, carry, peel"
                     />
                 </label>
@@ -145,7 +202,7 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
                     <select
                         value={editRating}
                         onChange={(e) => setEditRating(e.target.value as ChampionNoteRating | "")}
-                        disabled={!selectedChampion}
+                        disabled={!selectedChampion || loadingNotes}
                     >
                         <option value="">{t("cn_noRating")}</option>
                         {RATINGS.map((r) => (
@@ -160,16 +217,16 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
                     <button
                         type="button"
                         className="secondary-button"
-                        onClick={handleSave}
-                        disabled={!selectedChampion}
+                        onClick={() => void handleSave()}
+                        disabled={!selectedChampion || loadingNotes}
                     >
                         {savedFlash ? t("cn_saved") : t("cn_save")}
                     </button>
                     <button
                         type="button"
                         className="secondary-button"
-                        onClick={handleDelete}
-                        disabled={!selectedChampion || !notes[selectedChampion]}
+                        onClick={() => void handleDelete()}
+                        disabled={!selectedChampion || !notes[selectedChampion] || loadingNotes}
                     >
                         {t("cn_delete")}
                     </button>

@@ -1,6 +1,11 @@
 import { useState, useMemo, useEffect } from "react"
 import { FilterProvider, useFilters } from "./context/FilterContext"
 import { LanguageProvider, useTranslation } from "./i18n/LanguageContext"
+import { AuthProvider } from "./auth/AuthContext"
+import { TeamProvider } from "./teams/TeamContext"
+import { UserMenu } from "./components/auth/UserMenu"
+import { AuthPanel } from "./components/auth/AuthPanel"
+import { TeamStatusPanel } from "./components/TeamStatusPanel"
 import { parseMatches } from "./import/parseMatches"
 import { applyFilters } from "./analysis/filters"
 import { calculateChampionStats, primaryRole } from "./analysis/championStats"
@@ -22,6 +27,8 @@ import { DraftHelper } from "./components/DraftHelper"
 import sampleData from "./data/sampleMatches.json"
 import type { Match, SyncReport } from "./domain/types"
 
+const DISCORD_INVITE_URL = "DISCORD_INVITE_HIER_EINSETZEN"
+
 const sampleMatches = parseMatches(sampleData)
 
 type TabId = "champions" | "draft" | "synergies" | "matchups" | "roles" | "patches"
@@ -32,6 +39,7 @@ function AppContent() {
     const [selectedChampion, setSelectedChampion] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<TabId>("champions")
     const [filtersCollapsed, setFiltersCollapsed] = useState(false)
+    const [authPanelOpen, setAuthPanelOpen] = useState(false)
 
     const [allMatches, setAllMatches] = useState<Match[]>(sampleMatches)
     const [isUsingSampleData, setIsUsingSampleData] = useState(true)
@@ -112,25 +120,42 @@ function AppContent() {
         <div className="app">
             <header className="app-header">
                 <h1>Aatroxtool</h1>
-                <div className="lang-toggle">
-                    <button
-                        type="button"
-                        className={`lang-btn${lang === "de" ? " lang-active" : ""}`}
-                        onClick={() => setLang("de")}
-                        aria-pressed={lang === "de"}
+                <div className="header-right" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                    <div className="lang-toggle">
+                        <button
+                            type="button"
+                            className={`lang-btn${lang === "de" ? " lang-active" : ""}`}
+                            onClick={() => setLang("de")}
+                            aria-pressed={lang === "de"}
+                        >
+                            DE
+                        </button>
+                        <button
+                            type="button"
+                            className={`lang-btn${lang === "en" ? " lang-active" : ""}`}
+                            onClick={() => setLang("en")}
+                            aria-pressed={lang === "en"}
+                        >
+                            EN
+                        </button>
+                    </div>
+                    <a
+                        href={DISCORD_INVITE_URL}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="lang-btn"
                     >
-                        DE
-                    </button>
-                    <button
-                        type="button"
-                        className={`lang-btn${lang === "en" ? " lang-active" : ""}`}
-                        onClick={() => setLang("en")}
-                        aria-pressed={lang === "en"}
-                    >
-                        EN
-                    </button>
+                        {t("header_contact")}
+                    </a>
+                    <UserMenu onShowLogin={() => setAuthPanelOpen((prev) => !prev)} />
                 </div>
             </header>
+
+            {authPanelOpen && (
+                <AuthPanel onClose={() => setAuthPanelOpen(false)} />
+            )}
+
+            <TeamStatusPanel />
 
             <DataSourceInfo
                 isUsingSampleData={isUsingSampleData}
@@ -259,9 +284,13 @@ function AppContent() {
 export default function App() {
     return (
         <LanguageProvider>
-            <FilterProvider>
-                <AppContent />
-            </FilterProvider>
+            <AuthProvider>
+                <TeamProvider>
+                    <FilterProvider>
+                        <AppContent />
+                    </FilterProvider>
+                </TeamProvider>
+            </AuthProvider>
         </LanguageProvider>
     )
 }

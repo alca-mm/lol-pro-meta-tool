@@ -248,4 +248,33 @@ export const en: Translations = {
     cn_rating_avoid: "Avoid",
     cn_rating_blind: "Blind Pick",
     cn_rating_pocket: "Pocket Pick",
+
+    // Auth
+    auth_login: "Login",
+    auth_logout: "Logout",
+    auth_signUp: "Sign Up",
+    auth_email: "Email",
+    auth_password: "Password",
+    auth_sendMagicLink: "Send Magic Link",
+    auth_magicLinkSent: "Check your email!",
+    auth_unavailable: "Auth not configured.",
+    auth_loggedInAs: "Logged in as",
+    auth_error: "Error",
+    auth_loading: "Loading…",
+
+    // Teams
+    team_myTeams: "My Teams",
+    team_createTeam: "Create Team",
+    team_teamName: "Team Name",
+    team_activeTeam: "Active Team",
+    team_noTeam: "No team yet. Create one to share notes.",
+    team_create: "Create",
+    team_switchTeam: "Switch team",
+
+    // Notes mode
+    cn_modeLocal: "Local only",
+    cn_modeTeam: "Team:",
+
+    // Header
+    header_contact: "Contact",
 }

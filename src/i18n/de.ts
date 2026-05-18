@@ -246,4 +246,33 @@ export const de = {
     cn_rating_avoid: "Vermeiden",
     cn_rating_blind: "Blind Pick",
     cn_rating_pocket: "Pocket Pick",
+
+    // Auth
+    auth_login: "Login",
+    auth_logout: "Abmelden",
+    auth_signUp: "Registrieren",
+    auth_email: "E-Mail",
+    auth_password: "Passwort",
+    auth_sendMagicLink: "Magic Link senden",
+    auth_magicLinkSent: "Prüfe deine E-Mail!",
+    auth_unavailable: "Auth nicht konfiguriert.",
+    auth_loggedInAs: "Angemeldet als",
+    auth_error: "Fehler",
+    auth_loading: "Laden…",
+
+    // Teams
+    team_myTeams: "Meine Teams",
+    team_createTeam: "Team erstellen",
+    team_teamName: "Teamname",
+    team_activeTeam: "Aktives Team",
+    team_noTeam: "Noch kein Team. Erstelle eines, um Notizen zu teilen.",
+    team_create: "Erstellen",
+    team_switchTeam: "Team wechseln",
+
+    // Notes mode
+    cn_modeLocal: "Nur lokal",
+    cn_modeTeam: "Team:",
+
+    // Header
+    header_contact: "Kontakt",
 } as const
