@@ -229,4 +229,23 @@ export const en: Translations = {
     similarDrafts_similarity: "Similarity",
     similarDrafts_winner: "Winner",
     similarDrafts_matchedBans: "Matched bans",
+
+    // Champion Notes
+    cn_title: "Champion Notes",
+    cn_selectChampion: "Champion",
+    cn_note: "Note",
+    cn_tags: "Tags (comma-separated)",
+    cn_rating: "Rating",
+    cn_save: "Save",
+    cn_saved: "Saved",
+    cn_delete: "Delete",
+    cn_noRating: "— No rating —",
+    cn_relevantNotes: "Notes for drafted champions",
+    cn_noDraftedNotes: "No notes for current picks.",
+    cn_editNote: "Edit note",
+    cn_rating_comfort: "Comfort",
+    cn_rating_situational: "Situational",
+    cn_rating_avoid: "Avoid",
+    cn_rating_blind: "Blind Pick",
+    cn_rating_pocket: "Pocket Pick",
 }

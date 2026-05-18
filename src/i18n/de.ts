@@ -227,4 +227,23 @@ export const de = {
     similarDrafts_similarity: "Ähnlichkeit",
     similarDrafts_winner: "Sieger",
     similarDrafts_matchedBans: "Gemeinsame Bans",
+
+    // Champion Notes
+    cn_title: "Champion-Notizen",
+    cn_selectChampion: "Champion",
+    cn_note: "Notiz",
+    cn_tags: "Tags (kommagetrennt)",
+    cn_rating: "Einschätzung",
+    cn_save: "Speichern",
+    cn_saved: "Gespeichert",
+    cn_delete: "Löschen",
+    cn_noRating: "— Keine Einschätzung —",
+    cn_relevantNotes: "Notizen zu aktuellen Draft-Picks",
+    cn_noDraftedNotes: "Keine Notizen zu aktuellen Picks.",
+    cn_editNote: "Notiz bearbeiten",
+    cn_rating_comfort: "Comfort",
+    cn_rating_situational: "Situativ",
+    cn_rating_avoid: "Vermeiden",
+    cn_rating_blind: "Blind Pick",
+    cn_rating_pocket: "Pocket Pick",
 } as const

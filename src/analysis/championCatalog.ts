@@ -1,3 +1,5 @@
+// Statisch gepflegt – bei neuen Champions ergänzen.
+// Data-Dragon-Sonderfälle (Sonderzeichen, Leerzeichen) liegen in championAssets.ts.
 export const ALL_CHAMPIONS: string[] = [
     "Aatrox",
     "Ahri",
@@ -26,8 +28,8 @@ export const ALL_CHAMPIONS: string[] = [
     "Corki",
     "Darius",
     "Diana",
-    "Dr. Mundo",
     "Draven",
+    "Dr. Mundo",
     "Ekko",
     "Elise",
     "Evelynn",
@@ -161,7 +163,9 @@ export const ALL_CHAMPIONS: string[] = [
     "Yasuo",
     "Yone",
     "Yorick",
+    "Yunara",
     "Yuumi",
+    "Zaahen",
     "Zac",
     "Zed",
     "Zeri",

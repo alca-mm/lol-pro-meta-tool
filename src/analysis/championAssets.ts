@@ -1,4 +1,4 @@
-const DATA_DRAGON_VERSION = "15.24.1"
+const DATA_DRAGON_VERSION = "16.10.1"
 
 const SPECIAL_CHAMPION_IMAGE_IDS: Record<string, string> = {
     "aurelion sol": "AurelionSol",

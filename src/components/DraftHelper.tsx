@@ -15,6 +15,7 @@ import { PatchWeightPanel } from "./draft/PatchWeightPanel"
 import { ScoreWeightPanel } from "./draft/ScoreWeightPanel"
 import { iconFor, flexRoleLabel } from "./draft/utils"
 import { SimilarDraftsPanel } from "./draft/SimilarDraftsPanel"
+import { ChampionNotesPanel } from "./draft/ChampionNotesPanel"
 import { findSimilarDrafts } from "../draft/similarDrafts"
 import { useTranslation } from "../i18n/LanguageContext"
 
@@ -972,6 +973,12 @@ export function DraftHelper({ matches }: DraftHelperProps) {
         return new Set([...allBans.map((name) => normalizeChampionName(name)), ...fearlessChampionSet])
     }, [allBans, fearlessChampionSet])
 
+    const pickedChampions = useMemo(() => {
+        return [...bluePickSlots, ...redPickSlots]
+            .map((slot) => slot.championName)
+            .filter(Boolean)
+    }, [bluePickSlots, redPickSlots])
+
     const championPool = useMemo(() => {
         if (!poolRoleFilter) return ALL_CHAMPIONS
 
@@ -1857,6 +1864,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 hasInput={hasSimilarDraftInput}
                 t={t}
             />
+            <ChampionNotesPanel pickedChampions={pickedChampions} />
         </section>
     )
 }
