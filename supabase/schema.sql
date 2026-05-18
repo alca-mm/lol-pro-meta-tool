@@ -328,3 +328,142 @@ select id, owner_id, 'owner'
 from public.teams
     on conflict (team_id, user_id)
 do update set role = 'owner';
+
+-- ============================================================
+-- 10. team_invites
+-- ============================================================
+
+create table if not exists public.team_invites (
+    id          uuid primary key default gen_random_uuid(),
+    team_id     uuid not null references public.teams(id) on delete cascade,
+    code        text not null unique,
+    created_by  uuid not null default auth.uid() references auth.users(id) on delete cascade,
+    created_at  timestamptz not null default now(),
+    expires_at  timestamptz null default (now() + interval '30 minutes'),
+    revoked_at  timestamptz null
+);
+
+-- Ensure the default is applied on existing deployments that ran an earlier schema
+alter table if exists public.team_invites
+    alter column expires_at set default (now() + interval '30 minutes');
+
+grant select, insert, update, delete on public.team_invites to authenticated;
+
+alter table public.team_invites enable row level security;
+
+drop policy if exists "team_invites_select" on public.team_invites;
+drop policy if exists "team_invites_insert" on public.team_invites;
+drop policy if exists "team_invites_update" on public.team_invites;
+drop policy if exists "team_invites_delete" on public.team_invites;
+
+-- Team members can see their team's invites
+create policy "team_invites_select" on public.team_invites
+    for select
+    using (public.is_team_member(team_id));
+
+-- Owner or admin can create invites
+create policy "team_invites_insert" on public.team_invites
+    for insert
+    with check (public.can_manage_team_members(team_id));
+
+-- Owner or admin can revoke (update) invites
+create policy "team_invites_update" on public.team_invites
+    for update
+    using (public.can_manage_team_members(team_id))
+    with check (public.can_manage_team_members(team_id));
+
+-- Owner or admin can delete invites
+create policy "team_invites_delete" on public.team_invites
+    for delete
+    using (public.can_manage_team_members(team_id));
+
+-- ============================================================
+-- 11. join_team_with_invite
+-- SECURITY DEFINER so an unenrolled authenticated user can
+-- validate and join without a direct SELECT on team_invites.
+-- ============================================================
+
+create or replace function public.join_team_with_invite(p_code text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_team_id uuid;
+begin
+    select team_id into v_team_id
+    from public.team_invites
+    where code = upper(trim(p_code))
+      and revoked_at is null
+      and (expires_at is null or expires_at > now())
+    limit 1;
+
+    if v_team_id is null then
+        raise exception 'invalid_invite';
+    end if;
+
+    insert into public.team_members (team_id, user_id, role)
+    values (v_team_id, auth.uid(), 'player')
+    on conflict (team_id, user_id) do nothing;
+
+    return v_team_id;
+end;
+$$;
+
+grant execute on function public.join_team_with_invite(text) to authenticated;
+
+-- ============================================================
+-- 12. team_drafts
+-- ============================================================
+
+create table if not exists public.team_drafts (
+    id          uuid primary key default gen_random_uuid(),
+    team_id     uuid not null references public.teams(id) on delete cascade,
+    name        text not null,
+    note        text not null default '',
+    patch       text null,
+    blue_picks  jsonb not null default '[]'::jsonb,
+    red_picks   jsonb not null default '[]'::jsonb,
+    blue_bans   text[] not null default '{}',
+    red_bans    text[] not null default '{}',
+    created_by  uuid references auth.users(id) on delete set null,
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now()
+);
+
+grant select, insert, update, delete on public.team_drafts to authenticated;
+
+alter table public.team_drafts enable row level security;
+
+drop policy if exists "team_drafts_select" on public.team_drafts;
+drop policy if exists "team_drafts_insert" on public.team_drafts;
+drop policy if exists "team_drafts_update" on public.team_drafts;
+drop policy if exists "team_drafts_delete" on public.team_drafts;
+
+create policy "team_drafts_select" on public.team_drafts
+    for select
+    using (
+        public.is_team_member(team_id)
+    );
+
+create policy "team_drafts_insert" on public.team_drafts
+    for insert
+    with check (
+        public.is_team_member(team_id)
+    );
+
+create policy "team_drafts_update" on public.team_drafts
+    for update
+    using (
+        public.is_team_member(team_id)
+    )
+    with check (
+        public.is_team_member(team_id)
+    );
+
+create policy "team_drafts_delete" on public.team_drafts
+    for delete
+    using (
+        public.can_manage_team_members(team_id)
+    );

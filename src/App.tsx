@@ -27,7 +27,7 @@ import { DraftHelper } from "./components/DraftHelper"
 import sampleData from "./data/sampleMatches.json"
 import type { Match, SyncReport } from "./domain/types"
 
-const DISCORD_INVITE_URL = "DISCORD_INVITE_HIER_EINSETZEN"
+const DISCORD_INVITE_URL = "https://discord.gg/8cdFSGy9qT"
 
 const sampleMatches = parseMatches(sampleData)
 

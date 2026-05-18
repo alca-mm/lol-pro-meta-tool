@@ -173,6 +173,93 @@ export async function removeTeamMember(
     return error?.message ?? null
 }
 
+// ── Invite codes ─────────────────────────────────────────────────────────────
+
+export interface TeamInvite {
+    id: string
+    team_id: string
+    code: string
+    created_by: string
+    created_at: string
+    expires_at: string | null
+    revoked_at: string | null
+}
+
+// Charset excludes visually ambiguous characters I, O (no 0 or 1 either)
+const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+function randSegment(n: number): string {
+    return Array.from({ length: n }, () =>
+        CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]
+    ).join("")
+}
+
+export function generateInviteCode(teamName?: string): string {
+    // Only keep chars that are already in the allowed charset (no I, O)
+    const letters = teamName
+        ? (teamName.toUpperCase().match(/[ABCDEFGHJKLMNPQRSTUVWXYZ]/g) ?? []).slice(0, 4).join("")
+        : ""
+    const needed = 4 - letters.length
+    const prefix = letters + (needed > 0 ? randSegment(needed) : "")
+    return `${prefix}-${randSegment(4)}-${randSegment(4)}`
+}
+
+export async function createInvite(teamId: string, teamName?: string): Promise<{ code: string } | string> {
+    if (!supabase) return "Not configured"
+    const code = generateInviteCode(teamName)
+    const { error } = await supabase.from("team_invites").insert({ team_id: teamId, code })
+    if (error) return error.message
+    return { code }
+}
+
+export async function fetchTeamInvites(teamId: string): Promise<TeamInvite[]> {
+    if (!supabase) return []
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+        .from("team_invites")
+        .select("id, team_id, code, created_by, created_at, expires_at, revoked_at")
+        .eq("team_id", teamId)
+        .is("revoked_at", null)
+        .or(`expires_at.is.null,expires_at.gt.${now}`)
+        .order("created_at", { ascending: false })
+    if (error || !data) return []
+    return data as TeamInvite[]
+}
+
+export function formatExpiry(expiresAt: string | null, now = new Date()): string {
+    if (!expiresAt) return ""
+    const ms = new Date(expiresAt).getTime() - now.getTime()
+    if (ms <= 0) return ""
+    const totalMinutes = Math.ceil(ms / 60_000)
+    if (totalMinutes >= 60) {
+        const h = Math.floor(totalMinutes / 60)
+        const m = totalMinutes % 60
+        return m > 0 ? `${h}h ${m}m` : `${h}h`
+    }
+    return `${totalMinutes}m`
+}
+
+export async function revokeInvite(inviteId: string): Promise<string | null> {
+    if (!supabase) return "Not configured"
+    const { error } = await supabase
+        .from("team_invites")
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("id", inviteId)
+    return error?.message ?? null
+}
+
+export async function joinTeamWithInvite(code: string): Promise<{ teamId: string } | string> {
+    if (!supabase) return "invite_invalidCode"
+    const { data, error } = await supabase.rpc("join_team_with_invite", {
+        p_code: code.trim().toUpperCase(),
+    })
+    if (error) {
+        if (error.message.includes("invalid_invite")) return "invite_invalidCode"
+        return error.message
+    }
+    return { teamId: data as string }
+}
+
 // ── Team deletion ────────────────────────────────────────────────────────────
 
 export function canDeleteTeam(role: TeamRole | null): boolean {

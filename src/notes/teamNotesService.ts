@@ -53,6 +53,16 @@ export async function saveTeamNote(
     return error?.message ?? null
 }
 
+export async function getChampionNotesCount(teamId: string): Promise<number> {
+    if (!supabase) return 0
+    const { count, error } = await supabase
+        .from("champion_notes")
+        .select("*", { count: "exact", head: true })
+        .eq("team_id", teamId)
+    if (error || count === null) return 0
+    return count
+}
+
 export async function deleteTeamNote(
     teamId: string,
     championName: string,

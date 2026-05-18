@@ -16,8 +16,11 @@ import { ScoreWeightPanel } from "./draft/ScoreWeightPanel"
 import { iconFor, flexRoleLabel } from "./draft/utils"
 import { SimilarDraftsPanel } from "./draft/SimilarDraftsPanel"
 import { ChampionNotesPanel } from "./draft/ChampionNotesPanel"
+import { TeamDraftLibraryPanel } from "./draft/TeamDraftLibraryPanel"
 import { findSimilarDrafts } from "../draft/similarDrafts"
 import { useTranslation } from "../i18n/LanguageContext"
+import { useTeam } from "../teams/TeamContext"
+import type { SavedTeamDraft } from "../teams/teamDraftsService"
 
 import type { TranslationKey } from "../i18n/types"
 import type {
@@ -836,6 +839,7 @@ function formatSingleGameDraftForExport(game: CompletedGameDraft, labelSuffix = 
 
 export function DraftHelper({ matches }: DraftHelperProps) {
     const { t } = useTranslation()
+    const { activeTeam, myRole } = useTeam()
 
     const [bluePickSlots, setBluePickSlots] = useState<PickSlot[]>(createEmptyPickSlots)
     const [redPickSlots, setRedPickSlots] = useState<PickSlot[]>(createEmptyPickSlots)
@@ -1124,6 +1128,17 @@ export function DraftHelper({ matches }: DraftHelperProps) {
 
     function deactivateDraftFlow() {
         setDraftFlowEnabled(false)
+    }
+
+    function handleLoadTeamDraft(draft: SavedTeamDraft) {
+        setBluePickSlots(draft.bluePicks)
+        setRedPickSlots(draft.redPicks)
+        setBlueBans(draft.blueBans)
+        setRedBans(draft.redBans)
+        setActiveDraftSlot(null)
+        setDraftFlowEnabled(false)
+        setFlowStepIndex(0)
+        setHistory([])
     }
 
     function resetDraft() {
@@ -1865,6 +1880,17 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 t={t}
             />
             <ChampionNotesPanel pickedChampions={pickedChampions} />
+            <TeamDraftLibraryPanel
+                activeTeamId={activeTeam?.id ?? null}
+                activeTeamName={activeTeam?.name}
+                currentRole={myRole}
+                bluePicks={bluePickSlots}
+                redPicks={redPickSlots}
+                blueBans={blueBans}
+                redBans={redBans}
+                patch={recentPatchData.patches[0] ?? null}
+                onLoadDraft={handleLoadTeamDraft}
+            />
         </section>
     )
 }

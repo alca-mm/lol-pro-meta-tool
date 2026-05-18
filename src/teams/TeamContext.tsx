@@ -6,7 +6,7 @@ import {
     useCallback,
     type ReactNode,
 } from "react"
-import type { Team, TeamMember, TeamRole } from "./teamService"
+import type { Team, TeamMember, TeamRole, TeamInvite } from "./teamService"
 import {
     fetchUserTeams,
     createTeam as createTeamService,
@@ -17,8 +17,14 @@ import {
     updateTeamMemberRole,
     removeTeamMember,
     deleteTeam as deleteTeamService,
+    createInvite as createInviteService,
+    fetchTeamInvites,
+    revokeInvite as revokeInviteService,
+    joinTeamWithInvite as joinTeamWithInviteService,
+    canManageMembers,
 } from "./teamService"
 import { useAuth } from "../auth/AuthContext"
+import { getChampionNotesCount } from "../notes/teamNotesService"
 
 interface TeamContextValue {
     teams: Team[]
@@ -33,6 +39,11 @@ interface TeamContextValue {
     updateMemberRole: (userId: string, role: TeamRole) => Promise<string | null>
     refreshMembers: () => Promise<void>
     deleteTeam: (teamId: string) => Promise<string | null>
+    invites: TeamInvite[]
+    createInvite: () => Promise<{ code: string } | string>
+    revokeInvite: (inviteId: string) => Promise<string | null>
+    joinTeamWithInvite: (code: string) => Promise<string | null>
+    notesCount: number
 }
 
 const TeamContext = createContext<TeamContextValue | null>(null)
@@ -43,6 +54,8 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     const [activeTeamId, setActiveTeamIdState] = useState<string | null>(getActiveTeamId())
     const [loading, setLoading] = useState(false)
     const [members, setMembers] = useState<TeamMember[]>([])
+    const [invites, setInvites] = useState<TeamInvite[]>([])
+    const [notesCount, setNotesCount] = useState(0)
 
     // Load teams when user changes
     useEffect(() => {
@@ -51,6 +64,8 @@ export function TeamProvider({ children }: { children: ReactNode }) {
             setActiveTeamIdState(null)
             setActiveTeamId(null)
             setMembers([])
+            setInvites([])
+            setNotesCount(0)
             return
         }
         setLoading(true)
@@ -79,6 +94,26 @@ export function TeamProvider({ children }: { children: ReactNode }) {
 
     const activeTeam = teams.find((t) => t.id === activeTeamId) ?? null
     const myRole = members.find((m) => m.user_id === user?.id)?.role ?? null
+
+    // Load invites when active team or role changes (only for owner/admin)
+    const refreshInvites = useCallback(async () => {
+        if (!activeTeamId || !canManageMembers(myRole)) {
+            setInvites([])
+            return
+        }
+        const loaded = await fetchTeamInvites(activeTeamId)
+        setInvites(loaded)
+    }, [activeTeamId, myRole])
+
+    useEffect(() => {
+        void refreshInvites()
+    }, [refreshInvites])
+
+    // Load champion notes count when active team changes
+    useEffect(() => {
+        if (!activeTeamId) { setNotesCount(0); return }
+        getChampionNotesCount(activeTeamId).then(setNotesCount)
+    }, [activeTeamId])
 
     async function createTeam(name: string): Promise<void> {
         if (!user) return
@@ -130,6 +165,30 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         return err
     }
 
+    async function createInvite(): Promise<{ code: string } | string> {
+        if (!activeTeamId) return "No active team"
+        const result = await createInviteService(activeTeamId, activeTeam?.name)
+        if (typeof result !== "string") await refreshInvites()
+        return result
+    }
+
+    async function revokeInvite(inviteId: string): Promise<string | null> {
+        const err = await revokeInviteService(inviteId)
+        if (!err) await refreshInvites()
+        return err
+    }
+
+    async function joinTeamWithInvite(code: string): Promise<string | null> {
+        if (!user) return "invite_invalidCode"
+        const result = await joinTeamWithInviteService(code)
+        if (typeof result === "string") return result
+        const loaded = await fetchUserTeams(user.id)
+        setTeams(loaded)
+        setActiveTeamIdState(result.teamId)
+        setActiveTeamId(result.teamId)
+        return null
+    }
+
     return (
         <TeamContext.Provider
             value={{
@@ -145,6 +204,11 @@ export function TeamProvider({ children }: { children: ReactNode }) {
                 updateMemberRole,
                 refreshMembers,
                 deleteTeam,
+                invites,
+                createInvite,
+                revokeInvite,
+                joinTeamWithInvite,
+                notesCount,
             }}
         >
             {children}
