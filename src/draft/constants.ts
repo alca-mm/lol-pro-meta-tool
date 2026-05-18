@@ -67,56 +67,29 @@ export const DEFAULT_WEIGHTS: WeightConfig = {
     matchup: 20,
     winRate: 5,
     sampleSize: 0,
+    teamPool: 30,
 }
 
 export const WEIGHT_PRESETS: Record<DraftAiPresetKey, { label: string; weights: WeightConfig }> = {
     balanced: {
         label: "Balanced",
-        weights: DEFAULT_WEIGHTS,
+        weights: { draftPriority: 40, roleStats: 20, synergy: 15, matchup: 20, winRate: 5, sampleSize: 0, teamPool: 30 },
     },
     counterpick: {
         label: "Counterpick",
-        weights: {
-            draftPriority: 20,
-            roleStats: 15,
-            synergy: 10,
-            matchup: 45,
-            winRate: 5,
-            sampleSize: 5,
-        },
+        weights: { draftPriority: 20, roleStats: 15, synergy: 10, matchup: 45, winRate: 5, sampleSize: 5, teamPool: 15 },
     },
     synergy: {
         label: "Synergy",
-        weights: {
-            draftPriority: 20,
-            roleStats: 15,
-            synergy: 45,
-            matchup: 10,
-            winRate: 5,
-            sampleSize: 5,
-        },
+        weights: { draftPriority: 20, roleStats: 15, synergy: 45, matchup: 10, winRate: 5, sampleSize: 5, teamPool: 20 },
     },
     meta: {
         label: "Meta Priority",
-        weights: {
-            draftPriority: 60,
-            roleStats: 20,
-            synergy: 5,
-            matchup: 10,
-            winRate: 5,
-            sampleSize: 0,
-        },
+        weights: { draftPriority: 60, roleStats: 20, synergy: 5, matchup: 10, winRate: 5, sampleSize: 0, teamPool: 10 },
     },
     safe: {
         label: "Safe / High Confidence",
-        weights: {
-            draftPriority: 25,
-            roleStats: 25,
-            synergy: 10,
-            matchup: 10,
-            winRate: 10,
-            sampleSize: 20,
-        },
+        weights: { draftPriority: 25, roleStats: 25, synergy: 10, matchup: 10, winRate: 10, sampleSize: 20, teamPool: 25 },
     },
 }
 

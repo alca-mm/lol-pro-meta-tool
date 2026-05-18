@@ -36,7 +36,7 @@ export type CompletedGameDraft = {
     redBans: string[]
 }
 
-export type WeightKey = "draftPriority" | "roleStats" | "synergy" | "matchup" | "winRate" | "sampleSize"
+export type WeightKey = "draftPriority" | "roleStats" | "synergy" | "matchup" | "winRate" | "sampleSize" | "teamPool"
 
 export type WeightConfig = Record<WeightKey, number>
 

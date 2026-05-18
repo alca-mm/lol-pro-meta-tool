@@ -1,4 +1,12 @@
-export type ChampionNoteRating = "comfort" | "situational" | "avoid" | "blind" | "pocket"
+export type ChampionNoteRating =
+    | "comfort"
+    | "blind"
+    | "pocket"
+    | "situational"
+    | "needs_practice"
+    | "avoid"
+
+export type TeamChampionRating = ChampionNoteRating
 
 export interface ChampionNote {
     championName: string

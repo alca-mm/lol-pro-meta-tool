@@ -1,5 +1,6 @@
 import { championIconUrl } from "../analysis/championAssets"
 import { useTranslation } from "../i18n/LanguageContext"
+import type { ChampionNoteRating } from "../notes/types"
 
 interface ChampionPortraitGridProps {
     champions: string[]
@@ -8,20 +9,37 @@ interface ChampionPortraitGridProps {
     searchQuery: string
     onSearchQueryChange: (value: string) => void
     onSelectChampion: (championName: string) => void
+    teamRatings?: Map<string, ChampionNoteRating>
 }
 
 function normalizeChampionName(name: string): string {
     return name.trim().toLowerCase()
 }
 
+function ratingDotColor(rating: ChampionNoteRating): string {
+    switch (rating) {
+        case "comfort":
+        case "blind":
+        case "pocket":
+            return "var(--green)"
+        case "situational":
+            return "var(--accent)"
+        case "needs_practice":
+            return "var(--text-dim)"
+        case "avoid":
+            return "var(--red)"
+    }
+}
+
 export function ChampionPortraitGrid({
-                                         champions,
-                                         selectedChampions,
-                                         bannedChampions,
-                                         searchQuery,
-                                         onSearchQueryChange,
-                                         onSelectChampion,
-                                     }: ChampionPortraitGridProps) {
+    champions,
+    selectedChampions,
+    bannedChampions,
+    searchQuery,
+    onSearchQueryChange,
+    onSelectChampion,
+    teamRatings,
+}: ChampionPortraitGridProps) {
     const { t } = useTranslation()
     const normalizedSearch = searchQuery.trim().toLowerCase()
 
@@ -70,6 +88,22 @@ export function ChampionPortraitGrid({
                                     event.currentTarget.style.visibility = "hidden"
                                 }}
                             />
+                            {teamRatings?.has(normalized) && (
+                                <span
+                                    aria-hidden="true"
+                                    style={{
+                                        position: "absolute",
+                                        bottom: 2,
+                                        right: 2,
+                                        width: 7,
+                                        height: 7,
+                                        borderRadius: "50%",
+                                        background: ratingDotColor(teamRatings.get(normalized)!),
+                                        boxShadow: "0 0 0 1px rgba(0,0,0,0.6)",
+                                        pointerEvents: "none",
+                                    }}
+                                />
+                            )}
                         </button>
                     )
                 })}

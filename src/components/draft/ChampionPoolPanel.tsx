@@ -1,6 +1,7 @@
 import { useTranslation } from "../../i18n/LanguageContext"
 import type { Role } from "../../domain/types"
 import type { ActiveDraftSlot } from "../../draft/types"
+import type { ChampionNoteRating } from "../../notes/types"
 import { ROLES, ROLE_LABELS } from "../../draft/constants"
 import { sideLabel } from "../../draft/helpers"
 import { ChampionPortraitGrid } from "../ChampionPortraitGrid"
@@ -12,6 +13,7 @@ interface ChampionPoolPanelProps {
     bannedChampionSet: Set<string>
     championSearch: string
     poolRoleFilter: Role | null
+    teamRatings?: Map<string, ChampionNoteRating>
     onSetPoolRoleFilter: (role: Role | null) => void
     onChampionSearchChange: (query: string) => void
     onSelectChampion: (championName: string) => void
@@ -24,6 +26,7 @@ export function ChampionPoolPanel({
     bannedChampionSet,
     championSearch,
     poolRoleFilter,
+    teamRatings,
     onSetPoolRoleFilter,
     onChampionSearchChange,
     onSelectChampion,
@@ -83,6 +86,7 @@ export function ChampionPoolPanel({
                 searchQuery={championSearch}
                 onSearchQueryChange={onChampionSearchChange}
                 onSelectChampion={onSelectChampion}
+                teamRatings={teamRatings}
             />
         </div>
     )

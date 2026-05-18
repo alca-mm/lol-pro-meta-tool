@@ -104,6 +104,7 @@ export const en: Translations = {
     dh_wLabel_matchup: "Matchup / Counter",
     dh_wLabel_winRate: "Win Rate",
     dh_wLabel_sampleSize: "Sample Size",
+    dh_wLabel_teamPool: "Team Pool",
 
     // Draft Edge section
     dh_edgeDesc: "Heuristic draft evaluation based on your pro play data. Not calibrated as a real win rate.",
@@ -248,6 +249,7 @@ export const en: Translations = {
     cn_rating_avoid: "Avoid",
     cn_rating_blind: "Blind Pick",
     cn_rating_pocket: "Pocket Pick",
+    cn_rating_needs_practice: "Needs Practice",
 
     // Auth
     auth_login: "Login",

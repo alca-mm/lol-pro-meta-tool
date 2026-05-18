@@ -199,6 +199,14 @@ describe("calculateDraftRecommendations", () => {
         expect(kaisaRec.totalScore).toBeGreaterThan(xayahRec.totalScore)
     })
 
+    it("calculateDraftRecommendations initializes teamPoolScore and teamPoolRating to null", () => {
+        const recs = calculateDraftRecommendations(ahriVsViktor, createEmptyDraftState())
+        const ahriRec = recs.find((r) => r.championName === "Ahri" && r.role === "mid")!
+        expect(ahriRec).toBeDefined()
+        expect(ahriRec.teamPoolScore).toBeNull()
+        expect(ahriRec.teamPoolRating).toBeNull()
+    })
+
     it("known good synergy increases synergyScore above 0.5", () => {
         // Ahri and Ornn always on the same team, always winning
         const synergyMatches = Array.from({ length: 10 }, (_, i) =>

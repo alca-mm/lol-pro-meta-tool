@@ -10,7 +10,7 @@ import { useAuth } from "../../auth/AuthContext"
 import { useTeam } from "../../teams/TeamContext"
 import { isSupabaseConfigured } from "../../lib/supabase"
 
-const RATINGS: ChampionNoteRating[] = ["comfort", "blind", "pocket", "situational", "avoid"]
+const RATINGS: ChampionNoteRating[] = ["comfort", "blind", "pocket", "situational", "needs_practice", "avoid"]
 
 interface ChampionNotesPanelProps {
     pickedChampions: string[]

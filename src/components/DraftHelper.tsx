@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import type { Match, Role } from "../domain/types"
 import {
     calculateDraftRecommendations,
@@ -6,6 +6,8 @@ import {
     type DraftRecommendation,
     type DraftState,
 } from "../analysis/draftHelper"
+import type { ChampionNote, ChampionNoteRating } from "../notes/types"
+import { loadTeamNotes } from "../notes/teamNotesService"
 import { ALL_CHAMPIONS } from "../analysis/championCatalog"
 import { SeriesPanel } from "./draft/SeriesPanel"
 import { DraftFlowPanel } from "./draft/DraftFlowPanel"
@@ -78,6 +80,44 @@ import {
     clonePickSlots,
     draftHasContent,
 } from "../draft/helpers"
+
+export function ratingToTeamPoolScore(rating: ChampionNoteRating | null): number {
+    switch (rating) {
+        case "comfort": return 1.00
+        case "blind": return 0.95
+        case "pocket": return 0.90
+        case "situational": return 0.65
+        case "needs_practice": return 0.25
+        case "avoid": return 0.00
+        default: return 0.50
+    }
+}
+
+function ratingBadge(rating: ChampionNoteRating): string {
+    switch (rating) {
+        case "comfort": return "C"
+        case "blind": return "B"
+        case "pocket": return "P"
+        case "situational": return "S"
+        case "needs_practice": return "!"
+        case "avoid": return "X"
+    }
+}
+
+function ratingBadgeColor(rating: ChampionNoteRating): string {
+    switch (rating) {
+        case "comfort":
+        case "blind":
+        case "pocket":
+            return "var(--green)"
+        case "situational":
+            return "var(--accent)"
+        case "needs_practice":
+            return "var(--text-dim)"
+        case "avoid":
+            return "var(--red)"
+    }
+}
 
 interface DraftHelperProps {
     matches: Match[]
@@ -172,13 +212,18 @@ function getViableFlexRoles(info: FlexChampionInfo | undefined): Role[] {
         .map((roleInfo) => roleInfo.role)
 }
 
-function calculateWeightedScore(entry: DraftRecommendation, weights: WeightConfig): number {
+export function calculateWeightedScore(
+    entry: DraftRecommendation,
+    weights: WeightConfig,
+    teamPoolScore: number | null = null,
+): number {
     const totalWeight = Object.values(weights).reduce((sum, value) => sum + value, 0)
 
     if (totalWeight <= 0) return entry.totalScore
 
     const winRateScore = entry.winRate === null ? 0 : (entry.winRate - 0.5) * 2
     const sampleSizeScore = Math.min(entry.games / 25, 1)
+    const effectiveTeamPoolScore = teamPoolScore ?? 0.5
 
     const weightedSum =
         entry.draftPriorityScore * weights.draftPriority +
@@ -186,7 +231,8 @@ function calculateWeightedScore(entry: DraftRecommendation, weights: WeightConfi
         entry.synergyScore * weights.synergy +
         entry.matchupScore * weights.matchup +
         winRateScore * weights.winRate +
-        sampleSizeScore * weights.sampleSize
+        sampleSizeScore * weights.sampleSize +
+        effectiveTeamPoolScore * weights.teamPool
 
     return (weightedSum / totalWeight) * sampleConfidence(entry.games)
 }
@@ -196,12 +242,21 @@ function weightedRecommendations(
     matches: Match[],
     draftState: DraftState,
     weights: WeightConfig,
+    teamPoolMap: Map<string, { score: number; rating: ChampionNoteRating }>,
 ): DraftRecommendation[] {
     return calculateDraftRecommendations(matches, draftState)
-        .map((entry) => ({
-            ...entry,
-            totalScore: calculateWeightedScore(entry, weights),
-        }))
+        .map((entry) => {
+            const normalized = normalizeChampionName(entry.championName)
+            const poolEntry = teamPoolMap.get(normalized)
+            const teamPoolScore = poolEntry?.score ?? null
+            const teamPoolRating = poolEntry?.rating ?? null
+            return {
+                ...entry,
+                teamPoolScore,
+                teamPoolRating,
+                totalScore: calculateWeightedScore(entry, weights, teamPoolScore),
+            }
+        })
         .sort((a, b) => b.totalScore - a.totalScore)
 }
 
@@ -860,6 +915,36 @@ export function DraftHelper({ matches }: DraftHelperProps) {
     const [fearlessEnabled, setFearlessEnabled] = useState(false)
     const [seriesHistory, setSeriesHistory] = useState<CompletedGameDraft[]>([])
     const [copyStatus, setCopyStatus] = useState("")
+    const [teamNoteMap, setTeamNoteMap] = useState<Record<string, ChampionNote>>({})
+
+    useEffect(() => {
+        if (!activeTeam) {
+            setTeamNoteMap({})
+            return
+        }
+        void loadTeamNotes(activeTeam.id).then(setTeamNoteMap)
+    }, [activeTeam])
+
+    const teamPoolMap = useMemo(() => {
+        const map = new Map<string, { score: number; rating: ChampionNoteRating }>()
+        for (const [name, note] of Object.entries(teamNoteMap)) {
+            if (note.rating) {
+                map.set(normalizeChampionName(name), {
+                    score: ratingToTeamPoolScore(note.rating),
+                    rating: note.rating,
+                })
+            }
+        }
+        return map
+    }, [teamNoteMap])
+
+    const teamRatingsMap = useMemo(() => {
+        const map = new Map<string, ChampionNoteRating>()
+        for (const [name, entry] of teamPoolMap) {
+            map.set(name, entry.rating)
+        }
+        return map
+    }, [teamPoolMap])
 
     const bluePicks = useMemo(() => slotsToDraftPicks(bluePickSlots), [bluePickSlots])
     const redPicks = useMemo(() => slotsToDraftPicks(redPickSlots), [redPickSlots])
@@ -906,13 +991,13 @@ export function DraftHelper({ matches }: DraftHelperProps) {
     )
 
     const blueWeightedRecommendations = useMemo(
-        () => weightedRecommendations(recentPatchData.matches, blueRecommendationDraftState, weights),
-        [recentPatchData.matches, blueRecommendationDraftState, weights],
+        () => weightedRecommendations(recentPatchData.matches, blueRecommendationDraftState, weights, teamPoolMap),
+        [recentPatchData.matches, blueRecommendationDraftState, weights, teamPoolMap],
     )
 
     const redWeightedRecommendations = useMemo(
-        () => weightedRecommendations(recentPatchData.matches, redRecommendationDraftState, weights),
-        [recentPatchData.matches, redRecommendationDraftState, weights],
+        () => weightedRecommendations(recentPatchData.matches, redRecommendationDraftState, weights, teamPoolMap),
+        [recentPatchData.matches, redRecommendationDraftState, weights, teamPoolMap],
     )
 
     const recommendations = recommendationSide === "blue" ? blueWeightedRecommendations : redWeightedRecommendations
@@ -1454,6 +1539,22 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     <strong>
                         {index + 1}. {entry.championName}
                     </strong>
+                    {entry.teamPoolRating && (
+                        <span
+                            title={t(`cn_rating_${entry.teamPoolRating}` as TranslationKey)}
+                            style={{
+                                marginLeft: "0.4rem",
+                                fontSize: "0.7rem",
+                                fontWeight: 700,
+                                padding: "1px 5px",
+                                borderRadius: 3,
+                                background: "var(--surface2)",
+                                color: ratingBadgeColor(entry.teamPoolRating),
+                            }}
+                        >
+                            {ratingBadge(entry.teamPoolRating)}
+                        </span>
+                    )}
                     <span className="muted" style={{ display: "block" }}>
                         {ROLE_LABELS[entry.role]} · Score {formatScore(entry.totalScore)} · {entry.games} Picks
                         {entry.games < 50 ? ` · ${entry.sampleSizeLabel}` : ""}
@@ -1748,6 +1849,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 bannedChampionSet={bannedChampionSet}
                 championSearch={championSearch}
                 poolRoleFilter={poolRoleFilter}
+                teamRatings={teamRatingsMap}
                 onActivateBanSlot={(visualSide, index) => {
                     setActiveDraftSlot({ type: "ban", visualSide, index })
                     setRecommendationSide(visualSide)
@@ -1850,6 +1952,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                                 <th>Picks</th>
                                 <th>Winrate</th>
                                 <th>Sample</th>
+                                <th>Pool</th>
                                 <th>{t("dh_tableReasons")}</th>
                             </tr>
                             </thead>
@@ -1866,6 +1969,9 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                                     <td>{entry.games}</td>
                                     <td>{formatPercent(entry.winRate)}</td>
                                     <td className="muted">{entry.sampleSizeLabel}</td>
+                                    <td style={{ color: entry.teamPoolRating ? ratingBadgeColor(entry.teamPoolRating) : undefined }}>
+                                        {entry.teamPoolRating ? ratingBadge(entry.teamPoolRating) : "—"}
+                                    </td>
                                     <td>{entry.reasons.map((r) => t(r as TranslationKey)).join(", ")}</td>
                                 </tr>
                             ))}

@@ -1,4 +1,5 @@
 import type { Match, Role } from "../domain/types"
+import type { ChampionNoteRating } from "../notes/types"
 import { calculateChampionStats } from "./championStats"
 import { calculateRoleStats } from "./roleStats"
 import { calculateSynergyStats } from "./synergyStats"
@@ -28,6 +29,8 @@ export type DraftRecommendation = {
     winRate: number | null
     sampleSizeLabel: string
     reasons: string[]
+    teamPoolScore: number | null
+    teamPoolRating: ChampionNoteRating | null
 }
 
 const ROLES: Role[] = ["top", "jungle", "mid", "bot", "support"]
@@ -336,6 +339,8 @@ export function calculateDraftRecommendations(
                 matchupScore,
                 games: roleStat.picks,
             }),
+            teamPoolScore: null,
+            teamPoolRating: null,
         })
     }
 

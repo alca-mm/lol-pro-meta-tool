@@ -19,6 +19,7 @@ export function ScoreWeightPanel({ weights, onUpdateWeight, onApplyPreset, onRes
         matchup: t("dh_wLabel_matchup"),
         winRate: t("dh_wLabel_winRate"),
         sampleSize: t("dh_wLabel_sampleSize"),
+        teamPool: t("dh_wLabel_teamPool"),
     }
 
     return (

@@ -111,7 +111,7 @@ describe("deleteNote", () => {
 })
 
 describe("ChampionNoteRating values", () => {
-    const validRatings = ["comfort", "situational", "avoid", "blind", "pocket"] as const
+    const validRatings = ["comfort", "situational", "avoid", "blind", "pocket", "needs_practice"] as const
 
     it("all rating values are non-empty strings", () => {
         for (const r of validRatings) {

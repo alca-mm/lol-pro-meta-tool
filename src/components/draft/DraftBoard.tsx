@@ -1,5 +1,6 @@
 import type { Role } from "../../domain/types"
 import type { PickSlot, DraftVisualSide, ActiveDraftSlot, FlexChampionInfo } from "../../draft/types"
+import type { ChampionNoteRating } from "../../notes/types"
 import { DraftTeamPanel } from "./DraftTeamPanel"
 import { ChampionPoolPanel } from "./ChampionPoolPanel"
 
@@ -15,6 +16,7 @@ interface DraftBoardProps {
     bannedChampionSet: Set<string>
     championSearch: string
     poolRoleFilter: Role | null
+    teamRatings?: Map<string, ChampionNoteRating>
     onActivateBanSlot: (visualSide: DraftVisualSide, index: number) => void
     onActivatePickSlot: (visualSide: DraftVisualSide, index: number) => void
     onClearBan: (visualSide: DraftVisualSide, index: number) => void
@@ -37,6 +39,7 @@ export function DraftBoard({
     bannedChampionSet,
     championSearch,
     poolRoleFilter,
+    teamRatings,
     onActivateBanSlot,
     onActivatePickSlot,
     onClearBan,
@@ -68,6 +71,7 @@ export function DraftBoard({
                 bannedChampionSet={bannedChampionSet}
                 championSearch={championSearch}
                 poolRoleFilter={poolRoleFilter}
+                teamRatings={teamRatings}
                 onSetPoolRoleFilter={onSetPoolRoleFilter}
                 onChampionSearchChange={onChampionSearchChange}
                 onSelectChampion={onSelectChampion}
