@@ -2,13 +2,16 @@ import { useState } from "react"
 import { useTranslation } from "../i18n/LanguageContext"
 import { useAuth } from "../auth/AuthContext"
 import { useTeam } from "../teams/TeamContext"
+import { canDeleteTeam } from "../teams/teamService"
+import { TeamMembersPanel } from "./team/TeamMembersPanel"
 
 export function TeamStatusPanel() {
     const { t } = useTranslation()
     const { user } = useAuth()
-    const { teams, activeTeam, loading, createTeam, setActiveTeam } = useTeam()
+    const { teams, activeTeam, loading, myRole, createTeam, setActiveTeam, deleteTeam } = useTeam()
     const [newTeamName, setNewTeamName] = useState("")
     const [creating, setCreating] = useState(false)
+    const [deleting, setDeleting] = useState(false)
 
     // only render when logged in
     if (!user) return null
@@ -22,7 +25,16 @@ export function TeamStatusPanel() {
         setCreating(false)
     }
 
+    async function handleDelete() {
+        if (!activeTeam) return
+        if (!window.confirm(t("team_deleteConfirm").replace("{name}", activeTeam.name))) return
+        setDeleting(true)
+        await deleteTeam(activeTeam.id)
+        setDeleting(false)
+    }
+
     return (
+        <>
         <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
                 {activeTeam ? (
@@ -66,8 +78,21 @@ export function TeamStatusPanel() {
                     >
                         {t("team_create")}
                     </button>
+                    {activeTeam && canDeleteTeam(myRole) && (
+                        <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => void handleDelete()}
+                            disabled={deleting}
+                            style={{ color: "var(--color-danger, #e55)" }}
+                        >
+                            {t("team_deleteTeam")}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
+        <TeamMembersPanel />
+        </>
     )
 }

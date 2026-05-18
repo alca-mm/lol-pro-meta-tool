@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "../../i18n/LanguageContext"
 import { useAuth } from "../../auth/AuthContext"
 import { isSupabaseConfigured } from "../../lib/supabase"
+import { isValidUsername } from "../../auth/usernameAuth"
 
 interface AuthPanelProps {
     onClose: () => void
@@ -9,11 +10,10 @@ interface AuthPanelProps {
 
 export function AuthPanel({ onClose }: AuthPanelProps) {
     const { t } = useTranslation()
-    const { signInWithEmail, signUpWithEmail, signInWithMagicLink, loading } = useAuth()
-    const [email, setEmail] = useState("")
+    const { signInWithUsername, signUpWithUsername, loading } = useAuth()
+    const [username, setUsername] = useState("")
     const [password, setPassword] = useState("")
     const [error, setError] = useState<string | null>(null)
-    const [info, setInfo] = useState<string | null>(null)
     const [busy, setBusy] = useState(false)
 
     if (!isSupabaseConfigured) {
@@ -33,8 +33,11 @@ export function AuthPanel({ onClose }: AuthPanelProps) {
     }
 
     async function handleAction(action: () => Promise<string | null>) {
+        if (!isValidUsername(username)) {
+            setError(t("auth_invalidUsername"))
+            return
+        }
         setError(null)
-        setInfo(null)
         setBusy(true)
         const err = await action()
         setBusy(false)
@@ -45,31 +48,20 @@ export function AuthPanel({ onClose }: AuthPanelProps) {
         }
     }
 
-    async function handleMagicLink() {
-        if (!email) return
-        setError(null)
-        setInfo(null)
-        setBusy(true)
-        const err = await signInWithMagicLink(email)
-        setBusy(false)
-        if (err) {
-            setError(err)
-        } else {
-            setInfo(t("auth_magicLinkSent"))
-        }
-    }
+    const canSubmit = !busy && username.length > 0 && password.length > 0
 
     return (
         <div className="auth-panel recommendation-section">
             <div style={{ display: "grid", gap: "0.5rem", maxWidth: "24rem" }}>
                 <label>
-                    {t("auth_email")}
+                    {t("auth_username")}
                     <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
                         disabled={busy}
-                        autoComplete="email"
+                        autoComplete="username"
+                        spellCheck={false}
                     />
                 </label>
                 <label>
@@ -83,33 +75,28 @@ export function AuthPanel({ onClose }: AuthPanelProps) {
                     />
                 </label>
 
-                {error && <p className="muted" style={{ color: "var(--score-neg, #f87171)" }}>{t("auth_error")}: {error}</p>}
-                {info && <p className="muted" style={{ color: "var(--score-pos, #4ade80)" }}>{info}</p>}
+                {error && (
+                    <p className="muted" style={{ color: "var(--score-neg, #f87171)" }}>
+                        {t("auth_error")}: {error}
+                    </p>
+                )}
 
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                     <button
                         type="button"
                         className="secondary-button"
-                        disabled={busy || !email || !password}
-                        onClick={() => handleAction(() => signInWithEmail(email, password))}
+                        disabled={!canSubmit}
+                        onClick={() => handleAction(() => signInWithUsername(username, password))}
                     >
                         {t("auth_login")}
                     </button>
                     <button
                         type="button"
                         className="secondary-button"
-                        disabled={busy || !email || !password}
-                        onClick={() => handleAction(() => signUpWithEmail(email, password))}
+                        disabled={!canSubmit}
+                        onClick={() => handleAction(() => signUpWithUsername(username, password))}
                     >
                         {t("auth_signUp")}
-                    </button>
-                    <button
-                        type="button"
-                        className="secondary-button"
-                        disabled={busy || !email}
-                        onClick={handleMagicLink}
-                    >
-                        {t("auth_sendMagicLink")}
                     </button>
                 </div>
             </div>

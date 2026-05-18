@@ -1,14 +1,15 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import type { Session, User } from "@supabase/supabase-js"
 import { supabase, isSupabaseConfigured } from "../lib/supabase"
+import { usernameToAuthEmail } from "./usernameAuth"
+import { upsertProfile } from "./profileService"
 
 interface AuthContextValue {
     session: Session | null
     user: User | null
     loading: boolean
-    signInWithEmail: (email: string, password: string) => Promise<string | null>
-    signUpWithEmail: (email: string, password: string) => Promise<string | null>
-    signInWithMagicLink: (email: string) => Promise<string | null>
+    signInWithUsername: (username: string, password: string) => Promise<string | null>
+    signUpWithUsername: (username: string, password: string) => Promise<string | null>
     signOut: () => Promise<void>
 }
 
@@ -36,22 +37,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => subscription.unsubscribe()
     }, [])
 
-    async function signInWithEmail(email: string, password: string): Promise<string | null> {
+    async function signInWithUsername(username: string, password: string): Promise<string | null> {
         if (!supabase) return "Auth not configured"
+        const email = usernameToAuthEmail(username)
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         return error?.message ?? null
     }
 
-    async function signUpWithEmail(email: string, password: string): Promise<string | null> {
+    async function signUpWithUsername(username: string, password: string): Promise<string | null> {
         if (!supabase) return "Auth not configured"
-        const { error } = await supabase.auth.signUp({ email, password })
-        return error?.message ?? null
-    }
-
-    async function signInWithMagicLink(email: string): Promise<string | null> {
-        if (!supabase) return "Auth not configured"
-        const { error } = await supabase.auth.signInWithOtp({ email })
-        return error?.message ?? null
+        const email = usernameToAuthEmail(username)
+        const { data, error } = await supabase.auth.signUp({ email, password })
+        if (error) return error.message
+        if (data.user) {
+            await upsertProfile(data.user.id, username)
+        }
+        return null
     }
 
     async function signOut(): Promise<void> {
@@ -65,9 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 session,
                 user: session?.user ?? null,
                 loading,
-                signInWithEmail,
-                signUpWithEmail,
-                signInWithMagicLink,
+                signInWithUsername,
+                signUpWithUsername,
                 signOut,
             }}
         >
