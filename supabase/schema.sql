@@ -467,3 +467,84 @@ create policy "team_drafts_delete" on public.team_drafts
     using (
         public.can_manage_team_members(team_id)
     );
+
+-- ============================================================
+-- 13. player_accounts
+-- One Riot account per user per team.
+-- ============================================================
+
+create table if not exists public.player_accounts (
+    id              uuid primary key default gen_random_uuid(),
+    team_id         uuid not null references public.teams(id) on delete cascade,
+    user_id         uuid not null references auth.users(id) on delete cascade,
+    region          text not null default 'euw1',
+    routing_region  text not null default 'europe',
+    riot_game_name  text not null,
+    riot_tag_line   text not null,
+    puuid           text not null,
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now(),
+    unique (team_id, user_id),
+    unique (team_id, puuid)
+);
+
+grant select, insert, update, delete on public.player_accounts to authenticated;
+
+alter table public.player_accounts enable row level security;
+
+drop policy if exists "player_accounts_select" on public.player_accounts;
+drop policy if exists "player_accounts_insert" on public.player_accounts;
+drop policy if exists "player_accounts_update" on public.player_accounts;
+drop policy if exists "player_accounts_delete" on public.player_accounts;
+
+create policy "player_accounts_select" on public.player_accounts
+    for select
+    using (public.is_team_member(team_id));
+
+create policy "player_accounts_insert" on public.player_accounts
+    for insert
+    with check (user_id = auth.uid() and public.is_team_member(team_id));
+
+create policy "player_accounts_update" on public.player_accounts
+    for update
+    using (user_id = auth.uid())
+    with check (user_id = auth.uid());
+
+create policy "player_accounts_delete" on public.player_accounts
+    for delete
+    using (user_id = auth.uid());
+
+-- ============================================================
+-- 14. ranked_matches
+-- SoloQ (420) and FlexQ (440) results, written by Edge Function.
+-- No direct write policies — only service_role via Edge Function.
+-- ============================================================
+
+create table if not exists public.ranked_matches (
+    id            uuid primary key default gen_random_uuid(),
+    team_id       uuid not null references public.teams(id) on delete cascade,
+    puuid         text not null,
+    match_id      text not null,
+    queue_id      int  not null,
+    champion_name text not null,
+    win           boolean not null,
+    kills         int  not null default 0,
+    deaths        int  not null default 0,
+    assists       int  not null default 0,
+    game_duration int  not null,
+    game_start    timestamptz not null,
+    role          text,
+    lane          text,
+    created_at    timestamptz not null default now(),
+    unique (puuid, match_id)
+);
+
+grant select on public.ranked_matches to authenticated;
+
+alter table public.ranked_matches enable row level security;
+
+drop policy if exists "ranked_matches_select" on public.ranked_matches;
+
+create policy "ranked_matches_select" on public.ranked_matches
+    for select
+    using (public.is_team_member(team_id));
