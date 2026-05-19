@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useAuth } from "../../auth/AuthContext"
 import { useTeam } from "../../teams/TeamContext"
 import {
@@ -8,7 +8,10 @@ import {
     getMyPlayerAccount,
     type PlayerAccount,
     type SyncResult,
+    type SyncMode,
 } from "../../teams/riotService"
+
+const COOLDOWN_SECS = 30
 
 export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } = {}) {
     const { user, session } = useAuth()
@@ -18,6 +21,25 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
     const [riotIdInput, setRiotIdInput] = useState("")
     const [busy, setBusy] = useState(false)
     const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null)
+    const [cooldownSecs, setCooldownSecs] = useState(0)
+    const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+    function startCooldown() {
+        setCooldownSecs(COOLDOWN_SECS)
+        if (cooldownRef.current) clearInterval(cooldownRef.current)
+        cooldownRef.current = setInterval(() => {
+            setCooldownSecs((s) => {
+                if (s <= 1) {
+                    clearInterval(cooldownRef.current!)
+                    cooldownRef.current = null
+                    return 0
+                }
+                return s - 1
+            })
+        }, 1000)
+    }
+
+    useEffect(() => () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }, [])
 
     function showFeedback(msg: string, ok: boolean) {
         setFeedback({ msg, ok })
@@ -63,10 +85,11 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
         }
     }
 
-    async function handleSync() {
+    async function handleSync(mode: SyncMode = "quick") {
         setBusy(true)
-        const result = await syncRiotMatches(session!.access_token, activeTeam!.id)
+        const result = await syncRiotMatches(session!.access_token, activeTeam!.id, mode)
         setBusy(false)
+        startCooldown()
         if (typeof result === "string") {
             const msg =
                 result === "riot_account_not_linked"
@@ -115,10 +138,19 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
                         type="button"
                         className="secondary-button"
                         style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem" }}
-                        disabled={busy}
-                        onClick={() => void handleSync()}
+                        disabled={busy || cooldownSecs > 0}
+                        onClick={() => void handleSync("quick")}
                     >
-                        {busy ? "Lädt…" : "Matches syncen"}
+                        {busy ? "Lädt…" : cooldownSecs > 0 ? `Sync (${cooldownSecs}s)` : "Matches syncen"}
+                    </button>
+                    <button
+                        type="button"
+                        className="secondary-button"
+                        style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem" }}
+                        disabled={busy || cooldownSecs > 0}
+                        onClick={() => void handleSync("deep")}
+                    >
+                        {cooldownSecs > 0 ? `Mehr laden (${cooldownSecs}s)` : "Mehr laden"}
                     </button>
                     <button
                         type="button"
@@ -175,9 +207,9 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
                 </p>
             )}
 
-            {account && !busy && (
+            {account && !busy && cooldownSecs === 0 && (
                 <p className="muted" style={{ marginTop: "0.4rem", fontSize: "0.8rem" }}>
-                    Klicke "Matches syncen" um neue Matches zu laden.
+                    Quick: letzte 10 Matches/Queue · Mehr laden: letzte 30/Queue
                 </p>
             )}
         </div>

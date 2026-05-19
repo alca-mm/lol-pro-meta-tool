@@ -50,6 +50,27 @@ export interface MatchParticipant {
     cs: number
 }
 
+export type SyncMode = "quick" | "deep"
+
+export const SYNC_MODE_CONFIG: Record<SyncMode, { countPerQueue: number }> = {
+    quick: { countPerQueue: 10 },
+    deep:  { countPerQueue: 30 },
+}
+
+export function isRankedQueue(queueId: number): boolean {
+    return queueId === 420 || queueId === 440
+}
+
+export function buildMatchIdsUrl(
+    base: string,
+    puuid: string,
+    queue: 420 | 440,
+    start: number,
+    count: number,
+): string {
+    return `${base}/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?queue=${queue}&start=${start}&count=${count}`
+}
+
 /** Returns the start-offsets for paginated Riot match-ID requests. */
 export function buildPageStarts(maxPages: number, pageSize: number): number[] {
     return Array.from({ length: maxPages }, (_, i) => i * pageSize)
@@ -118,15 +139,19 @@ export interface SyncResult {
     pagesFetched: number
     maxPagesReached: boolean
     moreMayBeAvailable: boolean
+    mode?: SyncMode
+    detailRequests?: number
 }
 
 export async function syncRiotMatches(
     accessToken: string,
     teamId: string,
+    mode: SyncMode = "quick",
 ): Promise<SyncResult | string> {
     const result = await callEdgeFunction(accessToken, {
         action: "sync",
         team_id: teamId,
+        mode,
     })
     if (result.error) return result.error as string
     return {
@@ -136,6 +161,8 @@ export async function syncRiotMatches(
         pagesFetched:       result.pagesFetched as number,
         maxPagesReached:    result.maxPagesReached as boolean,
         moreMayBeAvailable: result.moreMayBeAvailable as boolean,
+        mode:               result.mode as SyncMode | undefined,
+        detailRequests:     result.detailRequests as number | undefined,
     }
 }
 

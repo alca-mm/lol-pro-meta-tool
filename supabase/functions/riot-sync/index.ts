@@ -11,11 +11,11 @@ const RIOT_BASE: Record<string, string> = {
     asia:     "https://asia.api.riotgames.com",
 }
 
-const PAGE_SIZE       = 20
-const MAX_PAGES_TOTAL = 3   // 3 × 20 = 60 match IDs max
 const MAX_CONCURRENCY = 3
-const BATCH_PAUSE_MS  = 300 // pause between detail-fetch batches
+const BATCH_PAUSE_MS  = 750  // pause between detail-fetch batches
 const RANKED_QUEUES   = new Set([420, 440])
+const RANKED_QUEUES_LIST = [420, 440] as const
+const SYNC_COUNT: Record<"quick" | "deep", number> = { quick: 10, deep: 30 }
 
 Deno.serve(async (req: Request) => {
     if (req.method === "OPTIONS") {
@@ -123,63 +123,35 @@ Deno.serve(async (req: Request) => {
         const { puuid, routing_region } = account as { puuid: string; routing_region: string }
         const base = RIOT_BASE[routing_region] ?? RIOT_BASE.europe
 
-        // ── 1. Paginated match ID collection (all queues, 3 pages max = 60 total) ──
+        const mode = (body.mode === "deep" ? "deep" : "quick") as "quick" | "deep"
+        const countPerQueue = SYNC_COUNT[mode]
+
+        // ── 1. Fetch match IDs for each ranked queue (2 requests total) ──────
         const allMatchIds: string[] = []
-        let totalPagesFetched = 0
-        let maxPagesReached = false
+        let pagesFetched = 0
         let moreMayBeAvailable = false
 
-        for (let page = 0; page < MAX_PAGES_TOTAL; page++) {
+        for (const queue of RANKED_QUEUES_LIST) {
             const idsRes = await fetch(
-                `${base}/lol/match/v5/matches/by-puuid/${puuid}/ids?start=${page * PAGE_SIZE}&count=${PAGE_SIZE}`,
+                `${base}/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=${queue}&start=0&count=${countPerQueue}`,
                 { headers: { "X-Riot-Token": riotApiKey } },
             )
-
             if (!idsRes.ok) {
                 if (idsRes.status === 429) return json({ error: "riot_rate_limited" }, 429)
-                break
+                continue
             }
-
             const ids = await idsRes.json() as string[]
-            totalPagesFetched++
-
-            if (ids.length === 0) break
+            pagesFetched++
             allMatchIds.push(...ids)
-
-            const isLastAllowed = page === MAX_PAGES_TOTAL - 1
-            const isPartialPage = ids.length < PAGE_SIZE
-
-            // Natural end of match history
-            if (isPartialPage) break
-
-            if (isLastAllowed) {
-                // Check if last page contains any unknown IDs to set moreMayBeAvailable
-                const { data: knownOnPage } = await adminClient
-                    .from("ranked_matches")
-                    .select("match_id")
-                    .eq("puuid", puuid)
-                    .in("match_id", ids)
-                const knownCount = (knownOnPage ?? []).length
-                maxPagesReached = true
-                if (knownCount < ids.length) moreMayBeAvailable = true
-                break
-            }
-
-            // Early exit: all IDs on this page already in DB → no deeper pages needed
-            const { data: knownOnPage } = await adminClient
-                .from("ranked_matches")
-                .select("match_id")
-                .eq("puuid", puuid)
-                .in("match_id", ids)
-            const knownCount = (knownOnPage ?? []).length
-            if (knownCount === ids.length) break
+            if (ids.length >= countPerQueue) moreMayBeAvailable = true
         }
+        const maxPagesReached = moreMayBeAvailable
 
         if (allMatchIds.length === 0) {
-            return json({ success: true, imported: 0, skipped: 0, alreadyKnown: 0, pagesFetched: totalPagesFetched, maxPagesReached, moreMayBeAvailable })
+            return json({ success: true, imported: 0, skipped: 0, alreadyKnown: 0, pagesFetched, maxPagesReached, moreMayBeAvailable, mode, detailRequests: 0 })
         }
 
-        // ── 2. Bulk existence check for all collected IDs ────────
+        // ── 2. Bulk existence check + backfill detection ──────────────────────
         const uniqueMatchIds = [...new Set(allMatchIds)]
         const { data: existing } = await adminClient
             .from("ranked_matches")
@@ -188,8 +160,22 @@ Deno.serve(async (req: Request) => {
             .in("match_id", uniqueMatchIds)
 
         const knownIds = new Set((existing ?? []).map((r: { match_id: string }) => r.match_id))
-        const newIds = uniqueMatchIds.filter((id) => !knownIds.has(id))
-        const alreadyKnown = knownIds.size
+
+        // Re-fetch known rows with missing extended stats (gold_earned=0 is impossible in real ranked).
+        let incompleteIds: string[] = []
+        if (knownIds.size > 0) {
+            const { data: incomplete } = await adminClient
+                .from("ranked_matches")
+                .select("match_id")
+                .eq("puuid", puuid)
+                .in("match_id", [...knownIds])
+                .eq("gold_earned", 0)
+            incompleteIds = (incomplete ?? []).map((r: { match_id: string }) => r.match_id)
+        }
+
+        const trulyNewIds  = uniqueMatchIds.filter((id) => !knownIds.has(id))
+        const idsToFetch   = [...new Set([...trulyNewIds, ...incompleteIds])]
+        const alreadyKnown = knownIds.size - incompleteIds.length
 
         // ── 3. Fetch match details (max 3 concurrent, 300ms pause between batches) ──
         interface Participant {
@@ -209,13 +195,15 @@ Deno.serve(async (req: Request) => {
         const rows: Record<string, unknown>[] = []
         const participantRows: Record<string, unknown>[] = []
         let skipped = 0
+        let detailRequests = 0
 
-        for (let i = 0; i < newIds.length; i += MAX_CONCURRENCY) {
+        for (let i = 0; i < idsToFetch.length; i += MAX_CONCURRENCY) {
             if (i > 0) {
                 await new Promise<void>((resolve) => setTimeout(resolve, BATCH_PAUSE_MS))
             }
 
-            const batch = newIds.slice(i, i + MAX_CONCURRENCY)
+            const batch = idsToFetch.slice(i, i + MAX_CONCURRENCY)
+            detailRequests += batch.length
             const results = await Promise.all(
                 batch.map(async (matchId) => {
                     const res = await fetch(`${base}/lol/match/v5/matches/${matchId}`, {
@@ -310,9 +298,11 @@ Deno.serve(async (req: Request) => {
             imported: rows.length,
             skipped,
             alreadyKnown,
-            pagesFetched: totalPagesFetched,
+            pagesFetched,
             maxPagesReached,
             moreMayBeAvailable,
+            mode,
+            detailRequests,
         })
     }
 

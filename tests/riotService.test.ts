@@ -7,6 +7,9 @@ import {
     getTeamRankedMatches,
     formatGameDuration,
     filterMatches,
+    isRankedQueue,
+    buildMatchIdsUrl,
+    SYNC_MODE_CONFIG,
     type RankedMatch,
 } from "../src/teams/riotService"
 
@@ -145,6 +148,60 @@ function makeMatch(overrides: Partial<RankedMatch>): RankedMatch {
         ...overrides,
     }
 }
+
+describe("isRankedQueue", () => {
+    it("returns true for SoloQ (420)", () => {
+        expect(isRankedQueue(420)).toBe(true)
+    })
+
+    it("returns true for FlexQ (440)", () => {
+        expect(isRankedQueue(440)).toBe(true)
+    })
+
+    it("returns false for ARAM (450)", () => {
+        expect(isRankedQueue(450)).toBe(false)
+    })
+
+    it("returns false for 0", () => {
+        expect(isRankedQueue(0)).toBe(false)
+    })
+})
+
+describe("buildMatchIdsUrl", () => {
+    const base = "https://europe.api.riotgames.com"
+    const puuid = "abc-123"
+
+    it("contains the correct queue parameter for 420", () => {
+        const url = buildMatchIdsUrl(base, puuid, 420, 0, 10)
+        expect(url).toContain("queue=420")
+    })
+
+    it("contains the correct queue parameter for 440", () => {
+        const url = buildMatchIdsUrl(base, puuid, 440, 0, 10)
+        expect(url).toContain("queue=440")
+    })
+
+    it("contains start and count parameters", () => {
+        const url = buildMatchIdsUrl(base, puuid, 420, 0, 10)
+        expect(url).toContain("start=0")
+        expect(url).toContain("count=10")
+    })
+
+    it("URL-encodes the puuid in the path", () => {
+        const url = buildMatchIdsUrl(base, puuid, 420, 0, 10)
+        expect(url).toContain(encodeURIComponent(puuid))
+    })
+})
+
+describe("SYNC_MODE_CONFIG", () => {
+    it("quick mode uses countPerQueue=10", () => {
+        expect(SYNC_MODE_CONFIG.quick.countPerQueue).toBe(10)
+    })
+
+    it("deep mode uses countPerQueue=30", () => {
+        expect(SYNC_MODE_CONFIG.deep.countPerQueue).toBe(30)
+    })
+})
 
 describe("filterMatches", () => {
     const matches: RankedMatch[] = [
