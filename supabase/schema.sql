@@ -60,8 +60,6 @@ create table if not exists public.champion_notes (
 
 -- ============================================================
 -- 2. Helper functions for RLS
--- All SECURITY DEFINER with explicit search_path to prevent
--- privilege escalation. Avoids policy recursion.
 -- ============================================================
 
 create or replace function public.is_team_member(p_team_id uuid)
@@ -92,7 +90,6 @@ select exists (
 );
 $$;
 
--- Returns the current user's role in a team, or NULL if not a member.
 create or replace function public.get_team_role(p_team_id uuid)
 returns text
 language sql
@@ -106,7 +103,6 @@ where team_id = p_team_id
     limit 1;
 $$;
 
--- True if the current user can add/manage members (owner or admin).
 create or replace function public.can_manage_team_members(p_team_id uuid)
 returns boolean
 language sql
@@ -129,16 +125,19 @@ grant execute on function public.can_manage_team_members(uuid) to authenticated;
 
 -- ============================================================
 -- 3. Grants
--- RLS still controls row-level access. These grants only allow
--- authenticated users to access the tables through the API.
 -- ============================================================
 
-grant usage on schema public to anon, authenticated;
+grant usage on schema public to anon, authenticated, service_role;
 
 grant select, insert, update, delete on public.profiles       to authenticated;
 grant select, insert, update, delete on public.teams          to authenticated;
 grant select, insert, update, delete on public.team_members   to authenticated;
 grant select, insert, update, delete on public.champion_notes to authenticated;
+
+grant select, insert, update, delete on public.profiles       to service_role;
+grant select, insert, update, delete on public.teams          to service_role;
+grant select, insert, update, delete on public.team_members   to service_role;
+grant select, insert, update, delete on public.champion_notes to service_role;
 
 -- ============================================================
 -- 4. Enable RLS
@@ -150,7 +149,7 @@ alter table public.team_members   enable row level security;
 alter table public.champion_notes enable row level security;
 
 -- ============================================================
--- 5. Drop old policies (idempotent re-run)
+-- 5. Drop old policies
 -- ============================================================
 
 drop policy if exists "profiles_select"          on public.profiles;
@@ -174,8 +173,6 @@ drop policy if exists "champion_notes_delete"    on public.champion_notes;
 
 -- ============================================================
 -- 6. Policies: profiles
--- Any authenticated user can read profiles (needed for username lookup).
--- Each user can only write their own profile.
 -- ============================================================
 
 create policy "profiles_select" on public.profiles
@@ -201,8 +198,6 @@ create policy "profiles_update" on public.profiles
 
 -- ============================================================
 -- 7. Policies: teams
--- Owner can always see their own team, even before/if membership
--- rows are missing. Members can see teams they belong to.
 -- ============================================================
 
 create policy "teams_select" on public.teams
@@ -235,22 +230,6 @@ using (
 
 -- ============================================================
 -- 8. Policies: team_members
---
--- SELECT:
---   Team members can see memberships of their team.
---   A user can always see their own membership rows.
---
--- INSERT:
---   Owner can insert owner/admin/player.
---   Admin can insert only player.
---   This also supports owner bootstrap because is_team_owner(team_id)
---   checks teams.owner_id and does not depend on an existing member row.
---
--- UPDATE:
---   Only owner can change roles.
---
--- DELETE:
---   Only owner can remove members.
 -- ============================================================
 
 create policy "team_members_select" on public.team_members
@@ -292,7 +271,6 @@ using (
 
 -- ============================================================
 -- 9. Policies: champion_notes
--- All team members can read and write notes.
 -- ============================================================
 
 create policy "champion_notes_select" on public.champion_notes
@@ -334,20 +312,24 @@ do update set role = 'owner';
 -- ============================================================
 
 create table if not exists public.team_invites (
-    id          uuid primary key default gen_random_uuid(),
+                                                   id          uuid primary key default gen_random_uuid(),
     team_id     uuid not null references public.teams(id) on delete cascade,
     code        text not null unique,
     created_by  uuid not null default auth.uid() references auth.users(id) on delete cascade,
     created_at  timestamptz not null default now(),
     expires_at  timestamptz null default (now() + interval '30 minutes'),
     revoked_at  timestamptz null
-);
+    );
 
--- Ensure the default is applied on existing deployments that ran an earlier schema
 alter table if exists public.team_invites
-    alter column expires_at set default (now() + interval '30 minutes');
+alter column expires_at set default (now() + interval '30 minutes');
+
+update public.team_invites
+set expires_at = created_at + interval '30 minutes'
+where expires_at is null;
 
 grant select, insert, update, delete on public.team_invites to authenticated;
+grant select, insert, update, delete on public.team_invites to service_role;
 
 alter table public.team_invites enable row level security;
 
@@ -356,31 +338,35 @@ drop policy if exists "team_invites_insert" on public.team_invites;
 drop policy if exists "team_invites_update" on public.team_invites;
 drop policy if exists "team_invites_delete" on public.team_invites;
 
--- Team members can see their team's invites
 create policy "team_invites_select" on public.team_invites
     for select
-    using (public.is_team_member(team_id));
+                                       using (
+                                       public.is_team_member(team_id)
+                                       );
 
--- Owner or admin can create invites
 create policy "team_invites_insert" on public.team_invites
     for insert
-    with check (public.can_manage_team_members(team_id));
+    with check (
+        public.can_manage_team_members(team_id)
+    );
 
--- Owner or admin can revoke (update) invites
 create policy "team_invites_update" on public.team_invites
     for update
-    using (public.can_manage_team_members(team_id))
-    with check (public.can_manage_team_members(team_id));
+                          using (
+                          public.can_manage_team_members(team_id)
+                          )
+        with check (
+                          public.can_manage_team_members(team_id)
+                          );
 
--- Owner or admin can delete invites
 create policy "team_invites_delete" on public.team_invites
     for delete
-    using (public.can_manage_team_members(team_id));
+using (
+        public.can_manage_team_members(team_id)
+    );
 
 -- ============================================================
 -- 11. join_team_with_invite
--- SECURITY DEFINER so an unenrolled authenticated user can
--- validate and join without a direct SELECT on team_invites.
 -- ============================================================
 
 create or replace function public.join_team_with_invite(p_code text)
@@ -390,24 +376,24 @@ security definer
 set search_path = public
 as $$
 declare
-    v_team_id uuid;
+v_team_id uuid;
 begin
-    select team_id into v_team_id
-    from public.team_invites
-    where code = upper(trim(p_code))
-      and revoked_at is null
-      and (expires_at is null or expires_at > now())
+select team_id into v_team_id
+from public.team_invites
+where code = upper(trim(p_code))
+  and revoked_at is null
+  and expires_at > now()
     limit 1;
 
-    if v_team_id is null then
+if v_team_id is null then
         raise exception 'invalid_invite';
-    end if;
+end if;
 
-    insert into public.team_members (team_id, user_id, role)
-    values (v_team_id, auth.uid(), 'player')
+insert into public.team_members (team_id, user_id, role)
+values (v_team_id, auth.uid(), 'player')
     on conflict (team_id, user_id) do nothing;
 
-    return v_team_id;
+return v_team_id;
 end;
 $$;
 
@@ -418,7 +404,7 @@ grant execute on function public.join_team_with_invite(text) to authenticated;
 -- ============================================================
 
 create table if not exists public.team_drafts (
-    id          uuid primary key default gen_random_uuid(),
+                                                  id          uuid primary key default gen_random_uuid(),
     team_id     uuid not null references public.teams(id) on delete cascade,
     name        text not null,
     note        text not null default '',
@@ -430,9 +416,13 @@ create table if not exists public.team_drafts (
     created_by  uuid references auth.users(id) on delete set null,
     created_at  timestamptz not null default now(),
     updated_at  timestamptz not null default now()
-);
+    );
+
+create index if not exists team_drafts_team_updated_idx
+    on public.team_drafts (team_id, updated_at desc);
 
 grant select, insert, update, delete on public.team_drafts to authenticated;
+grant select, insert, update, delete on public.team_drafts to service_role;
 
 alter table public.team_drafts enable row level security;
 
@@ -443,9 +433,9 @@ drop policy if exists "team_drafts_delete" on public.team_drafts;
 
 create policy "team_drafts_select" on public.team_drafts
     for select
-    using (
-        public.is_team_member(team_id)
-    );
+                                       using (
+                                       public.is_team_member(team_id)
+                                       );
 
 create policy "team_drafts_insert" on public.team_drafts
     for insert
@@ -455,16 +445,16 @@ create policy "team_drafts_insert" on public.team_drafts
 
 create policy "team_drafts_update" on public.team_drafts
     for update
-    using (
-        public.is_team_member(team_id)
-    )
-    with check (
-        public.is_team_member(team_id)
-    );
+                          using (
+                          public.is_team_member(team_id)
+                          )
+        with check (
+                          public.is_team_member(team_id)
+                          );
 
 create policy "team_drafts_delete" on public.team_drafts
     for delete
-    using (
+using (
         public.can_manage_team_members(team_id)
     );
 
@@ -474,7 +464,7 @@ create policy "team_drafts_delete" on public.team_drafts
 -- ============================================================
 
 create table if not exists public.player_accounts (
-    id              uuid primary key default gen_random_uuid(),
+                                                      id              uuid primary key default gen_random_uuid(),
     team_id         uuid not null references public.teams(id) on delete cascade,
     user_id         uuid not null references auth.users(id) on delete cascade,
     region          text not null default 'euw1',
@@ -486,9 +476,13 @@ create table if not exists public.player_accounts (
     updated_at      timestamptz not null default now(),
     unique (team_id, user_id),
     unique (team_id, puuid)
-);
+    );
+
+create index if not exists player_accounts_team_idx
+    on public.player_accounts (team_id);
 
 grant select, insert, update, delete on public.player_accounts to authenticated;
+grant select, insert, update, delete on public.player_accounts to service_role;
 
 alter table public.player_accounts enable row level security;
 
@@ -499,29 +493,43 @@ drop policy if exists "player_accounts_delete" on public.player_accounts;
 
 create policy "player_accounts_select" on public.player_accounts
     for select
-    using (public.is_team_member(team_id));
+                                       using (
+                                       public.is_team_member(team_id)
+                                       );
 
 create policy "player_accounts_insert" on public.player_accounts
     for insert
-    with check (user_id = auth.uid() and public.is_team_member(team_id));
+    with check (
+        user_id = auth.uid()
+        and public.is_team_member(team_id)
+    );
 
 create policy "player_accounts_update" on public.player_accounts
     for update
-    using (user_id = auth.uid())
-    with check (user_id = auth.uid());
+                          using (
+                          user_id = auth.uid()
+                          and public.is_team_member(team_id)
+                          )
+        with check (
+                          user_id = auth.uid()
+                          and public.is_team_member(team_id)
+                          );
 
 create policy "player_accounts_delete" on public.player_accounts
     for delete
-    using (user_id = auth.uid());
+using (
+        user_id = auth.uid()
+        or public.can_manage_team_members(team_id)
+    );
 
 -- ============================================================
 -- 14. ranked_matches
 -- SoloQ (420) and FlexQ (440) results, written by Edge Function.
--- No direct write policies — only service_role via Edge Function.
+-- No direct authenticated write policies — writes use service_role.
 -- ============================================================
 
 create table if not exists public.ranked_matches (
-    id            uuid primary key default gen_random_uuid(),
+                                                     id            uuid primary key default gen_random_uuid(),
     team_id       uuid not null references public.teams(id) on delete cascade,
     puuid         text not null,
     match_id      text not null,
@@ -537,9 +545,16 @@ create table if not exists public.ranked_matches (
     lane          text,
     created_at    timestamptz not null default now(),
     unique (puuid, match_id)
-);
+    );
+
+create index if not exists ranked_matches_team_time_idx
+    on public.ranked_matches (team_id, game_start desc);
+
+create index if not exists ranked_matches_puuid_time_idx
+    on public.ranked_matches (puuid, game_start desc);
 
 grant select on public.ranked_matches to authenticated;
+grant select, insert, update, delete on public.ranked_matches to service_role;
 
 alter table public.ranked_matches enable row level security;
 
@@ -547,4 +562,56 @@ drop policy if exists "ranked_matches_select" on public.ranked_matches;
 
 create policy "ranked_matches_select" on public.ranked_matches
     for select
-    using (public.is_team_member(team_id));
+                        using (
+                        public.is_team_member(team_id)
+                        );
+
+-- ============================================================
+-- 15. ranked_matches — extended stats columns
+-- ============================================================
+
+alter table public.ranked_matches
+    add column if not exists cs              int not null default 0,
+    add column if not exists vision_score    int not null default 0,
+    add column if not exists damage_to_champs int not null default 0,
+    add column if not exists gold_earned     int not null default 0;
+
+-- ============================================================
+-- 16. ranked_match_participants
+-- Up to 4 same-team teammates per match, written by Edge Function.
+-- ============================================================
+
+create table if not exists public.ranked_match_participants (
+    id            uuid primary key default gen_random_uuid(),
+    team_id       uuid not null references public.teams(id) on delete cascade,
+    match_id      text not null,
+    puuid         text not null,
+    champion_name text not null,
+    role          text,
+    lane          text,
+    win           boolean not null,
+    kills         int not null default 0,
+    deaths        int not null default 0,
+    assists       int not null default 0,
+    cs            int not null default 0,
+    unique (match_id, puuid)
+);
+
+create index if not exists ranked_match_participants_match_idx
+    on public.ranked_match_participants (match_id);
+
+create index if not exists ranked_match_participants_team_idx
+    on public.ranked_match_participants (team_id);
+
+grant select on public.ranked_match_participants to authenticated;
+grant select, insert, update, delete on public.ranked_match_participants to service_role;
+
+alter table public.ranked_match_participants enable row level security;
+
+drop policy if exists "ranked_match_participants_select" on public.ranked_match_participants;
+
+create policy "ranked_match_participants_select" on public.ranked_match_participants
+    for select
+    using (
+        public.is_team_member(team_id)
+    );

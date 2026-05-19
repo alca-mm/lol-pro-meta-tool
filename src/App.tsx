@@ -24,6 +24,7 @@ import { RoleStatsTable } from "./components/RoleStatsTable"
 import { RoleMatchupTable } from "./components/RoleMatchupTable"
 import { PatchComparisonView } from "./components/PatchComparisonView"
 import { DraftHelper } from "./components/DraftHelper"
+import { PlayerResultsPage } from "./components/player-results/PlayerResultsPage"
 import sampleData from "./data/sampleMatches.json"
 import type { Match, SyncReport } from "./domain/types"
 
@@ -31,7 +32,7 @@ const DISCORD_INVITE_URL = "https://discord.gg/8cdFSGy9qT"
 
 const sampleMatches = parseMatches(sampleData)
 
-type TabId = "champions" | "draft" | "synergies" | "matchups" | "roles" | "patches"
+type TabId = "champions" | "draft" | "player-results" | "synergies" | "matchups" | "roles" | "patches"
 
 function AppContent() {
     const { filters } = useFilters()
@@ -77,13 +78,19 @@ function AppContent() {
         }
     }, [])
 
-    const TABS: { id: TabId; label: string }[] = [
+    const DATA_TABS: { id: TabId; label: string }[] = [
         { id: "champions", label: t("tab_champions") },
         { id: "draft", label: t("tab_draftHelper") },
         { id: "synergies", label: t("tab_synergies") },
         { id: "matchups", label: t("tab_matchups") },
         { id: "roles", label: t("tab_roles") },
         { id: "patches", label: t("tab_patches") },
+    ]
+
+    const ALL_TABS: { id: TabId; label: string }[] = [
+        ...DATA_TABS.slice(0, 2),
+        { id: "player-results", label: t("tab_playerResults") },
+        ...DATA_TABS.slice(2),
     ]
 
     const filteredMatches = useMemo(() => applyFilters(allMatches, filters), [allMatches, filters])
@@ -155,7 +162,7 @@ function AppContent() {
                 <AuthPanel onClose={() => setAuthPanelOpen(false)} />
             )}
 
-            <TeamStatusPanel />
+            <TeamStatusPanel onGoToPlayerResults={() => setActiveTab("player-results")} />
 
             <DataSourceInfo
                 isUsingSampleData={isUsingSampleData}
@@ -188,7 +195,24 @@ function AppContent() {
                         </button>
                     )}
 
-                    {allMatches.length === 0 ? (
+                    <nav className="tab-nav" aria-label="Ansichten">
+                        {ALL_TABS.map((tab) => (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                className={`tab-btn${activeTab === tab.id ? " tab-active" : ""}`}
+                                onClick={() => setActiveTab(tab.id)}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </nav>
+
+                    {activeTab === "player-results" ? (
+                        <section className="section">
+                            <PlayerResultsPage />
+                        </section>
+                    ) : allMatches.length === 0 ? (
                         <p className="empty-state error">{t("app_noMatches")}</p>
                     ) : (
                         <>
@@ -196,19 +220,6 @@ function AppContent() {
                                 totalMatches={allMatches.length}
                                 filteredMatches={filteredMatches.length}
                             />
-
-                            <nav className="tab-nav" aria-label="Ansichten">
-                                {TABS.map((tab) => (
-                                    <button
-                                        key={tab.id}
-                                        type="button"
-                                        className={`tab-btn${activeTab === tab.id ? " tab-active" : ""}`}
-                                        onClick={() => setActiveTab(tab.id)}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </nav>
 
                             {activeTab === "champions" && (
                                 <>

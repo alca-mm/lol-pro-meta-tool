@@ -1,5 +1,9 @@
 import { TeamDashboard } from "./team/TeamDashboard"
 
-export function TeamStatusPanel() {
-    return <TeamDashboard />
+interface Props {
+    onGoToPlayerResults?: () => void
+}
+
+export function TeamStatusPanel({ onGoToPlayerResults }: Props = {}) {
+    return <TeamDashboard onGoToPlayerResults={onGoToPlayerResults} />
 }

@@ -11,6 +11,12 @@ const RIOT_BASE: Record<string, string> = {
     asia:     "https://asia.api.riotgames.com",
 }
 
+const PAGE_SIZE       = 20
+const MAX_PAGES_TOTAL = 3   // 3 × 20 = 60 match IDs max
+const MAX_CONCURRENCY = 3
+const BATCH_PAUSE_MS  = 300 // pause between detail-fetch batches
+const RANKED_QUEUES   = new Set([420, 440])
+
 Deno.serve(async (req: Request) => {
     if (req.method === "OPTIONS") {
         return new Response("ok", { headers: corsHeaders })
@@ -77,6 +83,7 @@ Deno.serve(async (req: Request) => {
 
         if (!accountRes.ok) {
             if (accountRes.status === 404) return json({ error: "riot_account_not_found" }, 404)
+            if (accountRes.status === 429) return json({ error: "riot_rate_limited" }, 429)
             return json({ error: `Riot API error: ${accountRes.status}` }, 502)
         }
 
@@ -116,73 +123,174 @@ Deno.serve(async (req: Request) => {
         const { puuid, routing_region } = account as { puuid: string; routing_region: string }
         const base = RIOT_BASE[routing_region] ?? RIOT_BASE.europe
 
-        const matchIds: string[] = []
-        for (const queue of [420, 440]) {
-            const res = await fetch(
-                `${base}/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=${queue}&count=10`,
+        // ── 1. Paginated match ID collection (all queues, 3 pages max = 60 total) ──
+        const allMatchIds: string[] = []
+        let totalPagesFetched = 0
+        let maxPagesReached = false
+        let moreMayBeAvailable = false
+
+        for (let page = 0; page < MAX_PAGES_TOTAL; page++) {
+            const idsRes = await fetch(
+                `${base}/lol/match/v5/matches/by-puuid/${puuid}/ids?start=${page * PAGE_SIZE}&count=${PAGE_SIZE}`,
                 { headers: { "X-Riot-Token": riotApiKey } },
             )
-            if (res.ok) {
-                const ids = await res.json() as string[]
-                matchIds.push(...ids)
+
+            if (!idsRes.ok) {
+                if (idsRes.status === 429) return json({ error: "riot_rate_limited" }, 429)
+                break
             }
+
+            const ids = await idsRes.json() as string[]
+            totalPagesFetched++
+
+            if (ids.length === 0) break
+            allMatchIds.push(...ids)
+
+            const isLastAllowed = page === MAX_PAGES_TOTAL - 1
+            const isPartialPage = ids.length < PAGE_SIZE
+
+            // Natural end of match history
+            if (isPartialPage) break
+
+            if (isLastAllowed) {
+                // Check if last page contains any unknown IDs to set moreMayBeAvailable
+                const { data: knownOnPage } = await adminClient
+                    .from("ranked_matches")
+                    .select("match_id")
+                    .eq("puuid", puuid)
+                    .in("match_id", ids)
+                const knownCount = (knownOnPage ?? []).length
+                maxPagesReached = true
+                if (knownCount < ids.length) moreMayBeAvailable = true
+                break
+            }
+
+            // Early exit: all IDs on this page already in DB → no deeper pages needed
+            const { data: knownOnPage } = await adminClient
+                .from("ranked_matches")
+                .select("match_id")
+                .eq("puuid", puuid)
+                .in("match_id", ids)
+            const knownCount = (knownOnPage ?? []).length
+            if (knownCount === ids.length) break
         }
 
-        if (matchIds.length === 0) return json({ success: true, synced: 0 })
+        if (allMatchIds.length === 0) {
+            return json({ success: true, imported: 0, skipped: 0, alreadyKnown: 0, pagesFetched: totalPagesFetched, maxPagesReached, moreMayBeAvailable })
+        }
 
-        // Skip match IDs already stored
+        // ── 2. Bulk existence check for all collected IDs ────────
+        const uniqueMatchIds = [...new Set(allMatchIds)]
         const { data: existing } = await adminClient
             .from("ranked_matches")
             .select("match_id")
             .eq("puuid", puuid)
-            .in("match_id", matchIds)
+            .in("match_id", uniqueMatchIds)
 
         const knownIds = new Set((existing ?? []).map((r: { match_id: string }) => r.match_id))
-        const newIds = matchIds.filter((id) => !knownIds.has(id))
+        const newIds = uniqueMatchIds.filter((id) => !knownIds.has(id))
+        const alreadyKnown = knownIds.size
 
+        // ── 3. Fetch match details (max 3 concurrent, 300ms pause between batches) ──
         interface Participant {
-            puuid: string
-            championName: string
-            win: boolean
-            kills: number
-            deaths: number
-            assists: number
-            role?: string
-            lane?: string
+            puuid: string; championName: string; win: boolean
+            kills: number; deaths: number; assists: number
+            role?: string; lane?: string
+            totalMinionsKilled?: number; neutralMinionsKilled?: number
+            visionScore?: number; totalDamageDealtToChampions?: number
+            goldEarned?: number; teamId?: number
         }
         interface MatchInfo {
-            queueId: number
-            gameDuration: number
-            gameStartTimestamp: number
+            queueId: number; gameDuration: number; gameStartTimestamp: number
             participants: Participant[]
         }
         interface MatchData { info: MatchInfo }
 
         const rows: Record<string, unknown>[] = []
-        for (const matchId of newIds) {
-            const res = await fetch(
-                `${base}/lol/match/v5/matches/${matchId}`,
-                { headers: { "X-Riot-Token": riotApiKey } },
+        const participantRows: Record<string, unknown>[] = []
+        let skipped = 0
+
+        for (let i = 0; i < newIds.length; i += MAX_CONCURRENCY) {
+            if (i > 0) {
+                await new Promise<void>((resolve) => setTimeout(resolve, BATCH_PAUSE_MS))
+            }
+
+            const batch = newIds.slice(i, i + MAX_CONCURRENCY)
+            const results = await Promise.all(
+                batch.map(async (matchId) => {
+                    const res = await fetch(`${base}/lol/match/v5/matches/${matchId}`, {
+                        headers: { "X-Riot-Token": riotApiKey },
+                    })
+                    return {
+                        matchId,
+                        ok:     res.ok,
+                        status: res.status,
+                        data:   res.ok ? await res.json() as MatchData : null,
+                    }
+                }),
             )
-            if (!res.ok) continue
-            const data = await res.json() as MatchData
-            const p = data.info.participants.find((x) => x.puuid === puuid)
-            if (!p) continue
-            rows.push({
-                team_id,
-                puuid,
-                match_id:      matchId,
-                queue_id:      data.info.queueId,
-                champion_name: p.championName,
-                win:           p.win,
-                kills:         p.kills,
-                deaths:        p.deaths,
-                assists:       p.assists,
-                game_duration: data.info.gameDuration,
-                game_start:    new Date(data.info.gameStartTimestamp).toISOString(),
-                role:          p.role ?? null,
-                lane:          p.lane ?? null,
-            })
+
+            for (const { matchId, ok, status, data } of results) {
+                if (!ok) {
+                    if (status === 429) return json({ error: "riot_rate_limited" }, 429)
+                    continue
+                }
+                if (!data) continue
+
+                // Filter: only store ranked queues (420 SoloQ, 440 FlexQ)
+                if (!RANKED_QUEUES.has(data.info.queueId)) {
+                    skipped++
+                    continue
+                }
+
+                const p = data.info.participants.find((x) => x.puuid === puuid)
+                if (!p) continue
+
+                const cs = (p.totalMinionsKilled ?? 0) + (p.neutralMinionsKilled ?? 0)
+
+                rows.push({
+                    team_id,
+                    puuid,
+                    match_id:          matchId,
+                    queue_id:          data.info.queueId,
+                    champion_name:     p.championName,
+                    win:               p.win,
+                    kills:             p.kills,
+                    deaths:            p.deaths,
+                    assists:           p.assists,
+                    game_duration:     data.info.gameDuration,
+                    game_start:        new Date(data.info.gameStartTimestamp).toISOString(),
+                    role:              p.role ?? null,
+                    lane:              p.lane ?? null,
+                    cs,
+                    vision_score:      p.visionScore ?? 0,
+                    damage_to_champs:  p.totalDamageDealtToChampions ?? 0,
+                    gold_earned:       p.goldEarned ?? 0,
+                })
+
+                // Store up to 4 same-team teammates (excluding the tracked player)
+                const myTeamId = p.teamId
+                const teammates = data.info.participants
+                    .filter((x) => x.puuid !== puuid && x.teamId === myTeamId)
+                    .slice(0, 4)
+
+                for (const t of teammates) {
+                    const tCs = (t.totalMinionsKilled ?? 0) + (t.neutralMinionsKilled ?? 0)
+                    participantRows.push({
+                        team_id,
+                        match_id:      matchId,
+                        puuid:         t.puuid,
+                        champion_name: t.championName,
+                        role:          t.role ?? null,
+                        lane:          t.lane ?? null,
+                        win:           t.win,
+                        kills:         t.kills,
+                        deaths:        t.deaths,
+                        assists:       t.assists,
+                        cs:            tCs,
+                    })
+                }
+            }
         }
 
         if (rows.length > 0) {
@@ -191,7 +299,21 @@ Deno.serve(async (req: Request) => {
                 .upsert(rows, { onConflict: "puuid,match_id" })
         }
 
-        return json({ success: true, synced: rows.length })
+        if (participantRows.length > 0) {
+            await adminClient
+                .from("ranked_match_participants")
+                .upsert(participantRows, { onConflict: "match_id,puuid" })
+        }
+
+        return json({
+            success: true,
+            imported: rows.length,
+            skipped,
+            alreadyKnown,
+            pagesFetched: totalPagesFetched,
+            maxPagesReached,
+            moreMayBeAvailable,
+        })
     }
 
     return json({ error: "Unknown action" }, 400)

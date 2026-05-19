@@ -1,6 +1,7 @@
 export const de = {
     tab_champions: "Champions",
     tab_draftHelper: "Draft Helper",
+    tab_playerResults: "Player Results",
     tab_synergies: "Synergien",
     tab_matchups: "Matchups",
     tab_roles: "Rollen",

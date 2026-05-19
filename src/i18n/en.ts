@@ -3,6 +3,7 @@ import type { Translations } from "./types"
 export const en: Translations = {
     tab_champions: "Champions",
     tab_draftHelper: "Draft Helper",
+    tab_playerResults: "Player Results",
     tab_synergies: "Synergies",
     tab_matchups: "Matchups",
     tab_roles: "Roles",

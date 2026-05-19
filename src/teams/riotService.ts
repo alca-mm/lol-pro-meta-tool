@@ -28,7 +28,47 @@ export interface RankedMatch {
     game_start: string
     role: string | null
     lane: string | null
+    cs: number
+    vision_score: number
+    damage_to_champs: number
+    gold_earned: number
     created_at: string
+}
+
+export interface MatchParticipant {
+    id: string
+    team_id: string
+    match_id: string
+    puuid: string
+    champion_name: string
+    role: string | null
+    lane: string | null
+    win: boolean
+    kills: number
+    deaths: number
+    assists: number
+    cs: number
+}
+
+/** Returns the start-offsets for paginated Riot match-ID requests. */
+export function buildPageStarts(maxPages: number, pageSize: number): number[] {
+    return Array.from({ length: maxPages }, (_, i) => i * pageSize)
+}
+
+/**
+ * Decides whether there may be more matches beyond what was synced.
+ * True only when max pages were reached, the last page was full, and it
+ * contained at least one match ID not yet stored in the DB.
+ */
+export function computeMoreMayBeAvailable(
+    maxPagesReached: boolean,
+    lastPageCount: number,
+    pageSize: number,
+    unknownOnLastPage: number,
+): boolean {
+    if (!maxPagesReached) return false
+    if (lastPageCount < pageSize) return false
+    return unknownOnLastPage > 0
 }
 
 export function parseRiotId(input: string): { gameName: string; tagLine: string } | null {
@@ -71,16 +111,32 @@ export async function linkRiotAccount(
     return (result.error as string | undefined) ?? null
 }
 
+export interface SyncResult {
+    imported: number
+    skipped: number
+    alreadyKnown: number
+    pagesFetched: number
+    maxPagesReached: boolean
+    moreMayBeAvailable: boolean
+}
+
 export async function syncRiotMatches(
     accessToken: string,
     teamId: string,
-): Promise<{ synced: number } | string> {
+): Promise<SyncResult | string> {
     const result = await callEdgeFunction(accessToken, {
         action: "sync",
         team_id: teamId,
     })
     if (result.error) return result.error as string
-    return { synced: result.synced as number }
+    return {
+        imported:           result.imported as number,
+        skipped:            result.skipped as number,
+        alreadyKnown:       result.alreadyKnown as number,
+        pagesFetched:       result.pagesFetched as number,
+        maxPagesReached:    result.maxPagesReached as boolean,
+        moreMayBeAvailable: result.moreMayBeAvailable as boolean,
+    }
 }
 
 export async function getMyPlayerAccount(
@@ -111,4 +167,62 @@ export async function getTeamRankedMatches(
         .order("game_start", { ascending: false })
         .limit(limit)
     return (data as RankedMatch[] | null) ?? []
+}
+
+export async function getAllTeamRankedMatches(
+    teamId: string,
+    limit = 200,
+): Promise<RankedMatch[]> {
+    if (!supabase) return []
+    const { data } = await supabase
+        .from("ranked_matches")
+        .select("*")
+        .eq("team_id", teamId)
+        .order("game_start", { ascending: false })
+        .limit(limit)
+    return (data as RankedMatch[] | null) ?? []
+}
+
+export async function getTeamPlayerAccounts(teamId: string): Promise<PlayerAccount[]> {
+    if (!supabase) return []
+    const { data } = await supabase
+        .from("player_accounts")
+        .select("*")
+        .eq("team_id", teamId)
+    return (data as PlayerAccount[] | null) ?? []
+}
+
+export async function getMatchParticipants(
+    teamId: string,
+    matchIds: string[],
+): Promise<MatchParticipant[]> {
+    if (!supabase || matchIds.length === 0) return []
+    const { data } = await supabase
+        .from("ranked_match_participants")
+        .select("*")
+        .eq("team_id", teamId)
+        .in("match_id", matchIds)
+    return (data as MatchParticipant[] | null) ?? []
+}
+
+/** Formats seconds into "mm:ss". */
+export function formatGameDuration(seconds: number): string {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}:${String(s).padStart(2, "0")}`
+}
+
+export interface MatchFilter {
+    queueId?: number
+    puuid?: string
+    win?: boolean
+}
+
+export function filterMatches(matches: RankedMatch[], filter: MatchFilter): RankedMatch[] {
+    return matches.filter((m) => {
+        if (filter.queueId !== undefined && m.queue_id !== filter.queueId) return false
+        if (filter.puuid !== undefined && m.puuid !== filter.puuid) return false
+        if (filter.win !== undefined && m.win !== filter.win) return false
+        return true
+    })
 }

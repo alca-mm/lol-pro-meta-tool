@@ -6,34 +6,15 @@ import {
     linkRiotAccount,
     syncRiotMatches,
     getMyPlayerAccount,
-    getTeamRankedMatches,
     type PlayerAccount,
-    type RankedMatch,
+    type SyncResult,
 } from "../../teams/riotService"
 
-const QUEUE_LABELS: Record<number, string> = {
-    420: "SoloQ",
-    440: "FlexQ",
-}
-
-function formatKDA(kills: number, deaths: number, assists: number): string {
-    return `${kills}/${deaths}/${assists}`
-}
-
-function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString("de-DE", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",
-    })
-}
-
-export function RiotAccountPanel() {
+export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } = {}) {
     const { user, session } = useAuth()
     const { activeTeam } = useTeam()
 
     const [account, setAccount] = useState<PlayerAccount | null>(null)
-    const [matches, setMatches] = useState<RankedMatch[]>([])
     const [riotIdInput, setRiotIdInput] = useState("")
     const [busy, setBusy] = useState(false)
     const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null)
@@ -47,12 +28,6 @@ export function RiotAccountPanel() {
         if (!activeTeam || !user) return
         const acc = await getMyPlayerAccount(activeTeam.id, user.id)
         setAccount(acc)
-        if (acc) {
-            const m = await getTeamRankedMatches(activeTeam.id, acc.puuid)
-            setMatches(m)
-        } else {
-            setMatches([])
-        }
     }, [activeTeam, user])
 
     useEffect(() => {
@@ -96,20 +71,25 @@ export function RiotAccountPanel() {
             const msg =
                 result === "riot_account_not_linked"
                     ? "Bitte zuerst Riot-Account verknüpfen."
+                    : result === "riot_rate_limited"
+                    ? "Rate Limit erreicht. Bitte kurz warten und erneut synchronisieren."
                     : result
             showFeedback(msg, false)
         } else {
-            showFeedback(
-                `Sync abgeschlossen. ${result.synced} neue Match${result.synced === 1 ? "" : "es"} gespeichert.`,
-                true,
-            )
-            void loadAccount()
+            showFeedback(buildSyncMessage(result), true)
+            onAfterSync?.()
         }
+    }
+
+    function buildSyncMessage(r: SyncResult): string {
+        const base = `Sync abgeschlossen. ${r.imported} neue Match${r.imported === 1 ? "" : "es"} gespeichert.`
+        return r.moreMayBeAvailable
+            ? base + " Es könnten weitere Matches verfügbar sein. Synchronisiere erneut."
+            : base
     }
 
     function handleEditAccount() {
         setAccount(null)
-        setMatches([])
         setRiotIdInput("")
     }
 
@@ -195,60 +175,10 @@ export function RiotAccountPanel() {
                 </p>
             )}
 
-            {account && matches.length === 0 && !busy && (
+            {account && !busy && (
                 <p className="muted" style={{ marginTop: "0.4rem", fontSize: "0.8rem" }}>
-                    Noch keine Matches gespeichert — klicke "Matches syncen".
+                    Klicke "Matches syncen" um neue Matches zu laden.
                 </p>
-            )}
-
-            {matches.length > 0 && (
-                <table
-                    style={{
-                        width: "100%",
-                        borderCollapse: "collapse",
-                        marginTop: "0.75rem",
-                        fontSize: "0.8rem",
-                    }}
-                >
-                    <thead>
-                        <tr>
-                            <th style={{ textAlign: "left", paddingBottom: "0.25rem" }}>Queue</th>
-                            <th style={{ textAlign: "left", paddingBottom: "0.25rem" }}>Champion</th>
-                            <th style={{ textAlign: "left", paddingBottom: "0.25rem" }}>Ergebnis</th>
-                            <th style={{ textAlign: "left", paddingBottom: "0.25rem" }}>KDA</th>
-                            <th style={{ textAlign: "left", paddingBottom: "0.25rem" }}>Datum</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {matches.map((m) => (
-                            <tr key={m.id}>
-                                <td style={{ paddingRight: "0.75rem", paddingBottom: "0.2rem" }}>
-                                    {QUEUE_LABELS[m.queue_id] ?? String(m.queue_id)}
-                                </td>
-                                <td style={{ paddingRight: "0.75rem", paddingBottom: "0.2rem" }}>
-                                    {m.champion_name}
-                                </td>
-                                <td
-                                    style={{
-                                        paddingRight: "0.75rem",
-                                        paddingBottom: "0.2rem",
-                                        color: m.win
-                                            ? "var(--score-pos, #4ade80)"
-                                            : "var(--score-neg, #f87171)",
-                                    }}
-                                >
-                                    {m.win ? "Sieg" : "Niederlage"}
-                                </td>
-                                <td style={{ paddingRight: "0.75rem", paddingBottom: "0.2rem" }}>
-                                    {formatKDA(m.kills, m.deaths, m.assists)}
-                                </td>
-                                <td className="muted" style={{ paddingBottom: "0.2rem" }}>
-                                    {formatDate(m.game_start)}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
             )}
         </div>
     )

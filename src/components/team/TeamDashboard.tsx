@@ -5,9 +5,13 @@ import { TeamMembersPanel } from "./TeamMembersPanel"
 import { TeamInvitePanel } from "./TeamInvitePanel"
 import { TeamCreatePanel } from "./TeamCreatePanel"
 import { TeamDangerZone } from "./TeamDangerZone"
-import { RiotAccountPanel } from "./RiotAccountPanel"
+import { RiotAccountSummary } from "./RiotAccountSummary"
 
-export function TeamDashboard() {
+interface Props {
+    onGoToPlayerResults?: () => void
+}
+
+export function TeamDashboard({ onGoToPlayerResults }: Props = {}) {
     const { t } = useTranslation()
     const { user } = useAuth()
     const { activeTeam, teams, myRole, members, notesCount, loading, setActiveTeam } = useTeam()
@@ -81,7 +85,7 @@ export function TeamDashboard() {
 
             {/* ── Sections ───────────────────────────────────── */}
             <TeamMembersPanel />
-            <RiotAccountPanel />
+            <RiotAccountSummary onGoToPlayerResults={onGoToPlayerResults} />
             <TeamInvitePanel />
             <TeamCreatePanel />
             <TeamDangerZone />
