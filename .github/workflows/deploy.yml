@@ -34,6 +34,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Unpack last-known-good data
+        run: |
+          mkdir -p public/data
+          if [ -f "public/data/importedMatches.json.gz" ]; then
+            gzip -dkf public/data/importedMatches.json.gz
+            echo "✓ importedMatches.json.gz entpackt als Fallback"
+          else
+            echo "ℹ Kein importedMatches.json.gz im Repo gefunden"
+          fi
+
       - name: Restore last deployed data
         run: |
           mkdir -p public/data

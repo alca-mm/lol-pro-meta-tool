@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "sync:data": "tsx scripts/syncData.ts"
+    "sync:data": "tsx scripts/syncData.ts",
+    "data:pack": "tsx scripts/packData.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",

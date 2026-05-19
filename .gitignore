@@ -13,7 +13,9 @@ data/reports/
 data/manual/*.csv
 
 # generated app data (written by sync:data, served as static assets)
-public/data/
+# importedMatches.json.gz is NOT ignored — committed as last-known-good fallback
+public/data/importedMatches.json
+public/data/latest-sync-report.json
 
 # IDE
 .idea/
