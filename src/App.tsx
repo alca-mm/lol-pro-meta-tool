@@ -1,11 +1,9 @@
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, lazy, Suspense } from "react"
 import { FilterProvider, useFilters } from "./context/FilterContext"
 import { LanguageProvider, useTranslation } from "./i18n/LanguageContext"
 import { AuthProvider } from "./auth/AuthContext"
 import { TeamProvider } from "./teams/TeamContext"
 import { UserMenu } from "./components/auth/UserMenu"
-import { AuthPanel } from "./components/auth/AuthPanel"
-import { TeamStatusPanel } from "./components/TeamStatusPanel"
 import { parseMatches } from "./import/parseMatches"
 import { applyFilters } from "./analysis/filters"
 import { calculateChampionStats, primaryRole } from "./analysis/championStats"
@@ -17,16 +15,38 @@ import { Filters } from "./components/Filters"
 import { Dashboard } from "./components/Dashboard"
 import { ChampionStatsTable } from "./components/ChampionStatsTable"
 import { ChampionDetail } from "./components/ChampionDetail"
-import { SynergyTable } from "./components/SynergyTable"
-import { MatchupTable } from "./components/MatchupTable"
 import { DataSourceInfo } from "./components/DataSourceInfo"
-import { RoleStatsTable } from "./components/RoleStatsTable"
-import { RoleMatchupTable } from "./components/RoleMatchupTable"
-import { PatchComparisonView } from "./components/PatchComparisonView"
-import { DraftHelper } from "./components/DraftHelper"
-import { PlayerResultsPage } from "./components/player-results/PlayerResultsPage"
 import sampleData from "./data/sampleMatches.json"
 import type { Match, SyncReport } from "./domain/types"
+
+// Tab-specific components — loaded on first navigation to that tab
+const AuthPanel = lazy(() =>
+    import("./components/auth/AuthPanel").then((m) => ({ default: m.AuthPanel }))
+)
+const TeamStatusPanel = lazy(() =>
+    import("./components/TeamStatusPanel").then((m) => ({ default: m.TeamStatusPanel }))
+)
+const DraftHelper = lazy(() =>
+    import("./components/DraftHelper").then((m) => ({ default: m.DraftHelper }))
+)
+const PlayerResultsPage = lazy(() =>
+    import("./components/player-results/PlayerResultsPage").then((m) => ({ default: m.PlayerResultsPage }))
+)
+const SynergyTable = lazy(() =>
+    import("./components/SynergyTable").then((m) => ({ default: m.SynergyTable }))
+)
+const MatchupTable = lazy(() =>
+    import("./components/MatchupTable").then((m) => ({ default: m.MatchupTable }))
+)
+const RoleMatchupTable = lazy(() =>
+    import("./components/RoleMatchupTable").then((m) => ({ default: m.RoleMatchupTable }))
+)
+const RoleStatsTable = lazy(() =>
+    import("./components/RoleStatsTable").then((m) => ({ default: m.RoleStatsTable }))
+)
+const PatchComparisonView = lazy(() =>
+    import("./components/PatchComparisonView").then((m) => ({ default: m.PatchComparisonView }))
+)
 
 const DISCORD_INVITE_URL = "https://discord.gg/8cdFSGy9qT"
 
@@ -154,9 +174,11 @@ function AppContent() {
                 </div>
             </header>
 
-            {authPanelOpen && (
-                <AuthPanel onClose={() => setAuthPanelOpen(false)} />
-            )}
+            <Suspense fallback={null}>
+                {authPanelOpen && (
+                    <AuthPanel onClose={() => setAuthPanelOpen(false)} />
+                )}
+            </Suspense>
 
             <DataSourceInfo
                 isUsingSampleData={isUsingSampleData}
@@ -202,6 +224,7 @@ function AppContent() {
                         ))}
                     </nav>
 
+                    <Suspense fallback={<p className="muted">Lädt…</p>}>
                     {activeTab === "team-dashboard" ? (
                         <section className="section">
                             <TeamStatusPanel onGoToPlayerResults={() => setActiveTab("player-results")} />
@@ -284,6 +307,7 @@ function AppContent() {
                             )}
                         </>
                     )}
+                    </Suspense>
                 </main>
             </div>
         </div>
