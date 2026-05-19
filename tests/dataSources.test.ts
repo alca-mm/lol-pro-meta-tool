@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { getEnabledSources } from "../scripts/dataSources"
+import { getEnabledSources, dataSources } from "../scripts/dataSources"
 import type { DataSource } from "../scripts/dataSources"
 
 const sources: DataSource[] = [
@@ -10,6 +10,7 @@ const sources: DataSource[] = [
     googleDriveFileId: "realFileId123",
     enabled: true,
     sourceWebsite: "https://example.com",
+    localFallbackPath: "data/manual/enabled-1.csv",
   },
   {
     id: "disabled-1",
@@ -58,5 +59,38 @@ describe("getEnabledSources", () => {
 
   it("returns empty array for empty input", () => {
     expect(getEnabledSources([])).toHaveLength(0)
+  })
+})
+
+describe("DataSource.localFallbackPath", () => {
+  it("localFallbackPath is accepted on a DataSource without type errors", () => {
+    const source: DataSource = {
+      id: "test",
+      name: "Test",
+      type: "google-drive-csv",
+      googleDriveFileId: "abc",
+      enabled: true,
+      sourceWebsite: "https://example.com",
+      localFallbackPath: "data/manual/test.csv",
+    }
+    expect(source.localFallbackPath).toBe("data/manual/test.csv")
+  })
+
+  it("localFallbackPath is optional — omitting it is valid", () => {
+    const source: DataSource = {
+      id: "test",
+      name: "Test",
+      type: "google-drive-csv",
+      googleDriveFileId: "abc",
+      enabled: true,
+      sourceWebsite: "https://example.com",
+    }
+    expect(source.localFallbackPath).toBeUndefined()
+  })
+
+  it("all configured sources have a localFallbackPath pointing to data/manual/", () => {
+    for (const source of dataSources) {
+      expect(source.localFallbackPath).toMatch(/^data\/manual\//)
+    }
   })
 })

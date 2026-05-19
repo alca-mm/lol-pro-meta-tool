@@ -4,7 +4,7 @@
  * Downloads configured Oracle's Elixir CSV files from Google Drive,
  * converts them to Match[] format and writes src/data/importedMatches.json.
  */
-import { writeFileSync, mkdirSync } from "node:fs"
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs"
 import { resolve, join } from "node:path"
 import { dataSources, getEnabledSources } from "./dataSources.js"
 import { downloadCsvContent, saveCsvToFile } from "./googleDriveDownload.js"
@@ -27,6 +27,14 @@ mkdirSync(reportsDir, { recursive: true })
 mkdirSync(appDataDir, { recursive: true })
 
 async function run() {
+  const lastKnownGood: string | null = existsSync(outputFile)
+    ? readFileSync(outputFile, "utf8")
+    : null
+
+  if (lastKnownGood) {
+    console.log("ℹ  Backup der bestehenden importedMatches.json erstellt (in memory).")
+  }
+
   const report: SyncReport = createEmptyReport(outputFile)
   report.syncStartedAt = new Date().toISOString()
 
@@ -54,25 +62,41 @@ async function run() {
 
     const dlResult = await downloadCsvContent(source.googleDriveFileId)
 
+    let csvContent: string
+
     if (!dlResult.success || !dlResult.content) {
       console.error(`  ✗ Download fehlgeschlagen: ${dlResult.error}`)
-      report.errors.push(`[${source.id}] ${dlResult.error}`)
-      report.sourcesFailed++
-      continue
-    }
 
-    console.log(`  ✓ Download erfolgreich (${Math.round(dlResult.content.length / 1024)} KB)`)
+      const fallback = source.localFallbackPath
+        ? resolve(projectRoot, source.localFallbackPath)
+        : null
+
+      if (fallback && existsSync(fallback)) {
+        console.log(`  ↩ Nutze lokalen Fallback: ${source.localFallbackPath}`)
+        csvContent = readFileSync(fallback, "utf8")
+      } else {
+        if (fallback) {
+          console.warn(`  ✗ Kein lokaler Fallback gefunden unter: ${source.localFallbackPath}`)
+        }
+        report.errors.push(`[${source.id}] ${dlResult.error}`)
+        report.sourcesFailed++
+        continue
+      }
+    } else {
+      console.log(`  ✓ Download erfolgreich (${Math.round(dlResult.content.length / 1024)} KB)`)
+      csvContent = dlResult.content
+    }
 
     const rawPath = join(rawDataDir, `${source.id}.csv`)
     try {
-      saveCsvToFile(dlResult.content, rawPath)
+      saveCsvToFile(csvContent, rawPath)
       report.downloadedFiles.push(rawPath)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       console.warn(`  ⚠ Konnte CSV nicht speichern: ${msg}`)
     }
 
-    const rows = parseCsvWithHeaders(dlResult.content)
+    const rows = parseCsvWithHeaders(csvContent)
     report.rowsRead += rows.length
     console.log(`  Zeilen gelesen: ${rows.length}`)
 
@@ -108,11 +132,17 @@ async function run() {
   }
 
   if (!shouldWriteOutput(report.sourcesSucceeded, report.matchesImported)) {
-    console.warn("\n⚠  Keine Quelle erfolgreich. Bestehende importedMatches.json bleibt erhalten.")
-    report.errors.push("Sync fehlgeschlagen — importedMatches.json wurde nicht überschrieben.")
+    if (lastKnownGood) {
+      writeFileSync(outputFile, lastKnownGood, "utf8")
+      console.warn("\n⚠  Sync fehlgeschlagen. Last-known-good importedMatches.json wiederhergestellt.")
+      report.errors.push("Sync fehlgeschlagen — importedMatches.json aus Backup wiederhergestellt.")
+    } else {
+      console.warn("\n⚠  Sync fehlgeschlagen. Kein Backup vorhanden — importedMatches.json bleibt unverändert.")
+      report.errors.push("Sync fehlgeschlagen — kein Backup verfügbar, importedMatches.json nicht überschrieben.")
+    }
     const done = finishReport(report)
     writeReport(done)
-    console.log("\n─── Sync abgeschlossen (keine Daten geschrieben) ────")
+    console.log("\n─── Sync abgeschlossen (keine neuen Daten geschrieben) ───")
     console.log(`Quellen verarbeitet : ${done.sourcesProcessed}`)
     console.log(`Quellen erfolgreich : ${done.sourcesSucceeded}`)
     console.log(`Fehler              : ${done.errors.length}`)

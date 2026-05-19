@@ -34,6 +34,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Restore last deployed data
+        run: |
+          mkdir -p public/data
+          curl -L -f "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/importedMatches.json" -o public/data/importedMatches.json || echo "No deployed importedMatches.json found — starting fresh"
+          curl -L -f "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/latest-sync-report.json" -o public/data/latest-sync-report.json || echo "No deployed latest-sync-report.json found — starting fresh"
+
       - name: Sync pro play data
         run: npm run sync:data
         continue-on-error: true

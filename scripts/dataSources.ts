@@ -8,6 +8,13 @@ export interface DataSource {
   enabled: boolean
   notes?: string
   sourceWebsite: string
+  /**
+   * Optional local CSV fallback. If Google Drive returns HTML or the download fails,
+   * sync will read from this path instead.
+   * Place manually downloaded CSVs under data/manual/ (gitignored).
+   * Example: "data/manual/oracles-elixir-2025.csv"
+   */
+  localFallbackPath?: string
 }
 
 /**
@@ -25,19 +32,21 @@ export const dataSources: DataSource[] = [
     id: "oracles-elixir-2024",
     name: "Oracle's Elixir 2024 Pro Play CSV",
     type: "google-drive-csv",
-    googleDriveFileId: "1XXk2LO0CsNADBB1LRGOV5rUpyZdEZ8s2",
-    enabled: false, // Google Drive returns HTML instead of CSV for this file
+    googleDriveFileId: "1IjIEhLc9n8eLKeY-yh_YigKVWbhgGBsN",
+    enabled: true,
     sourceWebsite: "https://oracleselixir.com/tools/downloads",
     notes: "2024 Oracle's Elixir match data CSV",
+    localFallbackPath: "data/manual/oracles-elixir-2024.csv",
   },
   {
     id: "oracles-elixir-2025",
     name: "Oracle's Elixir 2025 Pro Play CSV",
     type: "google-drive-csv",
     googleDriveFileId: "1v6LRphp2kYciU4SXp0PCjEMuev1bDejc",
-    enabled: false, // Google Drive returns HTML instead of CSV for this file
+    enabled: true,
     sourceWebsite: "https://oracleselixir.com/tools/downloads",
     notes: "2025 Oracle's Elixir match data CSV",
+    localFallbackPath: "data/manual/oracles-elixir-2025.csv",
   },
   {
     id: "oracles-elixir-2026",
@@ -47,6 +56,7 @@ export const dataSources: DataSource[] = [
     enabled: true,
     sourceWebsite: "https://oracleselixir.com/tools/downloads",
     notes: "2026 Oracle's Elixir match data CSV",
+    localFallbackPath: "data/manual/oracles-elixir-2026.csv",
   },
 ]
 

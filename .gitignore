@@ -9,6 +9,9 @@ dist/
 data/raw/
 data/reports/
 
+# manually downloaded CSV fallbacks (can be large — do not commit)
+data/manual/*.csv
+
 # generated app data (written by sync:data, served as static assets)
 public/data/
 
