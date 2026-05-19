@@ -5,6 +5,7 @@ import { TeamMembersPanel } from "./TeamMembersPanel"
 import { TeamInvitePanel } from "./TeamInvitePanel"
 import { TeamCreatePanel } from "./TeamCreatePanel"
 import { TeamDangerZone } from "./TeamDangerZone"
+import { RiotAccountPanel } from "./RiotAccountPanel"
 
 export function TeamDashboard() {
     const { t } = useTranslation()
@@ -80,6 +81,7 @@ export function TeamDashboard() {
 
             {/* ── Sections ───────────────────────────────────── */}
             <TeamMembersPanel />
+            <RiotAccountPanel />
             <TeamInvitePanel />
             <TeamCreatePanel />
             <TeamDangerZone />
