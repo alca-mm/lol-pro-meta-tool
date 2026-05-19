@@ -42,6 +42,14 @@ export function PlayerResultsPage() {
         void reload()
     }, [reload])
 
+    if (!activeTeam) {
+        return (
+            <p className="muted" style={{ padding: "0.5rem 0" }}>
+                Wähle ein Team aus, um Player Results zu sehen.
+            </p>
+        )
+    }
+
     return (
         <div style={{ padding: "0.5rem 0" }}>
             <RiotAccountPanel onAfterSync={() => void reload()} />

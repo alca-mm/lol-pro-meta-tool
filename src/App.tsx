@@ -32,7 +32,7 @@ const DISCORD_INVITE_URL = "https://discord.gg/8cdFSGy9qT"
 
 const sampleMatches = parseMatches(sampleData)
 
-type TabId = "champions" | "draft" | "player-results" | "synergies" | "matchups" | "roles" | "patches"
+type TabId = "champions" | "draft" | "team-dashboard" | "player-results" | "synergies" | "matchups" | "roles" | "patches"
 
 function AppContent() {
     const { filters } = useFilters()
@@ -78,19 +78,15 @@ function AppContent() {
         }
     }, [])
 
-    const DATA_TABS: { id: TabId; label: string }[] = [
-        { id: "champions", label: t("tab_champions") },
-        { id: "draft", label: t("tab_draftHelper") },
-        { id: "synergies", label: t("tab_synergies") },
-        { id: "matchups", label: t("tab_matchups") },
-        { id: "roles", label: t("tab_roles") },
-        { id: "patches", label: t("tab_patches") },
-    ]
-
     const ALL_TABS: { id: TabId; label: string }[] = [
-        ...DATA_TABS.slice(0, 2),
+        { id: "champions",      label: t("tab_champions") },
+        { id: "draft",          label: t("tab_draftHelper") },
+        { id: "team-dashboard", label: t("tab_teamDashboard") },
         { id: "player-results", label: t("tab_playerResults") },
-        ...DATA_TABS.slice(2),
+        { id: "synergies",      label: t("tab_synergies") },
+        { id: "matchups",       label: t("tab_matchups") },
+        { id: "roles",          label: t("tab_roles") },
+        { id: "patches",        label: t("tab_patches") },
     ]
 
     const filteredMatches = useMemo(() => applyFilters(allMatches, filters), [allMatches, filters])
@@ -162,8 +158,6 @@ function AppContent() {
                 <AuthPanel onClose={() => setAuthPanelOpen(false)} />
             )}
 
-            <TeamStatusPanel onGoToPlayerResults={() => setActiveTab("player-results")} />
-
             <DataSourceInfo
                 isUsingSampleData={isUsingSampleData}
                 matches={allMatches}
@@ -208,7 +202,11 @@ function AppContent() {
                         ))}
                     </nav>
 
-                    {activeTab === "player-results" ? (
+                    {activeTab === "team-dashboard" ? (
+                        <section className="section">
+                            <TeamStatusPanel onGoToPlayerResults={() => setActiveTab("player-results")} />
+                        </section>
+                    ) : activeTab === "player-results" ? (
                         <section className="section">
                             <PlayerResultsPage />
                         </section>
