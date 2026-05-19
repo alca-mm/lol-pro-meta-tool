@@ -12,7 +12,7 @@ import { parseCsvWithHeaders } from "../src/import/parseCsv.js"
 import { mapOracleElixirCsvToMatches } from "../src/import/oracleElixirMapper.js"
 import { validateMatches } from "../src/import/validateMatches.js"
 import { createEmptyReport, finishReport } from "../src/import/importReport.js"
-import { buildSyncStatusResult } from "./syncStatus.js"
+import { buildSyncStatusResult, shouldWriteOutput } from "./syncStatus.js"
 import type { SyncReport } from "../src/domain/types.js"
 
 const projectRoot = process.cwd()
@@ -36,12 +36,13 @@ async function run() {
   if (enabled.length === 0) {
     console.log("ℹ  Keine aktive Datenquelle konfiguriert.")
     console.log("   Trage in scripts/dataSources.ts eine Google-Drive-File-ID ein und setze enabled: true.")
-    writeFileSync(outputFile, "[]", "utf8")
+    console.log("   Bestehende importedMatches.json bleibt erhalten.")
     report.errors.push("Keine aktiven Datenquellen konfiguriert")
     const done = finishReport(report)
     writeReport(done)
     console.log(`   Bericht: ${join(reportsDir, "latest-sync-report.json")}`)
     console.log(`   App-Bericht: ${appReportFile}`)
+    process.exit(1)
     return
   }
 
@@ -104,6 +105,21 @@ async function run() {
   const dates = allMatches.map((m) => m.date).filter(Boolean).sort()
   if (dates.length > 0) {
     report.dateRange = { from: dates[0], to: dates[dates.length - 1] }
+  }
+
+  if (!shouldWriteOutput(report.sourcesSucceeded, report.matchesImported)) {
+    console.warn("\n⚠  Keine Quelle erfolgreich. Bestehende importedMatches.json bleibt erhalten.")
+    report.errors.push("Sync fehlgeschlagen — importedMatches.json wurde nicht überschrieben.")
+    const done = finishReport(report)
+    writeReport(done)
+    console.log("\n─── Sync abgeschlossen (keine Daten geschrieben) ────")
+    console.log(`Quellen verarbeitet : ${done.sourcesProcessed}`)
+    console.log(`Quellen erfolgreich : ${done.sourcesSucceeded}`)
+    console.log(`Fehler              : ${done.errors.length}`)
+    console.log(`Bericht             : ${join(reportsDir, "latest-sync-report.json")}`)
+    console.log(`App-Bericht         : ${appReportFile}`)
+    process.exit(1)
+    return
   }
 
   writeFileSync(outputFile, JSON.stringify(allMatches, null, 2), "utf8")

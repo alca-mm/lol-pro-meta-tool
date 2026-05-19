@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { getSyncExitStatus, buildSyncStatusResult } from "../scripts/syncStatus"
+import { getSyncExitStatus, buildSyncStatusResult, shouldWriteOutput } from "../scripts/syncStatus"
 
 const base = {
     sourcesProcessed: 3,
@@ -58,6 +58,24 @@ describe("getSyncExitStatus", () => {
                 errors: [],
             }),
         ).toBe(1)
+    })
+})
+
+describe("shouldWriteOutput", () => {
+    it("returns true when at least one source succeeded and matches > 0", () => {
+        expect(shouldWriteOutput(1, 100)).toBe(true)
+    })
+
+    it("returns false when sourcesSucceeded is 0", () => {
+        expect(shouldWriteOutput(0, 0)).toBe(false)
+    })
+
+    it("returns false when matchesImported is 0 even if a source succeeded", () => {
+        expect(shouldWriteOutput(1, 0)).toBe(false)
+    })
+
+    it("returns false when all sources fail (existing file must be preserved)", () => {
+        expect(shouldWriteOutput(0, 100)).toBe(false)
     })
 })
 

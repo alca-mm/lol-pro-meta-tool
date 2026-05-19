@@ -26,7 +26,7 @@ export const dataSources: DataSource[] = [
     name: "Oracle's Elixir 2024 Pro Play CSV",
     type: "google-drive-csv",
     googleDriveFileId: "1XXk2LO0CsNADBB1LRGOV5rUpyZdEZ8s2",
-    enabled: true,
+    enabled: false, // Google Drive returns HTML instead of CSV for this file
     sourceWebsite: "https://oracleselixir.com/tools/downloads",
     notes: "2024 Oracle's Elixir match data CSV",
   },
@@ -35,7 +35,7 @@ export const dataSources: DataSource[] = [
     name: "Oracle's Elixir 2025 Pro Play CSV",
     type: "google-drive-csv",
     googleDriveFileId: "1v6LRphp2kYciU4SXp0PCjEMuev1bDejc",
-    enabled: true,
+    enabled: false, // Google Drive returns HTML instead of CSV for this file
     sourceWebsite: "https://oracleselixir.com/tools/downloads",
     notes: "2025 Oracle's Elixir match data CSV",
   },

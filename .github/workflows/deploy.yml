@@ -36,6 +36,7 @@ jobs:
 
       - name: Sync pro play data
         run: npm run sync:data
+        continue-on-error: true
 
       - name: Run tests
         run: npm test

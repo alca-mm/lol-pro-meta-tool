@@ -27,6 +27,14 @@ export type SyncStatusResult = {
     summaryLines: string[]
 }
 
+/**
+ * Returns true only when there is data worth writing to the output file.
+ * When false, the existing importedMatches.json should be preserved untouched.
+ */
+export function shouldWriteOutput(sourcesSucceeded: number, matchesImported: number): boolean {
+    return sourcesSucceeded > 0 && matchesImported > 0
+}
+
 export function buildSyncStatusResult(summary: SyncStatusInput): SyncStatusResult {
     const exitCode = getSyncExitStatus(summary)
     const isPartial = exitCode === 0 && summary.errors.length > 0
