@@ -224,7 +224,7 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
                     </button>
                     <button
                         type="button"
-                        className="secondary-button"
+                        className="btn-danger"
                         onClick={() => void handleDelete()}
                         disabled={!selectedChampion || !notes[selectedChampion] || loadingNotes}
                     >

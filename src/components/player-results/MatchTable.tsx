@@ -49,7 +49,7 @@ export function MatchTable({ matches, participants, accounts }: Props) {
     return (
         <div>
             {/* Filters */}
-            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.75rem", fontSize: "0.85rem" }}>
+            <div className="filter-bar" style={{ fontSize: "0.85rem" }}>
                 <select value={queueFilter} onChange={(e) => setQueueFilter(e.target.value === "" ? "" : Number(e.target.value))}>
                     <option value="">Alle Queues</option>
                     <option value={420}>SoloQ</option>
@@ -79,18 +79,19 @@ export function MatchTable({ matches, participants, accounts }: Props) {
             {filtered.length === 0 ? (
                 <p className="muted">Keine Matches gefunden.</p>
             ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                <div className="table-card">
+                <table className="stats-table" style={{ fontSize: "0.8rem" }}>
                     <thead>
                         <tr>
                             <th style={thStyle}>Queue</th>
                             <th style={thStyle}>Spieler</th>
                             <th style={thStyle}>Champion</th>
                             <th style={thStyle}>Ergebnis</th>
-                            <th style={thStyle}>KDA</th>
-                            <th style={thStyle}>CS</th>
-                            <th style={thStyle}>Schaden</th>
-                            <th style={thStyle}>Gold</th>
-                            <th style={thStyle}>Vision</th>
+                            <th style={{ ...thStyle, textAlign: "right" }}>KDA</th>
+                            <th style={{ ...thStyle, textAlign: "right" }}>CS</th>
+                            <th style={{ ...thStyle, textAlign: "right" }}>Schaden</th>
+                            <th style={{ ...thStyle, textAlign: "right" }}>Gold</th>
+                            <th style={{ ...thStyle, textAlign: "right" }}>Vision</th>
                             <th style={thStyle}>Dauer</th>
                             <th style={thStyle}>Datum</th>
                             <th style={thStyle}></th>
@@ -121,13 +122,13 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                                         <td style={{ ...tdStyle, color: m.win ? "var(--score-pos, #4ade80)" : "var(--score-neg, #f87171)" }}>
                                             {m.win ? "Sieg" : "Niederlage"}
                                         </td>
-                                        <td style={tdStyle}>{kda(m.kills, m.deaths, m.assists)}</td>
-                                        <td style={tdStyle}>{m.cs}</td>
-                                        <td style={tdStyle}>{m.damage_to_champs.toLocaleString("de-DE")}</td>
-                                        <td style={tdStyle}>{m.gold_earned.toLocaleString("de-DE")}</td>
-                                        <td style={tdStyle}>{m.vision_score}</td>
+                                        <td style={{ ...tdStyle, textAlign: "right" }}>{kda(m.kills, m.deaths, m.assists)}</td>
+                                        <td style={{ ...tdStyle, textAlign: "right" }}>{m.cs}</td>
+                                        <td style={{ ...tdStyle, textAlign: "right" }}>{m.damage_to_champs.toLocaleString("de-DE")}</td>
+                                        <td style={{ ...tdStyle, textAlign: "right" }}>{m.gold_earned.toLocaleString("de-DE")}</td>
+                                        <td style={{ ...tdStyle, textAlign: "right" }}>{m.vision_score}</td>
                                         <td style={tdStyle}>{formatGameDuration(m.game_duration)}</td>
-                                        <td style={{ ...tdStyle, color: "var(--color-muted, #888)" }}>{formatDate(m.game_start)}</td>
+                                        <td style={{ ...tdStyle, color: "var(--text-dim)" }}>{formatDate(m.game_start)}</td>
                                         <td style={tdStyle}>
                                             {teammates.length > 0 && (
                                                 <button
@@ -146,7 +147,7 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                                         <tr
                                             key={`${m.id}-${tp.puuid}`}
                                             style={{
-                                                background: "var(--color-surface2, rgba(255,255,255,0.03))",
+                                                background: "var(--surface2)",
                                                 fontSize: "0.75rem",
                                             }}
                                         >
@@ -157,8 +158,8 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                                             <td style={{ ...tdStyle, color: tp.win ? "var(--score-pos, #4ade80)" : "var(--score-neg, #f87171)" }}>
                                                 {tp.win ? "Sieg" : "Niederlage"}
                                             </td>
-                                            <td style={tdStyle}>{kda(tp.kills, tp.deaths, tp.assists)}</td>
-                                            <td style={tdStyle}>{tp.cs}</td>
+                                            <td style={{ ...tdStyle, textAlign: "right" }}>{kda(tp.kills, tp.deaths, tp.assists)}</td>
+                                            <td style={{ ...tdStyle, textAlign: "right" }}>{tp.cs}</td>
                                             <td style={tdStyle} colSpan={5}></td>
                                             <td style={tdStyle}></td>
                                         </tr>
@@ -168,6 +169,7 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                         })}
                     </tbody>
                 </table>
+                </div>
             )}
         </div>
     )
@@ -175,14 +177,10 @@ export function MatchTable({ matches, participants, accounts }: Props) {
 
 const thStyle: React.CSSProperties = {
     textAlign: "left",
-    paddingBottom: "0.3rem",
-    paddingRight: "0.75rem",
     whiteSpace: "nowrap",
 }
 
 const tdStyle: React.CSSProperties = {
-    paddingBottom: "0.2rem",
-    paddingRight: "0.75rem",
     whiteSpace: "nowrap",
     verticalAlign: "top",
 }

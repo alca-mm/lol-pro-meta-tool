@@ -21,18 +21,17 @@ export function TeamDangerZone() {
     return (
         <div
             className="recommendation-section"
-            style={{ padding: "0.75rem 1rem", borderColor: "var(--color-danger, #e55)" }}
+            style={{ padding: "0.75rem 1rem", borderColor: "var(--danger, #ff4d4d)" }}
         >
-            <strong style={{ fontSize: "0.85rem", color: "var(--color-danger, #e55)" }}>
+            <span className="panel-title" style={{ color: "var(--danger, #ff4d4d)" }}>
                 {t("team_dangerZone")}
-            </strong>
+            </span>
             <div style={{ marginTop: "0.6rem" }}>
                 <button
                     type="button"
-                    className="secondary-button"
+                    className="btn-danger"
                     disabled={deleting}
                     onClick={() => void handleDelete()}
-                    style={{ color: "var(--color-danger, #e55)" }}
                 >
                     {t("team_deleteTeam")}
                 </button>

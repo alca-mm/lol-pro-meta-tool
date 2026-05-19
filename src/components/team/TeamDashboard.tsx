@@ -17,7 +17,7 @@ export function TeamDashboard({ onGoToPlayerResults }: Props = {}) {
     const { activeTeam, teams, myRole, members, notesCount, loading, setActiveTeam } = useTeam()
 
     if (!user) return null
-    if (loading) return <p className="muted">{t("auth_loading")}</p>
+    if (loading) return <p className="inline-loading">{t("common_loading")}</p>
 
     const roleLabels: Record<string, string> = {
         owner: t("team_owner"),

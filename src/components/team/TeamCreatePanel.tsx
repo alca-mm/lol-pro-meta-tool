@@ -41,7 +41,7 @@ export function TeamCreatePanel() {
 
     return (
         <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
-            <strong style={{ fontSize: "0.85rem" }}>{t("team_quickActions")}</strong>
+            <span className="panel-title">{t("team_quickActions")}</span>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginTop: "0.6rem" }}>
                 {/* Join with invite code */}

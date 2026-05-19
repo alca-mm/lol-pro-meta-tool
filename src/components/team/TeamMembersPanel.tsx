@@ -59,7 +59,7 @@ export function TeamMembersPanel() {
 
     return (
         <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
-            <strong style={{ fontSize: "0.85rem" }}>{t("team_manageMembers")}</strong>
+            <span className="panel-title">{t("team_manageMembers")}</span>
 
             {members.length === 0 ? (
                 <p className="muted" style={{ margin: "0.5rem 0 0" }}>{t("team_noMembers")}</p>
@@ -106,7 +106,7 @@ export function TeamMembersPanel() {
                                         {member.user_id !== user.id && (
                                             <button
                                                 type="button"
-                                                className="secondary-button"
+                                                className="btn-danger"
                                                 style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem" }}
                                                 disabled={busy}
                                                 onClick={() => void handleRemove(member.user_id)}

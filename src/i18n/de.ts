@@ -346,4 +346,7 @@ export const de = {
 
     // Header
     header_contact: "Kontakt",
+
+    // Common
+    common_loading: "Lädt…",
 } as const

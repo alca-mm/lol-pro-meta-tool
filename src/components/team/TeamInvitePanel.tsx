@@ -41,7 +41,7 @@ export function TeamInvitePanel() {
 
     return (
         <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
-            <strong style={{ fontSize: "0.85rem" }}>{t("invite_manageInvites")}</strong>
+            <span className="panel-title">{t("invite_manageInvites")}</span>
 
             {invites.length === 0 ? (
                 <p className="muted" style={{ margin: "0.5rem 0 0", fontSize: "0.85rem" }}>
@@ -67,8 +67,8 @@ export function TeamInvitePanel() {
                             </button>
                             <button
                                 type="button"
-                                className="secondary-button"
-                                style={{ fontSize: "0.75rem", padding: "0.1rem 0.4rem", color: "var(--color-danger, #e55)" }}
+                                className="btn-danger"
+                                style={{ fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
                                 onClick={() => void handleRevoke(inv.id)}
                             >
                                 {t("invite_revoke")}

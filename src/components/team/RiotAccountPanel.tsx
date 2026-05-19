@@ -118,7 +118,7 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
 
     return (
         <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
-            <strong style={{ fontSize: "0.85rem" }}>Riot-Account</strong>
+            <span className="panel-title">Riot-Account</span>
 
             {account ? (
                 <div

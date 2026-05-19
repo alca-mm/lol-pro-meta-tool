@@ -11,23 +11,24 @@ interface Col {
     key: SortKey
     label: string
     title?: string
+    numeric?: boolean
 }
 
 const COLUMNS: Col[] = [
     { key: "championName",    label: "Champion" },
-    { key: "games",           label: "G",        title: "Games" },
-    { key: "wins",            label: "W",        title: "Wins" },
-    { key: "losses",          label: "L",        title: "Losses" },
-    { key: "winRate",         label: "Win%",     title: "Win Rate" },
-    { key: "avgKda",          label: "KDA",      title: "Avg KDA (kills+assists)/deaths" },
-    { key: "avgKills",        label: "K",        title: "Avg Kills" },
-    { key: "avgDeaths",       label: "D",        title: "Avg Deaths" },
-    { key: "avgAssists",      label: "A",        title: "Avg Assists" },
-    { key: "csPerMinute",     label: "CS/min" },
-    { key: "damagePerMinute", label: "Dmg/min" },
-    { key: "goldPerMinute",   label: "Gold/min" },
-    { key: "soloqGames",      label: "SoloQ" },
-    { key: "flexqGames",      label: "FlexQ" },
+    { key: "games",           label: "G",        title: "Games",                              numeric: true },
+    { key: "wins",            label: "W",        title: "Wins",                               numeric: true },
+    { key: "losses",          label: "L",        title: "Losses",                             numeric: true },
+    { key: "winRate",         label: "Win%",     title: "Win Rate",                           numeric: true },
+    { key: "avgKda",          label: "KDA",      title: "Avg KDA (kills+assists)/deaths",      numeric: true },
+    { key: "avgKills",        label: "K",        title: "Avg Kills",                          numeric: true },
+    { key: "avgDeaths",       label: "D",        title: "Avg Deaths",                         numeric: true },
+    { key: "avgAssists",      label: "A",        title: "Avg Assists",                        numeric: true },
+    { key: "csPerMinute",     label: "CS/min",   title: "CS per minute",                      numeric: true },
+    { key: "damagePerMinute", label: "Dmg/min",  title: "Damage per minute",                  numeric: true },
+    { key: "goldPerMinute",   label: "Gold/min", title: "Gold per minute",                    numeric: true },
+    { key: "soloqGames",      label: "SoloQ",    title: "Solo Queue games",                   numeric: true },
+    { key: "flexqGames",      label: "FlexQ",    title: "Flex Queue games",                   numeric: true },
 ]
 
 function fCell(key: SortKey, value: PlayerChampionResultStats[SortKey]): string {
@@ -103,8 +104,8 @@ export function ChampionResultsTable({ matches, accounts }: Props) {
             {sorted.length === 0 ? (
                 <p className="muted" style={{ fontSize: "0.8rem" }}>Keine Daten.</p>
             ) : (
-                <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                <div className="table-card">
+                    <table className="stats-table" style={{ fontSize: "0.8rem" }}>
                         <thead>
                             <tr>
                                 {COLUMNS.map((col) => (
@@ -115,9 +116,10 @@ export function ChampionResultsTable({ matches, accounts }: Props) {
                                             ...thStyle,
                                             cursor: "pointer",
                                             userSelect: "none",
+                                            textAlign: col.numeric ? "right" : "left",
                                             color: sortKey === col.key
-                                                ? "var(--color-fg, inherit)"
-                                                : "var(--color-muted, #888)",
+                                                ? "var(--text)"
+                                                : "var(--text-dim)",
                                         }}
                                         onClick={() => handleSort(col.key)}
                                     >
@@ -143,10 +145,11 @@ export function ChampionResultsTable({ matches, accounts }: Props) {
                                                 key={col.key}
                                                 style={{
                                                     ...tdStyle,
+                                                    textAlign: col.numeric ? "right" : "left",
                                                     color: isWinRate
                                                         ? (row.winRate >= 0.5
-                                                            ? "var(--score-pos, #4ade80)"
-                                                            : "var(--score-neg, #f87171)")
+                                                            ? "var(--green)"
+                                                            : "var(--red)")
                                                         : undefined,
                                                     fontWeight: col.key === "championName" ? 500 : undefined,
                                                 }}
@@ -166,16 +169,10 @@ export function ChampionResultsTable({ matches, accounts }: Props) {
 }
 
 const thStyle: React.CSSProperties = {
-    textAlign:   "left",
-    paddingRight: "0.75rem",
-    paddingBottom: "0.3rem",
-    whiteSpace:  "nowrap",
-    fontWeight:  500,
+    whiteSpace: "nowrap",
 }
 
 const tdStyle: React.CSSProperties = {
-    paddingRight:  "0.75rem",
-    paddingBottom: "0.2rem",
     whiteSpace:    "nowrap",
     verticalAlign: "top",
 }

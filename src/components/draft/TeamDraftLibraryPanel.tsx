@@ -112,7 +112,7 @@ export function TeamDraftLibraryPanel({
 
     return (
         <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
-            <strong style={{ fontSize: "0.85rem" }}>{title}</strong>
+            <span className="panel-title">{title}</span>
 
             {!activeTeamId ? (
                 <p className="muted" style={{ margin: "0.5rem 0 0", fontSize: "0.85rem" }}>
@@ -170,7 +170,7 @@ export function TeamDraftLibraryPanel({
                             {t("drafts_recent")}
                         </p>
                         {loading && (
-                            <p className="muted" style={{ fontSize: "0.85rem" }}>{t("auth_loading")}</p>
+                            <p className="inline-loading">{t("common_loading")}</p>
                         )}
                         {error && (
                             <p style={{ fontSize: "0.85rem", color: "var(--score-neg, #f87171)" }}>{error}</p>
@@ -212,9 +212,8 @@ export function TeamDraftLibraryPanel({
                                         {canDeleteDraft(currentRole) && (
                                             <button
                                                 type="button"
-                                                className="secondary-button"
+                                                className="btn-danger"
                                                 onClick={() => void handleDelete(draft)}
-                                                style={{ color: "var(--color-danger, #e55)" }}
                                             >
                                                 {t("drafts_delete")}
                                             </button>

@@ -348,4 +348,7 @@ export const en: Translations = {
 
     // Header
     header_contact: "Contact",
+
+    // Common
+    common_loading: "Loading…",
 }

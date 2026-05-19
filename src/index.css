@@ -1505,3 +1505,94 @@ body::-webkit-scrollbar {
   color: var(--green);
   background: rgba(76, 175, 130, 0.1);
 }
+
+/* ── UX polish utility classes ─────────────────────────────────── */
+
+/* Panel header: title left, optional actions right */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.panel-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+/* Danger button — same shape as secondary-button but danger-tinted */
+.btn-danger {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--danger);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.btn-danger:hover {
+  border-color: var(--danger);
+  background: rgba(255, 77, 77, 0.08);
+}
+
+.btn-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+/* Filter bar */
+.filter-bar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+/* Scrollable table card */
+.table-card {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+/* Section label (small uppercase heading inside a panel) */
+.section-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.5rem;
+  font-style: normal;
+}
+
+/* Inline loading indicator */
+.inline-loading {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 0.4rem 0;
+}
+
+/* Empty state — friendly placeholder */
+.empty-state {
+  color: var(--text-dim);
+  padding: 0.75rem 0;
+}
+
+.empty-state .empty-hint {
+  font-size: 0.78rem;
+  margin-top: 0.2rem;
+  opacity: 0.8;
+}

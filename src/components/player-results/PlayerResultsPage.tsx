@@ -45,9 +45,10 @@ export function PlayerResultsPage() {
 
     if (!activeTeam) {
         return (
-            <p className="muted" style={{ padding: "0.5rem 0" }}>
-                Wähle ein Team aus, um Player Results zu sehen.
-            </p>
+            <div className="empty-state" style={{ padding: "0.5rem 0" }}>
+                <p>Kein Team ausgewählt.</p>
+                <p className="empty-hint">Wähle ein Team im Team Dashboard aus, um Player Results zu sehen.</p>
+            </div>
         )
     }
 
@@ -55,33 +56,24 @@ export function PlayerResultsPage() {
         <div style={{ padding: "0.5rem 0" }}>
             <RiotAccountPanel onAfterSync={() => void reload()} />
 
-            {loading && <p className="muted" style={{ marginTop: "1rem" }}>Lädt…</p>}
+            {loading && <p className="inline-loading" style={{ marginTop: "1rem" }}>Lädt…</p>}
 
             {!loading && matches.length === 0 && (
-                <p className="muted" style={{ marginTop: "1rem" }}>
-                    Noch keine Matches gespeichert — klicke "Matches syncen" oben.
-                </p>
+                <div className="empty-state" style={{ marginTop: "1rem" }}>
+                    <p>Noch keine Matches gespeichert.</p>
+                    <p className="empty-hint">Klicke oben auf "Matches syncen" um Daten zu laden.</p>
+                </div>
             )}
 
             {!loading && matches.length > 0 && (
                 <>
                     <div style={{ marginTop: "1.5rem" }}>
-                        <p
-                            className="muted"
-                            style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}
-                        >
-                            Champion-Statistiken
-                        </p>
+                        <p className="section-label">Champion-Statistiken</p>
                         <ChampionResultsTable matches={matches} accounts={accounts} />
                     </div>
 
                     <div style={{ marginTop: "1.5rem" }}>
-                        <p
-                            className="muted"
-                            style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "0.5rem" }}
-                        >
-                            Match-Verlauf
-                        </p>
+                        <p className="section-label">Match-Verlauf</p>
                         <MatchTable
                             matches={matches}
                             participants={participants}

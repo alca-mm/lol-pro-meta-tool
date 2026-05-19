@@ -224,7 +224,7 @@ function AppContent() {
                         ))}
                     </nav>
 
-                    <Suspense fallback={<p className="muted">Lädt…</p>}>
+                    <Suspense fallback={<p className="inline-loading">{t("common_loading")}</p>}>
                     {activeTab === "team-dashboard" ? (
                         <section className="section">
                             <TeamStatusPanel onGoToPlayerResults={() => setActiveTab("player-results")} />
