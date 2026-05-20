@@ -44,42 +44,38 @@ export function TeamInvitePanel() {
             <span className="panel-title">{t("invite_manageInvites")}</span>
 
             {invites.length === 0 ? (
-                <p className="muted" style={{ margin: "0.5rem 0 0", fontSize: "0.85rem" }}>
-                    {t("invite_noInvites")}
-                </p>
+                <p className="empty-state">{t("invite_noInvites")}</p>
             ) : (
-                <div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                <div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                     {invites.map((inv) => {
                         const remaining = formatExpiry(inv.expires_at)
                         return (
-                        <div key={inv.id} style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.85rem" }}>
-                            <code style={{ letterSpacing: "0.05em", userSelect: "all" }}>{inv.code}</code>
-                            {remaining && (
-                                <span className="muted" style={{ fontSize: "0.75rem" }}>{remaining}</span>
-                            )}
-                            <button
-                                type="button"
-                                className="secondary-button"
-                                style={{ fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
-                                onClick={() => copyToClipboard(inv.code)}
-                            >
-                                {t("invite_copy")}
-                            </button>
-                            <button
-                                type="button"
-                                className="btn-danger"
-                                style={{ fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
-                                onClick={() => void handleRevoke(inv.id)}
-                            >
-                                {t("invite_revoke")}
-                            </button>
-                        </div>
+                            <div key={inv.id} className="button-row" style={{ marginTop: 0, fontSize: "0.85rem" }}>
+                                <code style={{ letterSpacing: "0.05em", userSelect: "all" }}>{inv.code}</code>
+                                {remaining && <span className="muted" style={{ fontSize: "0.75rem" }}>{remaining}</span>}
+                                <button
+                                    type="button"
+                                    className="secondary-button"
+                                    style={{ fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
+                                    onClick={() => copyToClipboard(inv.code)}
+                                >
+                                    {t("invite_copy")}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn-danger"
+                                    style={{ fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
+                                    onClick={() => void handleRevoke(inv.id)}
+                                >
+                                    {t("invite_revoke")}
+                                </button>
+                            </div>
                         )
                     })}
                 </div>
             )}
 
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap" }}>
+            <div className="button-row">
                 <button
                     type="button"
                     className="secondary-button"
@@ -109,14 +105,7 @@ export function TeamInvitePanel() {
             </div>
 
             {feedback && (
-                <p
-                    className="muted"
-                    style={{
-                        marginTop: "0.4rem",
-                        fontSize: "0.8rem",
-                        color: feedback.ok ? "var(--score-pos, #4ade80)" : "var(--score-neg, #f87171)",
-                    }}
-                >
+                <p className={`muted feedback-msg ${feedback.ok ? "feedback-ok" : "feedback-err"}`}>
                     {feedback.msg}
                 </p>
             )}

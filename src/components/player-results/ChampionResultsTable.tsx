@@ -85,7 +85,7 @@ export function ChampionResultsTable({ matches, accounts }: Props) {
         <div>
             {/* Player filter */}
             {accounts.length > 1 && (
-                <div style={{ marginBottom: "0.5rem" }}>
+                <div className="filter-bar">
                     <select
                         value={puuidFilter}
                         onChange={(e) => setPuuidFilter(e.target.value)}
@@ -102,7 +102,7 @@ export function ChampionResultsTable({ matches, accounts }: Props) {
             )}
 
             {sorted.length === 0 ? (
-                <p className="muted" style={{ fontSize: "0.8rem" }}>Keine Daten.</p>
+                <p className="empty-state">Keine Daten.</p>
             ) : (
                 <div className="table-card">
                     <table className="stats-table" style={{ fontSize: "0.8rem" }}>
@@ -112,11 +112,11 @@ export function ChampionResultsTable({ matches, accounts }: Props) {
                                     <th
                                         key={col.key}
                                         title={col.title}
+                                        className={col.numeric ? "numeric" : undefined}
                                         style={{
                                             ...thStyle,
                                             cursor: "pointer",
                                             userSelect: "none",
-                                            textAlign: col.numeric ? "right" : "left",
                                             color: sortKey === col.key
                                                 ? "var(--text)"
                                                 : "var(--text-dim)",
@@ -143,9 +143,9 @@ export function ChampionResultsTable({ matches, accounts }: Props) {
                                         return (
                                             <td
                                                 key={col.key}
+                                                className={col.numeric ? "numeric" : undefined}
                                                 style={{
                                                     ...tdStyle,
-                                                    textAlign: col.numeric ? "right" : "left",
                                                     color: isWinRate
                                                         ? (row.winRate >= 0.5
                                                             ? "var(--green)"

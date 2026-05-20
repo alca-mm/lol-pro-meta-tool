@@ -27,34 +27,27 @@ export function TeamDashboard({ onGoToPlayerResults }: Props = {}) {
     const myRoleLabel = myRole ? (roleLabels[myRole] ?? myRole) : null
 
     return (
-        <>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
             {/* ── Header card ────────────────────────────────── */}
-            <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "0.5rem" }}>
+            <div className="section-card">
+                <div className="panel-header">
                     <div>
-                        <p
-                            className="muted"
-                            style={{ margin: 0, fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.07em" }}
-                        >
-                            {t("team_dashboard")}
-                        </p>
+                        <span className="section-title">{t("team_dashboard")}</span>
                         {activeTeam ? (
-                            <p style={{ margin: "0.2rem 0 0", fontSize: "1.05rem", fontWeight: 600 }}>
+                            <p style={{ margin: "0.15rem 0 0", fontSize: "1rem", fontWeight: 600 }}>
                                 {activeTeam.name}
                             </p>
                         ) : (
-                            <p className="muted" style={{ margin: "0.2rem 0 0" }}>
-                                {t("team_noTeam")}
-                            </p>
+                            <p className="muted section-subtitle">{t("team_noTeam")}</p>
                         )}
                     </div>
 
                     {(myRoleLabel || teams.length > 1) && (
-                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                        <div className="button-row" style={{ marginTop: 0 }}>
                             {myRoleLabel && (
                                 <span className="muted" style={{ fontSize: "0.8rem" }}>
                                     {t("team_yourRole")}:{" "}
-                                    <strong style={{ color: "var(--color-fg, inherit)" }}>{myRoleLabel}</strong>
+                                    <strong style={{ color: "var(--text)" }}>{myRoleLabel}</strong>
                                 </span>
                             )}
                             {teams.length > 1 && (
@@ -72,9 +65,8 @@ export function TeamDashboard({ onGoToPlayerResults }: Props = {}) {
                     )}
                 </div>
 
-                {/* Summary line: member + notes count */}
                 {activeTeam && (
-                    <p className="muted" style={{ margin: "0.4rem 0 0", fontSize: "0.8rem" }}>
+                    <p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>
                         {members.length} {t("team_members")}
                         {notesCount > 0 && (
                             <> &middot; {notesCount} {t("team_notesSummary")}</>
@@ -83,12 +75,11 @@ export function TeamDashboard({ onGoToPlayerResults }: Props = {}) {
                 )}
             </div>
 
-            {/* ── Sections ───────────────────────────────────── */}
             <TeamMembersPanel />
             <RiotAccountSummary onGoToPlayerResults={onGoToPlayerResults} />
             <TeamInvitePanel />
             <TeamCreatePanel />
             <TeamDangerZone />
-        </>
+        </div>
     )
 }

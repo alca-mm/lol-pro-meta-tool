@@ -64,16 +64,7 @@ export function RiotAccountSummary({ onGoToPlayerResults }: Props) {
             <span className="panel-title">Riot-Account</span>
 
             {account ? (
-                <div
-                    style={{
-                        marginTop: "0.4rem",
-                        fontSize: "0.85rem",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        flexWrap: "wrap",
-                    }}
-                >
+                <div className="button-row" style={{ fontSize: "0.85rem" }}>
                     <span style={{ fontWeight: 500 }}>
                         {account.riot_game_name}#{account.riot_tag_line}
                     </span>
@@ -114,15 +105,7 @@ export function RiotAccountSummary({ onGoToPlayerResults }: Props) {
             )}
 
             {feedback && (
-                <p
-                    className="muted"
-                    style={{
-                        marginTop: "0.4rem",
-                        color: feedback.ok
-                            ? "var(--score-pos, #4ade80)"
-                            : "var(--score-neg, #f87171)",
-                    }}
-                >
+                <p className={`muted feedback-msg ${feedback.ok ? "feedback-ok" : "feedback-err"}`}>
                     {feedback.msg}
                 </p>
             )}

@@ -1588,11 +1588,70 @@ body::-webkit-scrollbar {
 /* Empty state — friendly placeholder */
 .empty-state {
   color: var(--text-dim);
-  padding: 0.75rem 0;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+  font-style: normal;
 }
 
 .empty-state .empty-hint {
   font-size: 0.78rem;
-  margin-top: 0.2rem;
-  opacity: 0.8;
+  margin-top: 0.25rem;
+  opacity: 0.75;
 }
+
+/* ── UX Polish Pack 1 ─────────────────────────────────────────── */
+
+/* Generic compact section card */
+.section-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(26, 29, 39, 0.92);
+  padding: 0.75rem 1rem;
+}
+
+/* Small uppercase section heading */
+.section-title {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+/* Subdued secondary line under a title */
+.section-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
+/* Horizontal button / input row */
+.button-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+/* Danger-zone card — same shape, danger border */
+.danger-zone {
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: rgba(26, 29, 39, 0.92);
+  padding: 0.75rem 1rem;
+}
+
+/* Right-align numeric table cells */
+.numeric {
+  text-align: right;
+}
+
+/* Inline feedback message */
+.feedback-msg {
+  font-size: 0.8rem;
+  margin-top: 0.4rem;
+}
+.feedback-ok  { color: var(--green);  }
+.feedback-err { color: var(--danger); }

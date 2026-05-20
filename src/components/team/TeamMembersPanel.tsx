@@ -62,68 +62,70 @@ export function TeamMembersPanel() {
             <span className="panel-title">{t("team_manageMembers")}</span>
 
             {members.length === 0 ? (
-                <p className="muted" style={{ margin: "0.5rem 0 0" }}>{t("team_noMembers")}</p>
+                <p className="empty-state">{t("team_noMembers")}</p>
             ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "0.5rem", fontSize: "0.85rem" }}>
-                    <thead>
-                        <tr>
-                            <th style={{ textAlign: "left", paddingBottom: "0.25rem" }}>{t("team_username")}</th>
-                            <th style={{ textAlign: "left", paddingBottom: "0.25rem" }}>{t("team_role")}</th>
-                            {canRemoveMembers(myRole) && <th />}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {members.map((member) => (
-                            <tr key={member.user_id}>
-                                <td style={{ paddingRight: "1rem", paddingBottom: "0.25rem" }}>
-                                    {member.username}
-                                    {member.user_id === user.id && (
-                                        <span className="muted" style={{ marginLeft: "0.35rem", fontSize: "0.75rem" }}>
-                                            (you)
-                                        </span>
-                                    )}
-                                </td>
-                                <td style={{ paddingRight: "1rem", paddingBottom: "0.25rem" }}>
-                                    {canChangeRoles(myRole) && member.user_id !== user.id ? (
-                                        <select
-                                            value={member.role}
-                                            onChange={(e) =>
-                                                void handleRoleChange(member.user_id, e.target.value as TeamRole)
-                                            }
-                                            disabled={busy}
-                                            style={{ fontSize: "0.8rem" }}
-                                        >
-                                            {ROLES.map((r) => (
-                                                <option key={r} value={r}>{roleLabel[r]}</option>
-                                            ))}
-                                        </select>
-                                    ) : (
-                                        <span>{roleLabel[member.role]}</span>
-                                    )}
-                                </td>
-                                {canRemoveMembers(myRole) && (
-                                    <td style={{ paddingBottom: "0.25rem" }}>
-                                        {member.user_id !== user.id && (
-                                            <button
-                                                type="button"
-                                                className="btn-danger"
-                                                style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem" }}
-                                                disabled={busy}
-                                                onClick={() => void handleRemove(member.user_id)}
-                                            >
-                                                {t("team_removeMember")}
-                                            </button>
+                <div className="table-card" style={{ marginTop: "0.5rem" }}>
+                    <table style={{ width: "100%", fontSize: "0.85rem" }}>
+                        <thead>
+                            <tr>
+                                <th>{t("team_username")}</th>
+                                <th>{t("team_role")}</th>
+                                {canRemoveMembers(myRole) && <th />}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {members.map((member) => (
+                                <tr key={member.user_id}>
+                                    <td>
+                                        {member.username}
+                                        {member.user_id === user.id && (
+                                            <span className="muted" style={{ marginLeft: "0.35rem", fontSize: "0.75rem" }}>
+                                                (you)
+                                            </span>
                                         )}
                                     </td>
-                                )}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                                    <td>
+                                        {canChangeRoles(myRole) && member.user_id !== user.id ? (
+                                            <select
+                                                value={member.role}
+                                                onChange={(e) =>
+                                                    void handleRoleChange(member.user_id, e.target.value as TeamRole)
+                                                }
+                                                disabled={busy}
+                                                style={{ fontSize: "0.8rem" }}
+                                            >
+                                                {ROLES.map((r) => (
+                                                    <option key={r} value={r}>{roleLabel[r]}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <span>{roleLabel[member.role]}</span>
+                                        )}
+                                    </td>
+                                    {canRemoveMembers(myRole) && (
+                                        <td>
+                                            {member.user_id !== user.id && (
+                                                <button
+                                                    type="button"
+                                                    className="btn-danger"
+                                                    style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem" }}
+                                                    disabled={busy}
+                                                    onClick={() => void handleRemove(member.user_id)}
+                                                >
+                                                    {t("team_removeMember")}
+                                                </button>
+                                            )}
+                                        </td>
+                                    )}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             )}
 
             {canManageMembers(myRole) && (
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem" }}>
+                <div className="button-row">
                     <input
                         type="text"
                         value={newUsername}
@@ -146,13 +148,7 @@ export function TeamMembersPanel() {
 
             {feedback && (
                 <p
-                    className="muted"
-                    style={{
-                        marginTop: "0.5rem",
-                        color: feedback.ok
-                            ? "var(--score-pos, #4ade80)"
-                            : "var(--score-neg, #f87171)",
-                    }}
+                    className={`muted feedback-msg ${feedback.ok ? "feedback-ok" : "feedback-err"}`}
                 >
                     {feedback.msg}
                 </p>

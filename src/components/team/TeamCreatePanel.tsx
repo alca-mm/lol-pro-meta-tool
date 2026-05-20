@@ -43,9 +43,9 @@ export function TeamCreatePanel() {
         <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
             <span className="panel-title">{t("team_quickActions")}</span>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginTop: "0.6rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginTop: "0.5rem" }}>
                 {/* Join with invite code */}
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <div className="button-row" style={{ marginTop: 0 }}>
                     <input
                         type="text"
                         value={joinCode}
@@ -65,13 +65,8 @@ export function TeamCreatePanel() {
                     </button>
                     {joinFeedback && (
                         <span
-                            className="muted"
-                            style={{
-                                fontSize: "0.8rem",
-                                color: joinFeedback.ok
-                                    ? "var(--score-pos, #4ade80)"
-                                    : "var(--score-neg, #f87171)",
-                            }}
+                            className={`muted ${joinFeedback.ok ? "feedback-ok" : "feedback-err"}`}
+                            style={{ fontSize: "0.8rem" }}
                         >
                             {joinFeedback.msg}
                         </span>
@@ -79,7 +74,7 @@ export function TeamCreatePanel() {
                 </div>
 
                 {/* Create new team */}
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <div className="button-row" style={{ marginTop: 0 }}>
                     <input
                         type="text"
                         value={newTeamName}

@@ -19,14 +19,11 @@ export function TeamDangerZone() {
     }
 
     return (
-        <div
-            className="recommendation-section"
-            style={{ padding: "0.75rem 1rem", borderColor: "var(--danger, #ff4d4d)" }}
-        >
-            <span className="panel-title" style={{ color: "var(--danger, #ff4d4d)" }}>
+        <div className="danger-zone">
+            <span className="panel-title" style={{ color: "var(--danger)" }}>
                 {t("team_dangerZone")}
             </span>
-            <div style={{ marginTop: "0.6rem" }}>
+            <div className="button-row">
                 <button
                     type="button"
                     className="btn-danger"
