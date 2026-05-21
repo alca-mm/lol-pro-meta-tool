@@ -1,5 +1,18 @@
 import type { RankedMatch } from "./riotService"
 
+export type LastNLimit = 10 | 20 | 50 | "all"
+
+export interface RecentFormResult {
+    games: number
+    wins: number
+    losses: number
+    winRate: number
+    avgKda: number
+    csPerMinute: number
+    damagePerMinute: number
+    form: Array<"W" | "L">
+}
+
 export interface PlayerChampionResultStats {
     championName: string
     games: number
@@ -91,4 +104,72 @@ export function computeChampionStats(matches: RankedMatch[]): PlayerChampionResu
             }
         })
         .sort((a, b) => b.games - a.games || a.championName.localeCompare(b.championName))
+}
+
+/** Slices a pre-sorted (newest-first) match list to the last N entries. */
+export function applyLastNFilter(matches: RankedMatch[], limit: LastNLimit): RankedMatch[] {
+    if (limit === "all") return matches
+    return matches.slice(0, limit)
+}
+
+export type PlayerScope = "team" | string
+
+/** Filters matches to a single player (by puuid) or returns all for "team". */
+export function applyScopeFilter(matches: RankedMatch[], scope: PlayerScope): RankedMatch[] {
+    if (scope === "team") return matches
+    return matches.filter((m) => m.puuid === scope)
+}
+
+/**
+ * Calculates win/loss form and summary stats for the most recent `count` matches.
+ * Expects `matches` sorted newest-first.
+ */
+export function calculateRecentForm(matches: RankedMatch[], count = 10): RecentFormResult {
+    const recent = matches.slice(0, count)
+    const games = recent.length
+    if (games === 0) {
+        return { games: 0, wins: 0, losses: 0, winRate: 0, avgKda: 0, csPerMinute: 0, damagePerMinute: 0, form: [] }
+    }
+    const wins = recent.filter((m) => m.win).length
+    const totalDuration = recent.reduce((s, m) => s + m.game_duration, 0)
+    const totalMinutes = totalDuration / 60 || 1
+    const totalKills   = recent.reduce((s, m) => s + m.kills, 0)
+    const totalDeaths  = recent.reduce((s, m) => s + m.deaths, 0)
+    const totalAssists = recent.reduce((s, m) => s + m.assists, 0)
+    const totalCs      = recent.reduce((s, m) => s + m.cs, 0)
+    const totalDamage  = recent.reduce((s, m) => s + m.damage_to_champs, 0)
+    return {
+        games,
+        wins,
+        losses:           games - wins,
+        winRate:          wins / games,
+        avgKda:           (totalKills + totalAssists) / Math.max(totalDeaths, 1),
+        csPerMinute:      totalCs    / totalMinutes,
+        damagePerMinute:  totalDamage / totalMinutes,
+        form:             recent.map((m) => (m.win ? "W" : "L")),
+    }
+}
+
+/** Returns top `limit` champions sorted by winRate → games → avgKda (descending). */
+export function getBestChampionStats(
+    stats: PlayerChampionResultStats[],
+    limit = 3,
+): PlayerChampionResultStats[] {
+    const qualified = stats.filter((s) => s.games >= 2)
+    const pool = qualified.length > 0 ? qualified : stats
+    return [...pool]
+        .sort((a, b) => b.winRate - a.winRate || b.games - a.games || b.avgKda - a.avgKda)
+        .slice(0, limit)
+}
+
+/** Returns bottom `limit` champions sorted by winRate → games desc → avgKda (ascending). */
+export function getNeedsReviewChampionStats(
+    stats: PlayerChampionResultStats[],
+    limit = 3,
+): PlayerChampionResultStats[] {
+    const qualified = stats.filter((s) => s.games >= 2)
+    const pool = qualified.length > 0 ? qualified : stats
+    return [...pool]
+        .sort((a, b) => a.winRate - b.winRate || b.games - a.games || a.avgKda - b.avgKda)
+        .slice(0, limit)
 }

@@ -349,4 +349,9 @@ export const de = {
 
     // Common
     common_loading: "Lädt…",
+
+    // Player Results
+    playerResults_view: "Ansicht",
+    playerResults_teamOverview: "Team Overview",
+    playerResults_noMatchesForPlayer: "Keine Matches für diesen Spieler.",
 } as const

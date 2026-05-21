@@ -1655,3 +1655,112 @@ body::-webkit-scrollbar {
 }
 .feedback-ok  { color: var(--green);  }
 .feedback-err { color: var(--danger); }
+
+/* ============================================================
+   ChampionCombobox
+   ============================================================ */
+
+.combobox {
+  position: relative;
+  max-width: 320px;
+}
+
+.combobox-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.combobox-input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 0.45rem 1.8rem 0.45rem 0.6rem;
+  font: inherit;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.combobox-input::placeholder {
+  color: var(--text-dim);
+  opacity: 1;
+}
+
+.combobox-input:focus {
+  border-color: var(--accent-dim);
+}
+
+.combobox-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.combobox-clear {
+  position: absolute;
+  right: 0.4rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 1rem;
+  padding: 0 0.2rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.combobox-clear:hover {
+  color: var(--text);
+}
+
+.combobox-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  margin: 0;
+  padding: 0.2rem 0;
+  list-style: none;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 240px;
+  overflow-y: auto;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+}
+
+.combobox-option {
+  padding: 0.28rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  border-left: 2px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.combobox-option-active {
+  background: var(--surface);
+  border-left-color: var(--accent);
+  color: var(--text);
+}
+
+.combobox-empty {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  padding: 0.45rem 0.6rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}

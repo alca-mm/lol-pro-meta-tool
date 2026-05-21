@@ -544,7 +544,7 @@ create table if not exists public.ranked_matches (
     role          text,
     lane          text,
     created_at    timestamptz not null default now(),
-    unique (puuid, match_id)
+    unique (team_id, puuid, match_id)
     );
 
 create index if not exists ranked_matches_team_time_idx
@@ -571,10 +571,10 @@ create policy "ranked_matches_select" on public.ranked_matches
 -- ============================================================
 
 alter table public.ranked_matches
-    add column if not exists cs              int not null default 0,
-    add column if not exists vision_score    int not null default 0,
+    add column if not exists cs int not null default 0,
+    add column if not exists vision_score int not null default 0,
     add column if not exists damage_to_champs int not null default 0,
-    add column if not exists gold_earned     int not null default 0;
+    add column if not exists gold_earned int not null default 0;
 
 -- ============================================================
 -- 16. ranked_match_participants
@@ -582,7 +582,7 @@ alter table public.ranked_matches
 -- ============================================================
 
 create table if not exists public.ranked_match_participants (
-    id            uuid primary key default gen_random_uuid(),
+                                                                id            uuid primary key default gen_random_uuid(),
     team_id       uuid not null references public.teams(id) on delete cascade,
     match_id      text not null,
     puuid         text not null,
@@ -594,8 +594,8 @@ create table if not exists public.ranked_match_participants (
     deaths        int not null default 0,
     assists       int not null default 0,
     cs            int not null default 0,
-    unique (match_id, puuid)
-);
+    unique (team_id, match_id, puuid)
+    );
 
 create index if not exists ranked_match_participants_match_idx
     on public.ranked_match_participants (match_id);
@@ -612,6 +612,75 @@ drop policy if exists "ranked_match_participants_select" on public.ranked_match_
 
 create policy "ranked_match_participants_select" on public.ranked_match_participants
     for select
-    using (
-        public.is_team_member(team_id)
-    );
+                        using (
+                        public.is_team_member(team_id)
+                        );
+
+-- ============================================================
+-- Migration: fix unique constraints to be team-scoped
+-- Safe for Supabase/Postgres.
+--
+-- Why:
+-- Older DBs may still have non-team-scoped unique constraints:
+--   ranked_matches:             unique (puuid, match_id)
+--   ranked_match_participants:  unique (match_id, puuid)
+--
+-- That breaks when the same Riot ID / PUUID is used in different teams.
+-- ============================================================
+
+-- Drop old non-team-scoped constraints if they exist
+alter table public.ranked_matches
+drop constraint if exists ranked_matches_puuid_match_id_key;
+
+alter table public.ranked_match_participants
+drop constraint if exists ranked_match_participants_match_id_puuid_key;
+
+-- Add team-scoped constraint for ranked_matches only if no equivalent unique constraint exists
+do $$
+begin
+    if not exists (
+        select 1
+        from pg_constraint c
+        join pg_class t on t.oid = c.conrelid
+        join pg_namespace n on n.oid = t.relnamespace
+        where n.nspname = 'public'
+          and t.relname = 'ranked_matches'
+          and c.contype = 'u'
+          and (
+              select array_agg(a.attname::text order by cols.ord)
+              from unnest(c.conkey) with ordinality as cols(attnum, ord)
+              join pg_attribute a
+                on a.attrelid = c.conrelid
+               and a.attnum = cols.attnum
+          ) = array['team_id', 'puuid', 'match_id']
+    ) then
+alter table public.ranked_matches
+    add constraint ranked_matches_team_puuid_match_id_key
+        unique (team_id, puuid, match_id);
+end if;
+end $$;
+
+-- Add team-scoped constraint for ranked_match_participants only if no equivalent unique constraint exists
+do $$
+begin
+    if not exists (
+        select 1
+        from pg_constraint c
+        join pg_class t on t.oid = c.conrelid
+        join pg_namespace n on n.oid = t.relnamespace
+        where n.nspname = 'public'
+          and t.relname = 'ranked_match_participants'
+          and c.contype = 'u'
+          and (
+              select array_agg(a.attname::text order by cols.ord)
+              from unnest(c.conkey) with ordinality as cols(attnum, ord)
+              join pg_attribute a
+                on a.attrelid = c.conrelid
+               and a.attnum = cols.attnum
+          ) = array['team_id', 'match_id', 'puuid']
+    ) then
+alter table public.ranked_match_participants
+    add constraint ranked_match_participants_team_match_puuid_key
+        unique (team_id, match_id, puuid);
+end if;
+end $$;

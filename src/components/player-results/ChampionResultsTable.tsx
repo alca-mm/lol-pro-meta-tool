@@ -3,7 +3,7 @@ import {
     computeChampionStats,
     type PlayerChampionResultStats,
 } from "../../teams/playerResultsAnalytics"
-import type { RankedMatch, PlayerAccount } from "../../teams/riotService"
+import type { RankedMatch } from "../../teams/riotService"
 
 type SortKey = keyof PlayerChampionResultStats
 
@@ -48,20 +48,13 @@ function fCell(key: SortKey, value: PlayerChampionResultStats[SortKey]): string 
 
 interface Props {
     matches: RankedMatch[]
-    accounts: PlayerAccount[]
 }
 
-export function ChampionResultsTable({ matches, accounts }: Props) {
-    const [puuidFilter, setPuuidFilter] = useState("")
-    const [sortKey, setSortKey]         = useState<SortKey>("games")
-    const [sortAsc, setSortAsc]         = useState(false)
+export function ChampionResultsTable({ matches }: Props) {
+    const [sortKey, setSortKey] = useState<SortKey>("games")
+    const [sortAsc, setSortAsc] = useState(false)
 
-    const filtered = useMemo(
-        () => puuidFilter ? matches.filter((m) => m.puuid === puuidFilter) : matches,
-        [matches, puuidFilter],
-    )
-
-    const stats = useMemo(() => computeChampionStats(filtered), [filtered])
+    const stats = useMemo(() => computeChampionStats(matches), [matches])
 
     const sorted = useMemo(() => {
         return [...stats].sort((a, b) => {
@@ -83,24 +76,6 @@ export function ChampionResultsTable({ matches, accounts }: Props) {
 
     return (
         <div>
-            {/* Player filter */}
-            {accounts.length > 1 && (
-                <div className="filter-bar">
-                    <select
-                        value={puuidFilter}
-                        onChange={(e) => setPuuidFilter(e.target.value)}
-                        style={{ fontSize: "0.85rem" }}
-                    >
-                        <option value="">Alle Spieler</option>
-                        {accounts.map((a) => (
-                            <option key={a.puuid} value={a.puuid}>
-                                {a.riot_game_name}#{a.riot_tag_line}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            )}
-
             {sorted.length === 0 ? (
                 <p className="empty-state">Keine Daten.</p>
             ) : (

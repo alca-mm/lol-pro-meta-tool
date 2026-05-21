@@ -69,6 +69,7 @@ import {
 import {
     formatPercent,
     formatScore,
+    formatScorePercent,
     normalizeChampionName,
     clamp,
     oppositeSide,
@@ -79,6 +80,9 @@ import {
     createEmptyPickSlots,
     clonePickSlots,
     draftHasContent,
+    teamPoolRatingShortLabel,
+    teamPoolRatingTone,
+    type TeamPoolTone,
 } from "../draft/helpers"
 
 export function ratingToTeamPoolScore(rating: ChampionNoteRating | null): number {
@@ -93,29 +97,12 @@ export function ratingToTeamPoolScore(rating: ChampionNoteRating | null): number
     }
 }
 
-function ratingBadge(rating: ChampionNoteRating): string {
-    switch (rating) {
-        case "comfort": return "C"
-        case "blind": return "B"
-        case "pocket": return "P"
-        case "situational": return "S"
-        case "needs_practice": return "!"
-        case "avoid": return "X"
-    }
-}
-
-function ratingBadgeColor(rating: ChampionNoteRating): string {
-    switch (rating) {
-        case "comfort":
-        case "blind":
-        case "pocket":
-            return "var(--green)"
-        case "situational":
-            return "var(--accent)"
-        case "needs_practice":
-            return "var(--text-dim)"
-        case "avoid":
-            return "var(--red)"
+function poolBadgeStyle(tone: TeamPoolTone): { background: string; color: string; border: string } {
+    switch (tone) {
+        case "positive": return { background: "rgba(76,175,130,0.12)", color: "var(--green)",  border: "1px solid rgba(76,175,130,0.3)" }
+        case "neutral":  return { background: "rgba(93,120,255,0.1)",  color: "var(--accent)", border: "1px solid rgba(93,120,255,0.25)" }
+        case "warning":  return { background: "rgba(245,158,11,0.12)", color: "#f59e0b",       border: "1px solid rgba(245,158,11,0.3)" }
+        case "danger":   return { background: "rgba(224,79,79,0.12)",  color: "var(--red)",    border: "1px solid rgba(224,79,79,0.35)" }
     }
 }
 
@@ -1541,24 +1528,30 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     </strong>
                     {entry.teamPoolRating && (
                         <span
-                            title={t(`cn_rating_${entry.teamPoolRating}` as TranslationKey)}
                             style={{
                                 marginLeft: "0.4rem",
-                                fontSize: "0.7rem",
+                                fontSize: "0.68rem",
                                 fontWeight: 700,
                                 padding: "1px 5px",
                                 borderRadius: 3,
-                                background: "var(--surface2)",
-                                color: ratingBadgeColor(entry.teamPoolRating),
+                                ...poolBadgeStyle(teamPoolRatingTone(entry.teamPoolRating)),
                             }}
                         >
-                            {ratingBadge(entry.teamPoolRating)}
+                            {teamPoolRatingShortLabel(entry.teamPoolRating)} {t(`cn_rating_${entry.teamPoolRating}` as TranslationKey)}
                         </span>
                     )}
                     <span className="muted" style={{ display: "block" }}>
                         {ROLE_LABELS[entry.role]} · Score {formatScore(entry.totalScore)} · {entry.games} Picks
                         {entry.games < 50 ? ` · ${entry.sampleSizeLabel}` : ""}
                         {flexInfo?.isFlex ? ` · Flex ${flexRoleLabel(flexInfo)}` : ""}
+                    </span>
+                    <span className="muted" style={{ display: "block", fontSize: "0.68rem" }}>
+                        {[
+                            entry.teamPoolScore !== null && `Pool ${formatScorePercent(entry.teamPoolScore)}`,
+                            `Role ${formatScorePercent(entry.roleStatsScore)}`,
+                            `Syn ${formatScorePercent(entry.synergyScore)}`,
+                            `Mtp ${formatScorePercent(entry.matchupScore)}`,
+                        ].filter(Boolean).join(" · ")}
                     </span>
                 </span>
             </button>
@@ -1969,8 +1962,26 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                                     <td>{entry.games}</td>
                                     <td>{formatPercent(entry.winRate)}</td>
                                     <td className="muted">{entry.sampleSizeLabel}</td>
-                                    <td style={{ color: entry.teamPoolRating ? ratingBadgeColor(entry.teamPoolRating) : undefined }}>
-                                        {entry.teamPoolRating ? ratingBadge(entry.teamPoolRating) : "—"}
+                                    <td>
+                                        {entry.teamPoolRating ? (
+                                            <span style={{
+                                                padding: "1px 5px",
+                                                borderRadius: 3,
+                                                fontSize: "0.72rem",
+                                                fontWeight: 700,
+                                                whiteSpace: "nowrap",
+                                                ...poolBadgeStyle(teamPoolRatingTone(entry.teamPoolRating)),
+                                            }}>
+                                                {teamPoolRatingShortLabel(entry.teamPoolRating)} {t(`cn_rating_${entry.teamPoolRating}` as TranslationKey)}
+                                            </span>
+                                        ) : (
+                                            <span className="muted">—</span>
+                                        )}
+                                        {entry.teamPoolScore !== null && (
+                                            <span className="muted" style={{ display: "block", fontSize: "0.7rem" }}>
+                                                {formatScorePercent(entry.teamPoolScore)}
+                                            </span>
+                                        )}
                                     </td>
                                     <td>{entry.reasons.map((r) => t(r as TranslationKey)).join(", ")}</td>
                                 </tr>

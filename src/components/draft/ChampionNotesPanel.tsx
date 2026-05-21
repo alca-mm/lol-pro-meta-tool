@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "../../i18n/LanguageContext"
 import type { TranslationKey } from "../../i18n/types"
 import { ALL_CHAMPIONS } from "../../analysis/championCatalog"
+import { ChampionCombobox } from "../common/ChampionCombobox"
 import type { ChampionNote, ChampionNoteRating } from "../../notes/types"
 import { loadNotes, saveNote, deleteNote } from "../../notes/storage"
 import { loadTeamNotes, saveTeamNote, deleteTeamNote } from "../../notes/teamNotesService"
@@ -159,20 +160,15 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
             )}
 
             <div style={{ display: "grid", gap: "0.5rem" }}>
-                <label>
+                <label style={{ maxWidth: "320px" }}>
                     {t("cn_selectChampion")}
-                    <select
+                    <ChampionCombobox
+                        champions={ALL_CHAMPIONS}
                         value={selectedChampion}
-                        onChange={(e) => setSelectedChampion(e.target.value)}
+                        onChange={setSelectedChampion}
+                        placeholder={t("pool_searchPlaceholder")}
                         disabled={loadingNotes}
-                    >
-                        <option value="">—</option>
-                        {ALL_CHAMPIONS.map((name) => (
-                            <option key={name} value={name}>
-                                {name}{notes[name] ? " ·" : ""}
-                            </option>
-                        ))}
-                    </select>
+                    />
                 </label>
 
                 <label>

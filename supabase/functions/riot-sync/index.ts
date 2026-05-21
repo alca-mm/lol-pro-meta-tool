@@ -156,6 +156,7 @@ Deno.serve(async (req: Request) => {
         const { data: existing } = await adminClient
             .from("ranked_matches")
             .select("match_id")
+            .eq("team_id", team_id)
             .eq("puuid", puuid)
             .in("match_id", uniqueMatchIds)
 
@@ -167,6 +168,7 @@ Deno.serve(async (req: Request) => {
             const { data: incomplete } = await adminClient
                 .from("ranked_matches")
                 .select("match_id")
+                .eq("team_id", team_id)
                 .eq("puuid", puuid)
                 .in("match_id", [...knownIds])
                 .eq("gold_earned", 0)
@@ -284,13 +286,13 @@ Deno.serve(async (req: Request) => {
         if (rows.length > 0) {
             await adminClient
                 .from("ranked_matches")
-                .upsert(rows, { onConflict: "puuid,match_id" })
+                .upsert(rows, { onConflict: "team_id,puuid,match_id" })
         }
 
         if (participantRows.length > 0) {
             await adminClient
                 .from("ranked_match_participants")
-                .upsert(participantRows, { onConflict: "match_id,puuid" })
+                .upsert(participantRows, { onConflict: "team_id,match_id,puuid" })
         }
 
         return json({

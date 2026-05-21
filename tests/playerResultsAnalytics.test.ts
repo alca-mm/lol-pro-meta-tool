@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest"
-import { computeChampionStats } from "../src/teams/playerResultsAnalytics"
+import {
+    computeChampionStats,
+    applyLastNFilter,
+    applyScopeFilter,
+    calculateRecentForm,
+    getBestChampionStats,
+    getNeedsReviewChampionStats,
+} from "../src/teams/playerResultsAnalytics"
 import type { RankedMatch } from "../src/teams/riotService"
 
 function makeMatch(overrides: Partial<RankedMatch> = {}): RankedMatch {
@@ -186,5 +193,183 @@ describe("computeChampionStats", () => {
         ]
         const [r] = computeChampionStats(matches)
         expect(r.winRate).toBe(1)
+    })
+})
+
+describe("applyLastNFilter", () => {
+    const ms = [
+        makeMatch({ match_id: "m1" }),
+        makeMatch({ match_id: "m2" }),
+        makeMatch({ match_id: "m3" }),
+    ]
+
+    it("returns all matches when limit is 'all'", () => {
+        expect(applyLastNFilter(ms, "all")).toHaveLength(3)
+    })
+
+    it("returns first N matches when limit is a number", () => {
+        expect(applyLastNFilter(ms, 2)).toHaveLength(2)
+        expect(applyLastNFilter(ms, 2)[0].match_id).toBe("m1")
+    })
+
+    it("returns all when N exceeds total", () => {
+        expect(applyLastNFilter(ms, 50)).toHaveLength(3)
+    })
+
+    it("returns empty array for empty input", () => {
+        expect(applyLastNFilter([], 10)).toHaveLength(0)
+    })
+})
+
+describe("calculateRecentForm", () => {
+    it("returns zeros for empty input", () => {
+        const r = calculateRecentForm([])
+        expect(r.games).toBe(0)
+        expect(r.winRate).toBe(0)
+        expect(r.form).toEqual([])
+    })
+
+    it("uses at most `count` matches", () => {
+        const ms = [
+            makeMatch({ match_id: "m1", win: true }),
+            makeMatch({ match_id: "m2", win: false }),
+            makeMatch({ match_id: "m3", win: true }),
+        ]
+        const r = calculateRecentForm(ms, 2)
+        expect(r.games).toBe(2)
+        expect(r.form).toEqual(["W", "L"])
+    })
+
+    it("calculates win rate correctly", () => {
+        const ms = [
+            makeMatch({ match_id: "m1", win: true }),
+            makeMatch({ match_id: "m2", win: false }),
+        ]
+        expect(calculateRecentForm(ms).winRate).toBeCloseTo(0.5, 5)
+    })
+
+    it("builds form array in order (newest-first as input)", () => {
+        const ms = [
+            makeMatch({ match_id: "m1", win: true }),
+            makeMatch({ match_id: "m2", win: true }),
+            makeMatch({ match_id: "m3", win: false }),
+        ]
+        expect(calculateRecentForm(ms).form).toEqual(["W", "W", "L"])
+    })
+
+    it("uses max(deaths,1) floor for avgKda", () => {
+        const ms = [makeMatch({ kills: 5, deaths: 0, assists: 3 })]
+        expect(calculateRecentForm(ms).avgKda).toBeCloseTo(8, 5)
+    })
+
+    it("computes per-minute stats across the window", () => {
+        const ms = [
+            makeMatch({ match_id: "m1", cs: 120, damage_to_champs: 20000, game_duration: 1200 }),
+            makeMatch({ match_id: "m2", cs: 180, damage_to_champs: 30000, game_duration: 1800 }),
+        ]
+        const r = calculateRecentForm(ms)
+        const mins = (1200 + 1800) / 60
+        expect(r.csPerMinute).toBeCloseTo(300 / mins, 5)
+        expect(r.damagePerMinute).toBeCloseTo(50000 / mins, 5)
+    })
+})
+
+describe("getBestChampionStats", () => {
+    it("returns empty array for empty input", () => {
+        expect(getBestChampionStats([])).toEqual([])
+    })
+
+    it("sorts by winRate descending", () => {
+        const stats = computeChampionStats([
+            makeMatch({ match_id: "m1", champion_name: "A", win: false }),
+            makeMatch({ match_id: "m2", champion_name: "A", win: false }),
+            makeMatch({ match_id: "m3", champion_name: "B", win: true }),
+            makeMatch({ match_id: "m4", champion_name: "B", win: true }),
+        ])
+        const best = getBestChampionStats(stats)
+        expect(best[0].championName).toBe("B")
+    })
+
+    it("returns at most `limit` entries", () => {
+        const stats = computeChampionStats([
+            makeMatch({ match_id: "m1", champion_name: "A", win: true }),
+            makeMatch({ match_id: "m2", champion_name: "A", win: true }),
+            makeMatch({ match_id: "m3", champion_name: "B", win: true }),
+            makeMatch({ match_id: "m4", champion_name: "B", win: true }),
+            makeMatch({ match_id: "m5", champion_name: "C", win: false }),
+            makeMatch({ match_id: "m6", champion_name: "C", win: false }),
+            makeMatch({ match_id: "m7", champion_name: "D", win: false }),
+            makeMatch({ match_id: "m8", champion_name: "D", win: false }),
+        ])
+        expect(getBestChampionStats(stats, 3)).toHaveLength(3)
+    })
+
+    it("prefers champions with 2+ games when available", () => {
+        const stats = computeChampionStats([
+            makeMatch({ match_id: "m1", champion_name: "Solo", win: true }),   // 1 game
+            makeMatch({ match_id: "m2", champion_name: "Multi", win: false }), // 2 games, lower wr
+            makeMatch({ match_id: "m3", champion_name: "Multi", win: false }),
+        ])
+        const best = getBestChampionStats(stats, 1)
+        expect(best[0].championName).toBe("Multi")
+    })
+})
+
+describe("applyScopeFilter", () => {
+    const ms = [
+        makeMatch({ match_id: "m1", puuid: "p1" }),
+        makeMatch({ match_id: "m2", puuid: "p2" }),
+        makeMatch({ match_id: "m3", puuid: "p1" }),
+    ]
+
+    it("returns all matches for scope 'team'", () => {
+        expect(applyScopeFilter(ms, "team")).toHaveLength(3)
+    })
+
+    it("returns empty array for empty input", () => {
+        expect(applyScopeFilter([], "p1")).toHaveLength(0)
+    })
+
+    it("filters to only matches with the given puuid", () => {
+        const result = applyScopeFilter(ms, "p1")
+        expect(result).toHaveLength(2)
+        expect(result.every((m) => m.puuid === "p1")).toBe(true)
+    })
+
+    it("returns empty array when puuid does not exist", () => {
+        expect(applyScopeFilter(ms, "unknown-puuid")).toHaveLength(0)
+    })
+
+    it("returns only the single match for a puuid with one game", () => {
+        const result = applyScopeFilter(ms, "p2")
+        expect(result).toHaveLength(1)
+        expect(result[0].match_id).toBe("m2")
+    })
+})
+
+describe("getNeedsReviewChampionStats", () => {
+    it("returns empty array for empty input", () => {
+        expect(getNeedsReviewChampionStats([])).toEqual([])
+    })
+
+    it("sorts by winRate ascending", () => {
+        const stats = computeChampionStats([
+            makeMatch({ match_id: "m1", champion_name: "Good", win: true }),
+            makeMatch({ match_id: "m2", champion_name: "Good", win: true }),
+            makeMatch({ match_id: "m3", champion_name: "Bad", win: false }),
+            makeMatch({ match_id: "m4", champion_name: "Bad", win: false }),
+        ])
+        const worst = getNeedsReviewChampionStats(stats, 1)
+        expect(worst[0].championName).toBe("Bad")
+    })
+
+    it("returns at most `limit` entries", () => {
+        const stats = computeChampionStats([
+            makeMatch({ match_id: "m1", champion_name: "A", win: false }),
+            makeMatch({ match_id: "m2", champion_name: "A", win: false }),
+            makeMatch({ match_id: "m3", champion_name: "B", win: false }),
+            makeMatch({ match_id: "m4", champion_name: "B", win: false }),
+        ])
+        expect(getNeedsReviewChampionStats(stats, 1)).toHaveLength(1)
     })
 })

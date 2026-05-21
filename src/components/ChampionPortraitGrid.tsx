@@ -1,5 +1,6 @@
 import { championIconUrl } from "../analysis/championAssets"
 import { useTranslation } from "../i18n/LanguageContext"
+import type { TranslationKey } from "../i18n/types"
 import type { ChampionNoteRating } from "../notes/types"
 
 interface ChampionPortraitGridProps {
@@ -30,6 +31,15 @@ function ratingDotColor(rating: ChampionNoteRating): string {
             return "var(--red)"
     }
 }
+
+const POOL_LEGEND: Array<{ rating: ChampionNoteRating; short: string }> = [
+    { rating: "comfort",        short: "C" },
+    { rating: "blind",          short: "B" },
+    { rating: "pocket",         short: "P" },
+    { rating: "situational",    short: "S" },
+    { rating: "needs_practice", short: "!" },
+    { rating: "avoid",          short: "X" },
+]
 
 export function ChampionPortraitGrid({
     champions,
@@ -111,6 +121,21 @@ export function ChampionPortraitGrid({
 
             {filteredChampions.length === 0 && (
                 <p className="empty-state">{t("pool_noChampion")}</p>
+            )}
+
+            {teamRatings && teamRatings.size > 0 && (
+                <div style={{ display: "flex", gap: "0.3rem 0.6rem", flexWrap: "wrap", marginTop: "0.4rem", fontSize: "0.67rem" }}>
+                    {POOL_LEGEND.map(({ rating, short }) => {
+                        const color = ratingDotColor(rating)
+                        return (
+                            <span key={rating} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", color: "var(--text-dim)" }}>
+                                <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
+                                <span style={{ color, fontWeight: 700 }}>{short}</span>
+                                <span>{t(`cn_rating_${rating}` as TranslationKey)}</span>
+                            </span>
+                        )
+                    })}
+                </div>
             )}
         </div>
     )

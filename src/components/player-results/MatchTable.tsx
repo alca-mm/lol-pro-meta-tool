@@ -27,13 +27,11 @@ interface Props {
 
 export function MatchTable({ matches, participants, accounts }: Props) {
     const [queueFilter, setQueueFilter] = useState<number | "">("")
-    const [puuidFilter, setPuuidFilter] = useState<string>("")
     const [resultFilter, setResultFilter] = useState<"" | "win" | "loss">("")
     const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null)
 
     const filtered = filterMatches(matches, {
         queueId: queueFilter !== "" ? queueFilter : undefined,
-        puuid:   puuidFilter || undefined,
         win:     resultFilter === "win" ? true : resultFilter === "loss" ? false : undefined,
     })
 
@@ -54,15 +52,6 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                     <option value="">Alle Queues</option>
                     <option value={420}>SoloQ</option>
                     <option value={440}>FlexQ</option>
-                </select>
-
-                <select value={puuidFilter} onChange={(e) => setPuuidFilter(e.target.value)}>
-                    <option value="">Alle Spieler</option>
-                    {accounts.map((a) => (
-                        <option key={a.puuid} value={a.puuid}>
-                            {a.riot_game_name}#{a.riot_tag_line}
-                        </option>
-                    ))}
                 </select>
 
                 <select value={resultFilter} onChange={(e) => setResultFilter(e.target.value as "" | "win" | "loss")}>

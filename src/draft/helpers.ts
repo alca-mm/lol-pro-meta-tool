@@ -1,5 +1,6 @@
 import type { Role } from "../domain/types"
 import type { DraftVisualSide, PickSlot } from "./types"
+import type { ChampionNoteRating } from "../notes/types"
 
 export function formatPercent(value: number | null): string {
     if (value === null) return "—"
@@ -58,6 +59,34 @@ export function createEmptyPickSlots(): PickSlot[] {
 
 export function clonePickSlots(slots: PickSlot[]): PickSlot[] {
     return slots.map((slot) => ({ ...slot }))
+}
+
+export function teamPoolRatingShortLabel(rating: ChampionNoteRating): "C" | "B" | "P" | "S" | "!" | "X" {
+    switch (rating) {
+        case "comfort":        return "C"
+        case "blind":          return "B"
+        case "pocket":         return "P"
+        case "situational":    return "S"
+        case "needs_practice": return "!"
+        case "avoid":          return "X"
+    }
+}
+
+export type TeamPoolTone = "positive" | "warning" | "danger" | "neutral"
+
+export function teamPoolRatingTone(rating: ChampionNoteRating): TeamPoolTone {
+    switch (rating) {
+        case "comfort":
+        case "blind":
+        case "pocket":         return "positive"
+        case "situational":    return "neutral"
+        case "needs_practice": return "warning"
+        case "avoid":          return "danger"
+    }
+}
+
+export function formatScorePercent(score: number): string {
+    return `${Math.round(score * 100)}%`
 }
 
 export function draftHasContent(

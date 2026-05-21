@@ -351,4 +351,9 @@ export const en: Translations = {
 
     // Common
     common_loading: "Loading…",
+
+    // Player Results
+    playerResults_view: "View",
+    playerResults_teamOverview: "Team Overview",
+    playerResults_noMatchesForPlayer: "No matches for this player.",
 }
