@@ -4,6 +4,7 @@ import {
     type PlayerChampionResultStats,
 } from "../../teams/playerResultsAnalytics"
 import type { RankedMatch } from "../../teams/riotService"
+import { useTranslation } from "../../i18n/LanguageContext"
 
 type SortKey = keyof PlayerChampionResultStats
 
@@ -51,6 +52,7 @@ interface Props {
 }
 
 export function ChampionResultsTable({ matches }: Props) {
+    const { t } = useTranslation()
     const [sortKey, setSortKey] = useState<SortKey>("games")
     const [sortAsc, setSortAsc] = useState(false)
 
@@ -77,7 +79,7 @@ export function ChampionResultsTable({ matches }: Props) {
     return (
         <div>
             {sorted.length === 0 ? (
-                <p className="empty-state">Keine Daten.</p>
+                <p className="empty-state">{t("playerResults_noData")}</p>
             ) : (
                 <div className="table-card">
                     <table className="stats-table" style={{ fontSize: "0.8rem" }}>

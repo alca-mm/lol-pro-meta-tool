@@ -142,21 +142,148 @@ button {
   margin-top: 4px;
 }
 
-.filters select,
-.filters input[type="number"] {
+/* Shared visual base for every filter control */
+.filter-control {
+  box-sizing: border-box;
   width: 100%;
+  height: 40px;
   background: var(--surface2);
   border: 1px solid var(--border);
-  color: var(--text);
-  padding: 6px 8px;
   border-radius: var(--radius);
+  color: var(--text);
+  padding: 0 12px;
+  font: inherit;
   font-size: 13px;
   outline: none;
 }
 
-.filters select:focus,
-.filters input:focus {
+.filter-control:focus {
   border-color: var(--accent-dim);
+}
+
+/* Wrapper that supplies a custom arrow for native <select> */
+.filter-select-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.filter-select-wrap::after {
+  content: "▼";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.filter-select-wrap:focus-within::after {
+  color: var(--accent-dim);
+}
+
+/* Applied to the <select> itself inside .filter-select-wrap */
+.filter-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-left: 12px;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+.msd-container {
+  position: relative;
+  width: 100%;
+}
+
+.msd-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  cursor: pointer;
+  text-align: left;
+  gap: 4px;
+}
+
+.msd-trigger:focus,
+.msd-trigger-open {
+  border-color: var(--accent-dim);
+}
+
+.msd-summary-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msd-arrow {
+  font-size: 9px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.msd-dropdown {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  z-index: 300;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.msd-actions {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.msd-action-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.msd-action-btn:hover {
+  text-decoration: underline;
+}
+
+.msd-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.msd-option:hover {
+  background: var(--surface);
+}
+
+.msd-option input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.msd-empty {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 /* Main Content */

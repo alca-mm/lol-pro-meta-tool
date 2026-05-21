@@ -6,6 +6,7 @@ import {
     type MatchParticipant,
     type PlayerAccount,
 } from "../../teams/riotService"
+import { useTranslation } from "../../i18n/LanguageContext"
 
 const QUEUE_LABELS: Record<number, string> = { 420: "SoloQ", 440: "FlexQ" }
 
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function MatchTable({ matches, participants, accounts }: Props) {
+    const { t } = useTranslation()
     const [queueFilter, setQueueFilter] = useState<number | "">("")
     const [resultFilter, setResultFilter] = useState<"" | "win" | "loss">("")
     const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null)
@@ -49,15 +51,15 @@ export function MatchTable({ matches, participants, accounts }: Props) {
             {/* Filters */}
             <div className="filter-bar" style={{ fontSize: "0.85rem" }}>
                 <select value={queueFilter} onChange={(e) => setQueueFilter(e.target.value === "" ? "" : Number(e.target.value))}>
-                    <option value="">Alle Queues</option>
+                    <option value="">{t("playerResults_allQueues")}</option>
                     <option value={420}>SoloQ</option>
                     <option value={440}>FlexQ</option>
                 </select>
 
                 <select value={resultFilter} onChange={(e) => setResultFilter(e.target.value as "" | "win" | "loss")}>
-                    <option value="">Alle Ergebnisse</option>
-                    <option value="win">Sieg</option>
-                    <option value="loss">Niederlage</option>
+                    <option value="">{t("playerResults_allResults")}</option>
+                    <option value="win">{t("playerResults_win")}</option>
+                    <option value="loss">{t("playerResults_loss")}</option>
                 </select>
 
                 <span className="muted" style={{ alignSelf: "center" }}>
@@ -66,23 +68,23 @@ export function MatchTable({ matches, participants, accounts }: Props) {
             </div>
 
             {filtered.length === 0 ? (
-                <p className="empty-state">Keine Matches gefunden.</p>
+                <p className="empty-state">{t("playerResults_noMatchesFound")}</p>
             ) : (
                 <div className="table-card">
                 <table className="stats-table" style={{ fontSize: "0.8rem" }}>
                     <thead>
                         <tr>
                             <th style={thStyle}>Queue</th>
-                            <th style={thStyle}>Spieler</th>
+                            <th style={thStyle}>{t("playerResults_player")}</th>
                             <th style={thStyle}>Champion</th>
-                            <th style={thStyle}>Ergebnis</th>
+                            <th style={thStyle}>{t("playerResults_result")}</th>
                             <th className="numeric" style={thStyle}>KDA</th>
                             <th className="numeric" style={thStyle}>CS</th>
-                            <th className="numeric" style={thStyle}>Schaden</th>
+                            <th className="numeric" style={thStyle}>Dmg</th>
                             <th className="numeric" style={thStyle}>Gold</th>
                             <th className="numeric" style={thStyle}>Vision</th>
-                            <th style={thStyle}>Dauer</th>
-                            <th style={thStyle}>Datum</th>
+                            <th style={thStyle}>{t("playerResults_duration")}</th>
+                            <th style={thStyle}>{t("playerResults_date")}</th>
                             <th style={thStyle}></th>
                         </tr>
                     </thead>
@@ -109,12 +111,12 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                                         <td style={tdStyle}>{playerLabel}</td>
                                         <td style={tdStyle}>{m.champion_name}</td>
                                         <td style={{ ...tdStyle, color: m.win ? "var(--green)" : "var(--red)" }}>
-                                            {m.win ? "Sieg" : "Niederlage"}
+                                            {m.win ? t("playerResults_win") : t("playerResults_loss")}
                                         </td>
                                         <td className="numeric" style={tdStyle}>{kda(m.kills, m.deaths, m.assists)}</td>
                                         <td className="numeric" style={tdStyle}>{m.cs}</td>
-                                        <td className="numeric" style={tdStyle}>{m.damage_to_champs.toLocaleString("de-DE")}</td>
-                                        <td className="numeric" style={tdStyle}>{m.gold_earned.toLocaleString("de-DE")}</td>
+                                        <td className="numeric" style={tdStyle}>{m.damage_to_champs.toLocaleString()}</td>
+                                        <td className="numeric" style={tdStyle}>{m.gold_earned.toLocaleString()}</td>
                                         <td className="numeric" style={tdStyle}>{m.vision_score}</td>
                                         <td style={tdStyle}>{formatGameDuration(m.game_duration)}</td>
                                         <td style={{ ...tdStyle, color: "var(--text-dim)" }}>{formatDate(m.game_start)}</td>
@@ -142,7 +144,7 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                                             </td>
                                             <td style={tdStyle}>{tp.champion_name}</td>
                                             <td style={{ ...tdStyle, color: tp.win ? "var(--green)" : "var(--red)" }}>
-                                                {tp.win ? "Sieg" : "Nied."}
+                                                {tp.win ? t("playerResults_win") : t("playerResults_lossShort")}
                                             </td>
                                             <td className="numeric" style={tdStyle}>{kda(tp.kills, tp.deaths, tp.assists)}</td>
                                             <td className="numeric" style={tdStyle}>{tp.cs}</td>

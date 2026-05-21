@@ -1,5 +1,8 @@
 import { useState } from "react"
-import type { ChampionStats } from "../domain/types"
+import type { ChampionStats, SynergyStats, MatchupStats, LaneMatchupStat } from "../domain/types"
+import { useTranslation } from "../i18n/LanguageContext"
+import type { TranslationKey } from "../i18n/types"
+import { ChampionDetail } from "./ChampionDetail"
 
 type SortKey = "championName" | "picks" | "bans" | "pickRate" | "banRate" | "presence" | "winRate" | "draftPriorityScore"
 
@@ -7,13 +10,17 @@ interface ChampionStatsTableProps {
   stats: ChampionStats[]
   selectedChampion: string | null
   onSelectChampion: (name: string | null) => void
+  synergies: SynergyStats[]
+  matchups: MatchupStats[]
+  laneMatchups: LaneMatchupStat[]
 }
 
 function pct(n: number): string {
   return (n * 100).toFixed(1) + "%"
 }
 
-export function ChampionStatsTable({ stats, selectedChampion, onSelectChampion }: ChampionStatsTableProps) {
+export function ChampionStatsTable({ stats, selectedChampion, onSelectChampion, synergies, matchups, laneMatchups }: ChampionStatsTableProps) {
+  const { t } = useTranslation()
   const [sortKey, setSortKey] = useState<SortKey>("draftPriorityScore")
   const [sortAsc, setSortAsc] = useState(false)
 
@@ -51,7 +58,7 @@ export function ChampionStatsTable({ stats, selectedChampion, onSelectChampion }
   }
 
   if (sorted.length === 0) {
-    return <p className="empty-state">Keine Champions für die aktuellen Filter.</p>
+    return <p className="empty-state">{t("tbl_noChampions")}</p>
   }
 
   return (
@@ -67,27 +74,42 @@ export function ChampionStatsTable({ stats, selectedChampion, onSelectChampion }
             {colBtn("presence", "Presence")}
             {colBtn("winRate", "Winrate")}
             {colBtn("draftPriorityScore", "Draft Priority")}
-            <th>Aussagekraft</th>
+            <th>{t("tbl_confidence")}</th>
           </tr>
         </thead>
         <tbody>
           {sorted.map((s) => (
-            <tr
-              key={s.championName}
-              className={s.championName === selectedChampion ? "row-selected" : ""}
-              onClick={() => onSelectChampion(s.championName === selectedChampion ? null : s.championName)}
-              style={{ cursor: "pointer" }}
-            >
-              <td>{s.championName}</td>
-              <td>{s.picks}</td>
-              <td>{s.bans}</td>
-              <td>{pct(s.pickRate)}</td>
-              <td>{pct(s.banRate)}</td>
-              <td>{pct(s.presence)}</td>
-              <td>{s.winRate !== null ? pct(s.winRate) : "—"}</td>
-              <td className="priority-score">{s.draftPriorityScore.toFixed(3)}</td>
-              <td className="sample-label">{s.sampleSizeLabel}</td>
-            </tr>
+            <>
+              <tr
+                key={s.championName}
+                className={s.championName === selectedChampion ? "row-selected" : ""}
+                onClick={() => onSelectChampion(s.championName === selectedChampion ? null : s.championName)}
+                style={{ cursor: "pointer" }}
+              >
+                <td>{s.championName}</td>
+                <td>{s.picks}</td>
+                <td>{s.bans}</td>
+                <td>{pct(s.pickRate)}</td>
+                <td>{pct(s.banRate)}</td>
+                <td>{pct(s.presence)}</td>
+                <td>{s.winRate !== null ? pct(s.winRate) : "—"}</td>
+                <td className="priority-score">{s.draftPriorityScore.toFixed(3)}</td>
+                <td className="sample-label">{t(s.sampleSizeLabel as TranslationKey)}</td>
+              </tr>
+              {s.championName === selectedChampion && (
+                <tr key={`${s.championName}-detail`}>
+                  <td colSpan={9} style={{ padding: 0 }}>
+                    <ChampionDetail
+                      stats={s}
+                      synergies={synergies}
+                      matchups={matchups}
+                      laneMatchups={laneMatchups}
+                      onClose={() => onSelectChampion(null)}
+                    />
+                  </td>
+                </tr>
+              )}
+            </>
           ))}
         </tbody>
       </table>

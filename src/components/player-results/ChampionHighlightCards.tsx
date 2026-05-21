@@ -6,6 +6,7 @@ import {
     type PlayerChampionResultStats,
 } from "../../teams/playerResultsAnalytics"
 import type { RankedMatch } from "../../teams/riotService"
+import { useTranslation } from "../../i18n/LanguageContext"
 
 interface CardProps {
     stat: PlayerChampionResultStats
@@ -53,6 +54,7 @@ interface Props {
 }
 
 export function ChampionHighlightCards({ matches }: Props) {
+    const { t } = useTranslation()
     const stats        = useMemo(() => computeChampionStats(matches), [matches])
     const best         = useMemo(() => getBestChampionStats(stats), [stats])
     const needsReview  = useMemo(() => getNeedsReviewChampionStats(stats), [stats])
@@ -65,9 +67,9 @@ export function ChampionHighlightCards({ matches }: Props) {
     return (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
             <div className="section-card" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <span className="section-title">Best Champions</span>
+                <span className="section-title">{t("playerResults_bestChampions")}</span>
                 {best.length === 0 ? (
-                    <p className="empty-state">Keine Daten.</p>
+                    <p className="empty-state">{t("playerResults_noData")}</p>
                 ) : (
                     <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                         {best.map((s) => <ChampionCard key={s.championName} stat={s} accent="pos" />)}
@@ -76,9 +78,9 @@ export function ChampionHighlightCards({ matches }: Props) {
             </div>
 
             <div className="section-card" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <span className="section-title">Needs Review</span>
+                <span className="section-title">{t("playerResults_needsReview")}</span>
                 {filteredNeedsReview.length === 0 ? (
-                    <p className="empty-state">Keine Daten.</p>
+                    <p className="empty-state">{t("playerResults_noData")}</p>
                 ) : (
                     <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                         {filteredNeedsReview.map((s) => <ChampionCard key={s.championName} stat={s} accent="neg" />)}

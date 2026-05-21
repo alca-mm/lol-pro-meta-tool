@@ -354,4 +354,61 @@ export const de = {
     playerResults_view: "Ansicht",
     playerResults_teamOverview: "Team Overview",
     playerResults_noMatchesForPlayer: "Keine Matches für diesen Spieler.",
+    playerResults_championStats: "Champion-Statistiken",
+    playerResults_matchHistory: "Match-Verlauf",
+    playerResults_allQueues: "Alle Queues",
+    playerResults_allResults: "Alle Ergebnisse",
+    playerResults_win: "Sieg",
+    playerResults_loss: "Niederlage",
+    playerResults_lossShort: "Nied.",
+    playerResults_noMatchesFound: "Keine Matches gefunden.",
+    playerResults_player: "Spieler",
+    playerResults_result: "Ergebnis",
+    playerResults_duration: "Dauer",
+    playerResults_date: "Datum",
+    playerResults_noData: "Keine Daten.",
+    playerResults_bestChampions: "Beste Champions",
+    playerResults_needsReview: "Needs Review",
+    playerResults_noSavedMatches: "Noch keine Matches gespeichert.",
+    playerResults_syncHint: "Klicke oben auf \"Matches syncen\" um Daten zu laden.",
+    playerResults_viewLabel: "Ansicht:",
+    playerResults_noTeam: "Kein Team ausgewählt.",
+    playerResults_noTeamHint: "Wähle ein Team im Team Dashboard aus, um Player Results zu sehen.",
+
+    // Sample size labels (translation keys returned by sampleSizeLabel())
+    sample_veryLow: "sehr geringe Aussagekraft",
+    sample_low: "geringe Aussagekraft",
+    sample_moderate: "brauchbarer Trend",
+    sample_good: "stabilerer Trend",
+
+    // Draft Edge notes
+    dh_noEvaluatedPicks: "Noch keine bewertbaren Picks mit Rolle.",
+    dh_solidDraft: "Solider datenbasierter Draft-Stand.",
+
+    // Champion Detail
+    cd_roleDistribution: "Rollenverteilung",
+    cd_topSynergies: "Top Synergien",
+    cd_topMatchupsFor: "Top Matchups (für",
+    cd_topLaneMatchups: "Top Lane-Matchups",
+    cd_noPicks: "Keine Picks",
+    cd_noData: "Keine Daten",
+
+    // Common
+    common_games: "Spiele",
+
+    // Table headers and empty states
+    tbl_confidence: "Aussagekraft",
+    tbl_games: "Spiele",
+    tbl_wins: "Siege",
+    tbl_wrForA: "WR für A",
+    tbl_showLess: "Weniger anzeigen",
+    tbl_showAll: "Alle anzeigen",
+    tbl_noChampions: "Keine Champions für die aktuellen Filter.",
+    tbl_noSynergies: "Keine Synergiedaten für die aktuellen Filter.",
+    tbl_noMatchups: "Keine Matchup-Daten für die aktuellen Filter.",
+    tbl_noRoleData: "Keine Daten für diese Rolle.",
+    tbl_noRoleMatchupsFor: "Keine Matchup-Daten für",
+    tbl_noPatchesNeeded: "Mindestens 2 verschiedene Patches nötig für Vergleich.",
+    tbl_selectDifferentPatches: "Bitte zwei unterschiedliche Patches auswählen.",
+    tbl_noPatchCompData: "Keine Daten für diesen Patch-Vergleich.",
 } as const

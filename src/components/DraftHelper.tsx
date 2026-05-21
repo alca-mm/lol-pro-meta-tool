@@ -394,9 +394,9 @@ function calculateSinglePickDraftScore(input: {
 
     const notes: string[] = []
     if (roleScore.games > 0) notes.push(`${input.slot.championName} ${ROLE_LABELS[input.slot.role]}: ${roleScore.games} Games`)
-    if (synergyScores.length > 0 && synergyScore >= 0.58) notes.push("gute historische Synergie")
-    if (matchupScore !== null && matchupScore >= 0.58) notes.push("gutes Same-Role-Matchup")
-    if (roleScore.confidence < 0.35) notes.push("kleine Sample Size")
+    if (synergyScores.length > 0 && synergyScore >= 0.58) notes.push("reason_goodSynergy")
+    if (matchupScore !== null && matchupScore >= 0.58) notes.push("reason_goodMatchup")
+    if (roleScore.confidence < 0.35) notes.push("reason_smallSample")
 
     return {
         score: clamp(score, 0, 1),
@@ -432,7 +432,7 @@ export function calculateDraftEdgeSummary(input: {
             completedPicks,
             assignedRoles,
             averageConfidence: 0,
-            notes: ["Noch keine bewertbaren Picks mit Rolle."],
+            notes: ["dh_noEvaluatedPicks"],
         }
     }
 
@@ -445,7 +445,7 @@ export function calculateDraftEdgeSummary(input: {
         completedPicks,
         assignedRoles,
         averageConfidence,
-        notes: notes.length > 0 ? notes : ["Solider datenbasierter Draft-Stand."],
+        notes: notes.length > 0 ? notes : ["dh_solidDraft"],
     }
 }
 
@@ -1542,7 +1542,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     )}
                     <span className="muted" style={{ display: "block" }}>
                         {ROLE_LABELS[entry.role]} · Score {formatScore(entry.totalScore)} · {entry.games} Picks
-                        {entry.games < 50 ? ` · ${entry.sampleSizeLabel}` : ""}
+                        {entry.games < 50 ? ` · ${t(entry.sampleSizeLabel as TranslationKey)}` : ""}
                         {flexInfo?.isFlex ? ` · Flex ${flexRoleLabel(flexInfo)}` : ""}
                     </span>
                     <span className="muted" style={{ display: "block", fontSize: "0.68rem" }}>
@@ -1700,7 +1700,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         <h3>{t("dh_strengthsData")}</h3>
                         {activeDraftEdge.notes.map((note) => (
                             <p key={note} className="muted">
-                                {note}
+                                {t(note as TranslationKey) ?? note}
                             </p>
                         ))}
                     </div>
@@ -1961,7 +1961,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                                     <td>{formatScore(entry.matchupScore)}</td>
                                     <td>{entry.games}</td>
                                     <td>{formatPercent(entry.winRate)}</td>
-                                    <td className="muted">{entry.sampleSizeLabel}</td>
+                                    <td className="muted">{t(entry.sampleSizeLabel as TranslationKey)}</td>
                                     <td>
                                         {entry.teamPoolRating ? (
                                             <span style={{

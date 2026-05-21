@@ -14,23 +14,33 @@ const matches: Match[] = [
   { matchId: "f4", date: "2024-01-04", tournament: "Worlds", patch: "14.5", region: "LCK", blueTeam: "B", redTeam: "D", winningTeam: "B", ...base },
 ]
 
-const noFilter: FilterState = { patch: null, region: null, tournament: null, role: null, minPicks: 1 }
+const noFilter: FilterState = { patches: [], regions: [], tournament: null, role: null, minPicks: 1 }
 
 describe("applyFilters", () => {
   it("returns all matches when no filters are set", () => {
     expect(applyFilters(matches, noFilter)).toHaveLength(4)
   })
 
-  it("filters by patch", () => {
-    const result = applyFilters(matches, { ...noFilter, patch: "14.4" })
+  it("filters by a single patch", () => {
+    const result = applyFilters(matches, { ...noFilter, patches: ["14.4"] })
     expect(result).toHaveLength(2)
     result.forEach((m) => expect(m.patch).toBe("14.4"))
   })
 
-  it("filters by region", () => {
-    const result = applyFilters(matches, { ...noFilter, region: "LCK" })
+  it("filters by multiple patches", () => {
+    const result = applyFilters(matches, { ...noFilter, patches: ["14.4", "14.5"] })
+    expect(result).toHaveLength(4)
+  })
+
+  it("filters by a single region", () => {
+    const result = applyFilters(matches, { ...noFilter, regions: ["LCK"] })
     expect(result).toHaveLength(2)
     result.forEach((m) => expect(m.region).toBe("LCK"))
+  })
+
+  it("filters by multiple regions", () => {
+    const result = applyFilters(matches, { ...noFilter, regions: ["LCK", "LEC"] })
+    expect(result).toHaveLength(4)
   })
 
   it("filters by tournament", () => {
@@ -40,13 +50,13 @@ describe("applyFilters", () => {
   })
 
   it("combines patch and region filters", () => {
-    const result = applyFilters(matches, { ...noFilter, patch: "14.5", region: "LEC" })
+    const result = applyFilters(matches, { ...noFilter, patches: ["14.5"], regions: ["LEC"] })
     expect(result).toHaveLength(1)
     expect(result[0].matchId).toBe("f3")
   })
 
   it("returns empty array when no matches pass filter", () => {
-    const result = applyFilters(matches, { ...noFilter, patch: "99.0" })
+    const result = applyFilters(matches, { ...noFilter, patches: ["99.0"] })
     expect(result).toHaveLength(0)
   })
 

@@ -8,8 +8,8 @@ interface FilterContextValue {
 }
 
 const defaultFilters: FilterState = {
-  patch: null,
-  region: null,
+  patches: [],
+  regions: [],
   tournament: null,
   role: null,
   minPicks: 1,

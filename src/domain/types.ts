@@ -67,6 +67,18 @@ export interface MatchupStats {
   sampleSizeLabel: string
 }
 
+export interface LaneMatchupStat {
+  championA: string
+  championB: string
+  lane: Role
+  gamesAgainst: number
+  winsForA: number
+  lossesForA: number
+  winRateForA: number
+  matchupScore: number
+  sampleSizeLabel: string
+}
+
 export interface RoleChampionStats {
   championName: string
   role: Role
@@ -103,8 +115,8 @@ export interface PatchComparisonEntry {
 }
 
 export interface FilterState {
-  patch: string | null
-  region: string | null
+  patches: string[]
+  regions: string[]
   tournament: string | null
   role: Role | null
   minPicks: number

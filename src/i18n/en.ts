@@ -356,4 +356,61 @@ export const en: Translations = {
     playerResults_view: "View",
     playerResults_teamOverview: "Team Overview",
     playerResults_noMatchesForPlayer: "No matches for this player.",
+    playerResults_championStats: "Champion Statistics",
+    playerResults_matchHistory: "Match History",
+    playerResults_allQueues: "All queues",
+    playerResults_allResults: "All results",
+    playerResults_win: "Win",
+    playerResults_loss: "Loss",
+    playerResults_lossShort: "Loss",
+    playerResults_noMatchesFound: "No matches found.",
+    playerResults_player: "Player",
+    playerResults_result: "Result",
+    playerResults_duration: "Duration",
+    playerResults_date: "Date",
+    playerResults_noData: "No data.",
+    playerResults_bestChampions: "Best Champions",
+    playerResults_needsReview: "Needs Review",
+    playerResults_noSavedMatches: "No matches saved yet.",
+    playerResults_syncHint: "Click \"Sync matches\" above to load data.",
+    playerResults_viewLabel: "View:",
+    playerResults_noTeam: "No team selected.",
+    playerResults_noTeamHint: "Select a team in the Team Dashboard to view Player Results.",
+
+    // Sample size labels (translation keys returned by sampleSizeLabel())
+    sample_veryLow: "very low confidence",
+    sample_low: "low confidence",
+    sample_moderate: "moderate confidence",
+    sample_good: "good confidence",
+
+    // Draft Edge notes
+    dh_noEvaluatedPicks: "No evaluated picks with role yet.",
+    dh_solidDraft: "Solid data-based draft.",
+
+    // Champion Detail
+    cd_roleDistribution: "Role distribution",
+    cd_topSynergies: "Top Synergies",
+    cd_topMatchupsFor: "Top Matchups (for",
+    cd_topLaneMatchups: "Top Lane Matchups",
+    cd_noPicks: "No picks",
+    cd_noData: "No data",
+
+    // Common
+    common_games: "games",
+
+    // Table headers and empty states
+    tbl_confidence: "Confidence",
+    tbl_games: "Games",
+    tbl_wins: "Wins",
+    tbl_wrForA: "WR for A",
+    tbl_showLess: "Show less",
+    tbl_showAll: "Show all",
+    tbl_noChampions: "No champions for the current filters.",
+    tbl_noSynergies: "No synergy data for the current filters.",
+    tbl_noMatchups: "No matchup data for the current filters.",
+    tbl_noRoleData: "No data for this role.",
+    tbl_noRoleMatchupsFor: "No matchup data for",
+    tbl_noPatchesNeeded: "At least 2 different patches needed for comparison.",
+    tbl_selectDifferentPatches: "Please select two different patches.",
+    tbl_noPatchCompData: "No data for this patch comparison.",
 }

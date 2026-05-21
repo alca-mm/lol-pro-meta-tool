@@ -7,9 +7,9 @@ export function comparePatchs(
   patch1: string,
   patch2: string
 ): PatchComparisonEntry[] {
-  const noFilter = { patch: null, region: null, tournament: null, role: null, minPicks: 0 }
-  const m1 = applyFilters(matches, { ...noFilter, patch: patch1 })
-  const m2 = applyFilters(matches, { ...noFilter, patch: patch2 })
+  const noFilter = { patches: [], regions: [], tournament: null, role: null, minPicks: 0 }
+  const m1 = applyFilters(matches, { ...noFilter, patches: [patch1] })
+  const m2 = applyFilters(matches, { ...noFilter, patches: [patch2] })
 
   const stats1 = new Map(calculateChampionStats(m1).map((s) => [s.championName, s]))
   const stats2 = new Map(calculateChampionStats(m2).map((s) => [s.championName, s]))

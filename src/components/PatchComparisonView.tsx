@@ -1,6 +1,7 @@
 import { useState } from "react"
 import type { Match } from "../domain/types"
 import { comparePatchs, getAvailablePatches } from "../analysis/patchComparison"
+import { useTranslation } from "../i18n/LanguageContext"
 
 interface PatchComparisonViewProps {
   matches: Match[]
@@ -16,13 +17,14 @@ function delta(n: number): string {
 }
 
 export function PatchComparisonView({ matches }: PatchComparisonViewProps) {
+  const { t } = useTranslation()
   const patches = getAvailablePatches(matches)
 
   const [patch1, setPatch1] = useState<string>(patches[0] ?? "")
   const [patch2, setPatch2] = useState<string>(patches[1] ?? "")
 
   if (patches.length < 2) {
-    return <p className="empty-state">Mindestens 2 verschiedene Patches nötig für Vergleich.</p>
+    return <p className="empty-state">{t("tbl_noPatchesNeeded")}</p>
   }
 
   const entries = patch1 && patch2 && patch1 !== patch2
@@ -52,9 +54,9 @@ export function PatchComparisonView({ matches }: PatchComparisonViewProps) {
       </div>
 
       {patch1 === patch2 ? (
-        <p className="empty-state">Bitte zwei unterschiedliche Patches auswählen.</p>
+        <p className="empty-state">{t("tbl_selectDifferentPatches")}</p>
       ) : entries.length === 0 ? (
-        <p className="empty-state">Keine Daten für diesen Patch-Vergleich.</p>
+        <p className="empty-state">{t("tbl_noPatchCompData")}</p>
       ) : (
         <div className="table-wrap">
           <table className="stats-table">

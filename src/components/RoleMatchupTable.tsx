@@ -1,5 +1,7 @@
 import { useState } from "react"
 import type { RoleMatchupStats, Role } from "../domain/types"
+import { useTranslation } from "../i18n/LanguageContext"
+import type { TranslationKey } from "../i18n/types"
 
 interface RoleMatchupTableProps {
   matchups: RoleMatchupStats[]
@@ -12,6 +14,7 @@ function pct(n: number): string {
 const ROLES: Role[] = ["top", "jungle", "mid", "bot", "support"]
 
 export function RoleMatchupTable({ matchups }: RoleMatchupTableProps) {
+  const { t } = useTranslation()
   const [selectedRole, setSelectedRole] = useState<Role>("top")
   const [showAll, setShowAll] = useState(false)
 
@@ -36,7 +39,7 @@ export function RoleMatchupTable({ matchups }: RoleMatchupTableProps) {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="empty-state">Keine Matchup-Daten für {selectedRole}.</p>
+        <p className="empty-state">{t("tbl_noRoleMatchupsFor")} {selectedRole}.</p>
       ) : (
         <>
           <div className="table-wrap">
@@ -45,10 +48,10 @@ export function RoleMatchupTable({ matchups }: RoleMatchupTableProps) {
                 <tr>
                   <th><span className="sort-btn">Champion A</span></th>
                   <th><span className="sort-btn">Champion B</span></th>
-                  <th><span className="sort-btn">Spiele</span></th>
-                  <th><span className="sort-btn">WR für A</span></th>
+                  <th><span className="sort-btn">{t("tbl_games")}</span></th>
+                  <th><span className="sort-btn">{t("tbl_wrForA")}</span></th>
                   <th><span className="sort-btn">Score</span></th>
-                  <th>Aussagekraft</th>
+                  <th>{t("tbl_confidence")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -61,7 +64,7 @@ export function RoleMatchupTable({ matchups }: RoleMatchupTableProps) {
                     <td className={m.matchupScore > 0 ? "score-pos" : "score-neg"}>
                       {m.matchupScore > 0 ? "+" : ""}{m.matchupScore.toFixed(3)}
                     </td>
-                    <td className="sample-label">{m.sampleSizeLabel}</td>
+                    <td className="sample-label">{t(m.sampleSizeLabel as TranslationKey)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -69,7 +72,7 @@ export function RoleMatchupTable({ matchups }: RoleMatchupTableProps) {
           </div>
           {filtered.length > 10 && (
             <button className="btn-toggle" onClick={() => setShowAll((v) => !v)}>
-              {showAll ? "Weniger anzeigen" : `Alle ${filtered.length} anzeigen`}
+              {showAll ? t("tbl_showLess") : `${t("tbl_showAll")} (${filtered.length})`}
             </button>
           )}
         </>

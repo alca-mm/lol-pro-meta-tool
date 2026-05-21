@@ -11,10 +11,10 @@ import { calculateSynergyStats } from "./analysis/synergyStats"
 import { calculateMatchupStats } from "./analysis/matchupStats"
 import { calculateRoleStats } from "./analysis/roleStats"
 import { calculateRoleMatchups } from "./analysis/roleMatchups"
+import { calculateLaneMatchupStats } from "./analysis/laneMatchupStats"
 import { Filters } from "./components/Filters"
 import { Dashboard } from "./components/Dashboard"
 import { ChampionStatsTable } from "./components/ChampionStatsTable"
-import { ChampionDetail } from "./components/ChampionDetail"
 import { DataSourceInfo } from "./components/DataSourceInfo"
 import sampleData from "./data/sampleMatches.json"
 import type { Match, SyncReport } from "./domain/types"
@@ -123,10 +123,9 @@ function AppContent() {
 
     const synergyStats = useMemo(() => calculateSynergyStats(filteredMatches), [filteredMatches])
     const matchupStats = useMemo(() => calculateMatchupStats(filteredMatches), [filteredMatches])
+    const laneMatchupStats = useMemo(() => calculateLaneMatchupStats(filteredMatches), [filteredMatches])
     const roleStats = useMemo(() => calculateRoleStats(filteredMatches), [filteredMatches])
     const roleMatchups = useMemo(() => calculateRoleMatchups(filteredMatches), [filteredMatches])
-
-    const selectedStats = championStats.find((s) => s.championName === selectedChampion) ?? null
 
     if (isLoading) {
         return (
@@ -250,19 +249,11 @@ function AppContent() {
                                             stats={championStats}
                                             selectedChampion={selectedChampion}
                                             onSelectChampion={setSelectedChampion}
+                                            synergies={synergyStats}
+                                            matchups={matchupStats}
+                                            laneMatchups={laneMatchupStats}
                                         />
                                     </section>
-
-                                    {selectedStats && (
-                                        <section className="section">
-                                            <ChampionDetail
-                                                stats={selectedStats}
-                                                synergies={synergyStats}
-                                                matchups={matchupStats}
-                                                onClose={() => setSelectedChampion(null)}
-                                            />
-                                        </section>
-                                    )}
                                 </>
                             )}
 
