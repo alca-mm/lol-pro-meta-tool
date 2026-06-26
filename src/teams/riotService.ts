@@ -114,6 +114,10 @@ async function callEdgeFunction(
         },
         body: JSON.stringify(body),
     })
+    if (!res.ok) {
+        // Log status only — never the body, which may echo request details.
+        console.error("riot-sync edge function returned non-OK status:", res.status)
+    }
     return res.json() as Promise<Record<string, unknown>>
 }
 
@@ -171,12 +175,13 @@ export async function getMyPlayerAccount(
     userId: string,
 ): Promise<PlayerAccount | null> {
     if (!supabase) return null
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from("player_accounts")
         .select("*")
         .eq("team_id", teamId)
         .eq("user_id", userId)
         .maybeSingle()
+    if (error) console.error("getMyPlayerAccount failed:", error.message)
     return (data as PlayerAccount | null) ?? null
 }
 
@@ -186,13 +191,14 @@ export async function getTeamRankedMatches(
     limit = 20,
 ): Promise<RankedMatch[]> {
     if (!supabase) return []
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from("ranked_matches")
         .select("*")
         .eq("team_id", teamId)
         .eq("puuid", puuid)
         .order("game_start", { ascending: false })
         .limit(limit)
+    if (error) console.error("getTeamRankedMatches failed:", error.message)
     return (data as RankedMatch[] | null) ?? []
 }
 
@@ -201,21 +207,23 @@ export async function getAllTeamRankedMatches(
     limit = 200,
 ): Promise<RankedMatch[]> {
     if (!supabase) return []
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from("ranked_matches")
         .select("*")
         .eq("team_id", teamId)
         .order("game_start", { ascending: false })
         .limit(limit)
+    if (error) console.error("getAllTeamRankedMatches failed:", error.message)
     return (data as RankedMatch[] | null) ?? []
 }
 
 export async function getTeamPlayerAccounts(teamId: string): Promise<PlayerAccount[]> {
     if (!supabase) return []
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from("player_accounts")
         .select("*")
         .eq("team_id", teamId)
+    if (error) console.error("getTeamPlayerAccounts failed:", error.message)
     return (data as PlayerAccount[] | null) ?? []
 }
 
@@ -224,11 +232,12 @@ export async function getMatchParticipants(
     matchIds: string[],
 ): Promise<MatchParticipant[]> {
     if (!supabase || matchIds.length === 0) return []
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from("ranked_match_participants")
         .select("*")
         .eq("team_id", teamId)
         .in("match_id", matchIds)
+    if (error) console.error("getMatchParticipants failed:", error.message)
     return (data as MatchParticipant[] | null) ?? []
 }
 

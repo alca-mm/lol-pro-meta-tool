@@ -16,6 +16,7 @@ import { Filters } from "./components/Filters"
 import { Dashboard } from "./components/Dashboard"
 import { ChampionStatsTable } from "./components/ChampionStatsTable"
 import { DataSourceInfo } from "./components/DataSourceInfo"
+import { publicAssetUrl } from "./lib/publicAssetUrl"
 import sampleData from "./data/sampleMatches.json"
 import type { Match, SyncReport } from "./domain/types"
 
@@ -69,9 +70,8 @@ function AppContent() {
 
     useEffect(() => {
         let cancelled = false
-        const base = import.meta.env.BASE_URL
 
-        fetch(`${base}data/importedMatches.json`)
+        fetch(publicAssetUrl("data/importedMatches.json"))
             .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
             .then((data: unknown) => {
                 if (cancelled) return
@@ -81,17 +81,21 @@ function AppContent() {
                     setIsUsingSampleData(false)
                 }
             })
-            .catch(() => {})
+            .catch((err) => {
+                console.error("Failed to load importedMatches.json:", err)
+            })
             .finally(() => {
                 if (!cancelled) setIsLoading(false)
             })
 
-        fetch(`${base}data/latest-sync-report.json`)
+        fetch(publicAssetUrl("data/latest-sync-report.json"))
             .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
             .then((data: unknown) => {
                 if (!cancelled) setSyncReport(data as SyncReport)
             })
-            .catch(() => {})
+            .catch((err) => {
+                console.error("Failed to load latest-sync-report.json:", err)
+            })
 
         return () => {
             cancelled = true

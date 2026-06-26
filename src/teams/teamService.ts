@@ -62,6 +62,7 @@ export async function fetchUserTeams(userId: string): Promise<Team[]> {
         .from("team_members")
         .select("teams(id, name, owner_id, created_at)")
         .eq("user_id", userId)
+    if (error) console.error("fetchUserTeams failed:", error.message)
     if (error || !data) return []
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (data as any[]).map((row) => row.teams).filter(Boolean) as Team[]
@@ -116,6 +117,7 @@ export async function getTeamMembers(teamId: string): Promise<TeamMember[]> {
         .select("user_id, team_id, role")
         .eq("team_id", teamId)
 
+    if (memberError) console.error("getTeamMembers failed:", memberError.message)
     if (memberError || !memberData || memberData.length === 0) return []
 
     // Step 2: load profiles for those user_ids
@@ -222,6 +224,7 @@ export async function fetchTeamInvites(teamId: string): Promise<TeamInvite[]> {
         .is("revoked_at", null)
         .or(`expires_at.is.null,expires_at.gt.${now}`)
         .order("created_at", { ascending: false })
+    if (error) console.error("fetchTeamInvites failed:", error.message)
     if (error || !data) return []
     return data as TeamInvite[]
 }

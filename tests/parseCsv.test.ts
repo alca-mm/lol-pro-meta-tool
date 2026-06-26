@@ -38,6 +38,54 @@ describe("parseCsv", () => {
     expect(rows).toHaveLength(2)
     expect(rows[1]).toEqual(["1", "2"])
   })
+
+  // ---- additional regression cases ----
+
+  it("handles a leading empty field", () => {
+    const rows = parseCsv(",b,c")
+    expect(rows[0]).toEqual(["", "b", "c"])
+  })
+
+  it("handles multiple consecutive empty fields in the middle", () => {
+    const rows = parseCsv("a,,,d")
+    expect(rows[0]).toEqual(["a", "", "", "d"])
+  })
+
+  it("does not produce a trailing empty field for a single trailing comma", () => {
+    // Characterizes actual behavior: a lone trailing comma is consumed
+    // without adding an empty field.
+    expect(parseCsv("a,b,")[0]).toEqual(["a", "b"])
+  })
+
+  it("produces an empty field for a double trailing comma", () => {
+    expect(parseCsv("a,b,,")[0]).toEqual(["a", "b", ""])
+  })
+
+  it("handles a quoted empty field", () => {
+    const rows = parseCsv('"",a')
+    expect(rows[0]).toEqual(["", "a"])
+  })
+
+  it("handles a quoted field that only contains commas", () => {
+    const rows = parseCsv('",,,",x')
+    expect(rows[0]).toEqual([",,,", "x"])
+  })
+
+  it("pushes text after a closing quote (before the comma) as a separate field", () => {
+    // Characterizes actual behavior: the quoted segment is one field, and the
+    // trailing un-quoted text up to the next comma becomes another field.
+    const rows = parseCsv('"ab"cd,e')
+    expect(rows[0]).toEqual(["ab", "cd", "e"])
+  })
+
+  it("does NOT support newlines embedded in quoted fields (splits on the raw newline)", () => {
+    // The content is split on \r?\n before field parsing, so an embedded
+    // newline breaks one logical record into two rows.
+    const rows = parseCsv('"line1\nline2",b')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toEqual(["line1"])
+    expect(rows[1]).toEqual(['line2"', "b"])
+  })
 })
 
 describe("parseCsvWithHeaders", () => {

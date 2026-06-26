@@ -23,3 +23,8 @@ public/data/latest-sync-report.json
 
 # Claude/local tooling
 .claude/
+
+# Markdown docs are local by default.
+*.md
+!README.md
+!**/README.md
