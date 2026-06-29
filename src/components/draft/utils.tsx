@@ -1,20 +1,11 @@
-import { championIconUrl } from "../../analysis/championAssets"
+import { ChampionIcon } from "../ChampionIcon"
 import type { FlexChampionInfo, PickSlot } from "../../draft/types"
 import { ROLE_LABELS } from "../../draft/constants"
 
 export function iconFor(championName?: string) {
     if (!championName) return null
 
-    return (
-        <img
-            src={championIconUrl(championName)}
-            alt={championName}
-            loading="lazy"
-            onError={(event) => {
-                event.currentTarget.style.visibility = "hidden"
-            }}
-        />
-    )
+    return <ChampionIcon championName={championName} alt={championName} />
 }
 
 export function flexRoleLabel(info: FlexChampionInfo | undefined): string {

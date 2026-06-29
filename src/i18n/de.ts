@@ -42,6 +42,14 @@ export const de = {
     app_loading: "Lade Matchdaten…",
     app_noMatches: "Keine validen Matches in den Daten gefunden.",
 
+    // Data load error / warning banners
+    dataLoad_matchesErrorTitle: "Live-Daten konnten nicht geladen werden.",
+    dataLoad_matchesErrorBody:
+        "Die App zeigt aktuell keine importierten Match-Daten. Bitte Seite neu laden oder später erneut versuchen.",
+    dataLoad_syncReportError: "Sync-Status konnte nicht geladen werden.",
+    dataLoad_retryButton: "Erneut laden",
+    dataLoad_retrying: "Wird geladen…",
+
     // DraftHelper — header & controls
     dh_patchInfo: "Empfehlungen nutzen eine gewichtete Patch-Auswahl:",
     dh_rawSample: "Roh-Sample:",

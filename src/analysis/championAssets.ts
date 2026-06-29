@@ -43,3 +43,26 @@ export function championIconUrl(championName: string): string {
         championName,
     )}.png`
 }
+
+// Pure, deterministic fallback used when a champion icon fails to load.
+// Builds a short initials label from the champion name. Never throws.
+export function championInitials(championName: string): string {
+    const words = championName
+        .trim()
+        .split(/\s+/)
+        .filter((word) => /[a-zA-Z]/.test(word))
+
+    if (words.length === 0) return "?"
+
+    if (words.length === 1) {
+        const firstLetter = words[0].match(/[a-zA-Z]/)?.[0] ?? ""
+        return firstLetter.toUpperCase() || "?"
+    }
+
+    const initials = words
+        .slice(0, 2)
+        .map((word) => word.match(/[a-zA-Z]/)?.[0] ?? "")
+        .join("")
+
+    return initials.toUpperCase() || "?"
+}

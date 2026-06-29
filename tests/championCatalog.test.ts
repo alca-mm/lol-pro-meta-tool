@@ -46,6 +46,10 @@ describe("ALL_CHAMPIONS", () => {
         expect(ALL_CHAMPIONS).toContain("Yunara")
         expect(ALL_CHAMPIONS).toContain("Zaahen")
     })
+
+    it("contains the new champion Locke", () => {
+        expect(ALL_CHAMPIONS).toContain("Locke")
+    })
 })
 
 describe("championImageId", () => {

@@ -1,4 +1,4 @@
-import { championIconUrl } from "../analysis/championAssets"
+import { ChampionIcon } from "./ChampionIcon"
 import { useTranslation } from "../i18n/LanguageContext"
 import type { TranslationKey } from "../i18n/types"
 import type { ChampionNoteRating } from "../notes/types"
@@ -90,14 +90,7 @@ export function ChampionPortraitGrid({
                             title={champion}
                             aria-label={champion}
                         >
-                            <img
-                                src={championIconUrl(champion)}
-                                alt=""
-                                loading="lazy"
-                                onError={(event) => {
-                                    event.currentTarget.style.visibility = "hidden"
-                                }}
-                            />
+                            <ChampionIcon championName={champion} alt="" />
                             {teamRatings?.has(normalized) && (
                                 <span
                                     aria-hidden="true"

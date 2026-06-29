@@ -44,6 +44,14 @@ export const en: Translations = {
     app_loading: "Loading match data…",
     app_noMatches: "No valid matches found in the data.",
 
+    // Data load error / warning banners
+    dataLoad_matchesErrorTitle: "Live data could not be loaded.",
+    dataLoad_matchesErrorBody:
+        "The app currently shows no imported match data. Please reload the page or try again later.",
+    dataLoad_syncReportError: "Sync status could not be loaded.",
+    dataLoad_retryButton: "Retry loading",
+    dataLoad_retrying: "Loading…",
+
     // DraftHelper — header & controls
     dh_patchInfo: "Recommendations use a weighted patch selection:",
     dh_rawSample: "Raw sample:",

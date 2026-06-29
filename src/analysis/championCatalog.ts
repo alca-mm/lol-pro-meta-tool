@@ -75,6 +75,7 @@ export const ALL_CHAMPIONS: string[] = [
     "Leona",
     "Lillia",
     "Lissandra",
+    "Locke",
     "Lucian",
     "Lulu",
     "Lux",

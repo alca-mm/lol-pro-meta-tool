@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { championImageId, championIconUrl } from "../src/analysis/championAssets"
+import { championImageId, championIconUrl, championInitials } from "../src/analysis/championAssets"
 
 const DATA_DRAGON_VERSION = "16.10.1"
 
@@ -50,6 +50,10 @@ describe("championImageId", () => {
     expect(typeof result).toBe("string")
     expect(result).toBe("")
   })
+
+  it("maps the new champion Locke to itself via the fallback (no special-map entry)", () => {
+    expect(championImageId("Locke")).toBe("Locke")
+  })
 })
 
 describe("championIconUrl", () => {
@@ -69,5 +73,38 @@ describe("championIconUrl", () => {
     expect(url).toBe(
       `https://ddragon.leagueoflegends.com/cdn/${DATA_DRAGON_VERSION}/img/champion/Kaisa.png`,
     )
+  })
+
+  it("builds a URL containing Locke.png for the new champion", () => {
+    expect(championIconUrl("Locke")).toContain("Locke.png")
+  })
+})
+
+describe("championInitials", () => {
+  it("returns the first letter for a single-word name", () => {
+    expect(championInitials("Aatrox")).toBe("A")
+    expect(championInitials("Locke")).toBe("L")
+  })
+
+  it("returns the first letter of the first two words for multi-word names", () => {
+    expect(championInitials("Lee Sin")).toBe("LS")
+  })
+
+  it("skips non-letter words and punctuation when building initials", () => {
+    expect(championInitials("Nunu & Willump")).toBe("NW")
+    expect(championInitials("Dr. Mundo")).toBe("DM")
+  })
+
+  it("returns '?' for empty or whitespace-only input", () => {
+    expect(championInitials("")).toBe("?")
+    expect(championInitials("   ")).toBe("?")
+  })
+
+  it("never throws for arbitrary input", () => {
+    const inputs = ["", "   ", "Aatrox", "Lee Sin", "Nunu & Willump", "Dr. Mundo", "!!!", "123 456"]
+    for (const input of inputs) {
+      expect(() => championInitials(input)).not.toThrow()
+      expect(typeof championInitials(input)).toBe("string")
+    }
   })
 })

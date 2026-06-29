@@ -1,11 +1,18 @@
 import type { ChampionNote } from "./types"
+import { isRecord } from "../lib/isRecord"
 
 const STORAGE_KEY = "lol_champion_notes"
 
 export function loadNotes(): Record<string, ChampionNote> {
     try {
         const raw = localStorage.getItem(STORAGE_KEY)
-        return raw ? (JSON.parse(raw) as Record<string, ChampionNote>) : {}
+        if (!raw) return {}
+        const parsed = JSON.parse(raw) as unknown
+        // Guard against corrupt storage holding a non-object (null, primitive,
+        // array): the return type promises a keyed object, and callers like
+        // saveNote/deleteNote index into it.
+        if (!isRecord(parsed)) return {}
+        return parsed as Record<string, ChampionNote>
     } catch {
         return {}
     }

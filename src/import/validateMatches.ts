@@ -1,4 +1,5 @@
 import type { Match } from "../domain/types"
+import { isRecord } from "../lib/isRecord"
 
 const VALID_ROLES = new Set(["top", "jungle", "mid", "bot", "support"])
 const VALID_SIDES = new Set(["blue", "red"])
@@ -7,6 +8,10 @@ export function validateMatches(raw: unknown[]): Match[] {
   const valid: Match[] = []
 
   for (const item of raw) {
+    if (!isRecord(item)) {
+      console.warn("Match (unknown): ungültiges Element (kein Objekt)")
+      continue
+    }
     const m = item as Record<string, unknown>
     const id = typeof m.matchId === "string" ? m.matchId : "(unknown)"
 
@@ -24,7 +29,13 @@ export function validateMatches(raw: unknown[]): Match[] {
     }
 
     let invalid = false
-    for (const pick of m.picks as Record<string, unknown>[]) {
+    for (const rawPick of m.picks as unknown[]) {
+      if (!isRecord(rawPick)) {
+        console.warn(`Match ${id}: ungültiger Pick (kein Objekt)`)
+        invalid = true
+        break
+      }
+      const pick = rawPick as Record<string, unknown>
       if (!VALID_ROLES.has(pick.role as string)) {
         console.warn(`Match ${id}: ungültige Rolle "${pick.role}"`)
         invalid = true
@@ -39,7 +50,13 @@ export function validateMatches(raw: unknown[]): Match[] {
     if (invalid) continue
 
     if (Array.isArray(m.bans)) {
-      for (const ban of m.bans as Record<string, unknown>[]) {
+      for (const rawBan of m.bans as unknown[]) {
+        if (!isRecord(rawBan)) {
+          console.warn(`Match ${id}: ungültiger Ban (kein Objekt)`)
+          invalid = true
+          break
+        }
+        const ban = rawBan as Record<string, unknown>
         if (!VALID_SIDES.has(ban.side as string)) {
           console.warn(`Match ${id}: Ban mit ungültiger Side "${ban.side}"`)
           invalid = true

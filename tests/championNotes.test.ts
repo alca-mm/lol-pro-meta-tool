@@ -43,6 +43,38 @@ describe("loadNotes", () => {
         store["lol_champion_notes"] = "not-valid-json{{{"
         expect(loadNotes()).toEqual({})
     })
+
+    it("returns empty object when stored JSON is the null literal", () => {
+        store["lol_champion_notes"] = "null"
+        expect(loadNotes()).toEqual({})
+    })
+
+    it("returns empty object when stored JSON is a primitive", () => {
+        store["lol_champion_notes"] = "42"
+        expect(loadNotes()).toEqual({})
+    })
+
+    it("returns empty object when stored JSON is an array", () => {
+        store["lol_champion_notes"] = "[1, 2, 3]"
+        expect(loadNotes()).toEqual({})
+    })
+})
+
+describe("storage resilience against corrupt non-object values", () => {
+    beforeEach(() => {
+        localStorage.clear()
+    })
+
+    it("saveNote recovers when stored value is the null literal", () => {
+        store["lol_champion_notes"] = "null"
+        expect(() => saveNote(noteGaren)).not.toThrow()
+        expect(loadNotes()["Garen"]).toEqual(noteGaren)
+    })
+
+    it("deleteNote is a safe no-op when stored value is a primitive", () => {
+        store["lol_champion_notes"] = "42"
+        expect(() => deleteNote("Garen")).not.toThrow()
+    })
 })
 
 describe("saveNote", () => {

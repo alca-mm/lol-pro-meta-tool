@@ -156,6 +156,7 @@ export const AP_DAMAGE_CHAMPIONS = new Set([
     "leblanc",
     "lillia",
     "lissandra",
+    "locke",
     "lux",
     "malzahar",
     "neeko",

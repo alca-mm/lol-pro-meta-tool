@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, lazy, Suspense } from "react"
+import { useState, useMemo, useEffect, useRef, useCallback, lazy, Suspense } from "react"
 import { FilterProvider, useFilters } from "./context/FilterContext"
 import { LanguageProvider, useTranslation } from "./i18n/LanguageContext"
 import { AuthProvider } from "./auth/AuthContext"
@@ -17,6 +17,11 @@ import { Dashboard } from "./components/Dashboard"
 import { ChampionStatsTable } from "./components/ChampionStatsTable"
 import { DataSourceInfo } from "./components/DataSourceInfo"
 import { publicAssetUrl } from "./lib/publicAssetUrl"
+import {
+    reduceDataLoadError,
+    toSafeErrorMessage,
+    type DataLoadError,
+} from "./lib/dataLoadError"
 import sampleData from "./data/sampleMatches.json"
 import type { Match, SyncReport } from "./domain/types"
 
@@ -67,40 +72,63 @@ function AppContent() {
     const [isUsingSampleData, setIsUsingSampleData] = useState(true)
     const [syncReport, setSyncReport] = useState<SyncReport | null>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [isRetrying, setIsRetrying] = useState(false)
+    const [matchesError, setMatchesError] = useState<DataLoadError | null>(null)
+    const [syncReportError, setSyncReportError] = useState<DataLoadError | null>(null)
 
-    useEffect(() => {
-        let cancelled = false
+    // Monotonic token: lets a fresh load (initial mount or a manual retry)
+    // invalidate any responses still in flight from a previous attempt, so a
+    // late/stale fetch can never overwrite newer state.
+    const loadTokenRef = useRef(0)
 
-        fetch(publicAssetUrl("data/importedMatches.json"))
+    const loadRuntimeData = useCallback(() => {
+        const token = ++loadTokenRef.current
+        setIsRetrying(true)
+
+        const matchesPromise = fetch(publicAssetUrl("data/importedMatches.json"))
             .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
             .then((data: unknown) => {
-                if (cancelled) return
+                if (loadTokenRef.current !== token) return
                 const matches = parseMatches(data)
                 if (matches.length > 0) {
                     setAllMatches(matches)
                     setIsUsingSampleData(false)
                 }
+                setMatchesError(reduceDataLoadError("matches", { type: "success" }))
             })
             .catch((err) => {
-                console.error("Failed to load importedMatches.json:", err)
-            })
-            .finally(() => {
-                if (!cancelled) setIsLoading(false)
+                if (loadTokenRef.current !== token) return
+                console.error("Failed to load imported matches:", toSafeErrorMessage(err))
+                setMatchesError(reduceDataLoadError("matches", { type: "error", error: err }))
             })
 
-        fetch(publicAssetUrl("data/latest-sync-report.json"))
+        const syncPromise = fetch(publicAssetUrl("data/latest-sync-report.json"))
             .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
             .then((data: unknown) => {
-                if (!cancelled) setSyncReport(data as SyncReport)
+                if (loadTokenRef.current !== token) return
+                setSyncReport(data as SyncReport)
+                setSyncReportError(reduceDataLoadError("syncReport", { type: "success" }))
             })
             .catch((err) => {
-                console.error("Failed to load latest-sync-report.json:", err)
+                if (loadTokenRef.current !== token) return
+                console.error("Failed to load sync report:", toSafeErrorMessage(err))
+                setSyncReportError(reduceDataLoadError("syncReport", { type: "error", error: err }))
             })
 
-        return () => {
-            cancelled = true
-        }
+        void Promise.allSettled([matchesPromise, syncPromise]).then(() => {
+            if (loadTokenRef.current !== token) return
+            setIsLoading(false)
+            setIsRetrying(false)
+        })
     }, [])
+
+    useEffect(() => {
+        loadRuntimeData()
+        // Invalidate in-flight responses on unmount.
+        return () => {
+            loadTokenRef.current += 1
+        }
+    }, [loadRuntimeData])
 
     const ALL_TABS: { id: TabId; label: string }[] = [
         { id: "champions",      label: t("tab_champions") },
@@ -187,7 +215,24 @@ function AppContent() {
                 isUsingSampleData={isUsingSampleData}
                 matches={allMatches}
                 syncReport={syncReport ?? undefined}
+                syncReportFailed={!matchesError && !!syncReportError}
             />
+
+            {matchesError && (
+                <div className="data-load-alert error" role="alert">
+                    <strong>{t("dataLoad_matchesErrorTitle")}</strong>
+                    <span>{t("dataLoad_matchesErrorBody")}</span>
+                    <span className="data-load-alert-detail">{matchesError.detail}</span>
+                    <button
+                        type="button"
+                        className="data-load-retry"
+                        onClick={() => loadRuntimeData()}
+                        disabled={isRetrying}
+                    >
+                        {isRetrying ? t("dataLoad_retrying") : t("dataLoad_retryButton")}
+                    </button>
+                </div>
+            )}
 
             <div className={`app-body${filtersCollapsed ? " filters-collapsed" : ""}`}>
                 <aside className="filters-shell">

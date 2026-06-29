@@ -595,6 +595,67 @@ table tbody tr:hover {
   opacity: 1;
 }
 
+/* Data load alert (visible runtime fetch error / warning) */
+.data-load-alert {
+  padding: 10px 20px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.data-load-alert.error {
+  background: #2a0e0e;
+  border-bottom: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.data-load-alert.warning {
+  background: #2a1f00;
+  border-bottom: 1px solid var(--accent-dim);
+  color: var(--accent);
+}
+
+.data-load-alert strong {
+  font-weight: 600;
+}
+
+.data-load-alert-detail {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.data-load-retry {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+.data-load-retry:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.data-load-retry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Compact non-critical sync-report warning inside the synced data badge */
+.datasource-warning {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 11px;
+}
+
 /* Tab Navigation */
 .tab-nav {
   display: flex;

@@ -15,6 +15,12 @@ interface DataSourceInfoProps {
     isUsingSampleData: boolean
     matches: Match[]
     syncReport?: SyncReportInfo
+    /**
+     * True when match data loaded but the sync report fetch failed. Renders a
+     * compact, non-critical warning inside the synced badge. Optional/defaults
+     * to false so existing call sites keep working.
+     */
+    syncReportFailed?: boolean
 }
 
 function parseDate(value: string | null | undefined): Date | null {
@@ -141,6 +147,7 @@ export function DataSourceInfo({
                                    isUsingSampleData,
                                    matches,
                                    syncReport,
+                                   syncReportFailed = false,
                                }: DataSourceInfoProps) {
     const { t } = useTranslation()
     const [isVisible, setIsVisible] = useState(true)
@@ -212,6 +219,12 @@ export function DataSourceInfo({
             <span className="datasource-meta">
                 {t("ds_matches")} {dataSummary.matchCount.toLocaleString("de-DE")}
             </span>
+
+            {syncReportFailed && (
+                <span className="datasource-warning" role="status">
+                    {t("dataLoad_syncReportError")}
+                </span>
+            )}
 
             <button
                 type="button"
