@@ -21,14 +21,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      # Force first-party JS actions onto the Node 24 runtime to clear the
+      # "Node.js 20 is deprecated" Actions warnings. Remove if any action misbehaves.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
