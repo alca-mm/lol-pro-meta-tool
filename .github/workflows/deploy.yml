@@ -60,8 +60,11 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # GitHub Pages project base path (change to '/' for a custom/root domain).
-          VITE_BASE_PATH: /lol-pro-meta-tool/
+          # Custom domain at root (aatroxtool.de) → build with base '/'.
+          # vite.config.ts defaults to '/' when VITE_BASE_PATH is unset, so we
+          # deliberately do NOT set it here. Do NOT set VITE_BASE_PATH=/ — the
+          # config normalizes a bare '/' to '//' (broken). For a GitHub Pages
+          # project subpath instead, set VITE_BASE_PATH=/<repo-name>/.
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
 
