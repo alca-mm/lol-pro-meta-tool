@@ -43,12 +43,21 @@ describe("parsePickSlots", () => {
 
     it("returns empty array for non-array input", () => {
         expect(parsePickSlots(null)).toEqual([])
-        expect(parsePickSlots("bad")).toEqual([])
+        expect(parsePickSlots("x")).toEqual([])
         expect(parsePickSlots(42)).toEqual([])
+        expect(parsePickSlots({})).toEqual([])
     })
 
     it("returns safe default for invalid items", () => {
         expect(parsePickSlots([null, "bad", 42])).toEqual([
+            { championName: "", role: null },
+            { championName: "", role: null },
+            { championName: "", role: null },
+        ])
+    })
+
+    it("returns default slot for an array element (arrays are not records)", () => {
+        expect(parsePickSlots([[], ["x"], [{ championName: "Zed" }]])).toEqual([
             { championName: "", role: null },
             { championName: "", role: null },
             { championName: "", role: null },
@@ -107,6 +116,46 @@ describe("mapTeamDraftRow", () => {
     it("throws for non-object input", () => {
         expect(() => mapTeamDraftRow(null)).toThrow()
         expect(() => mapTeamDraftRow("bad")).toThrow()
+    })
+
+    it("throws for an array row (arrays are not valid records)", () => {
+        expect(() => mapTeamDraftRow([])).toThrow("Invalid row")
+        expect(() => mapTeamDraftRow([{ id: "x" }])).toThrow("Invalid row")
+    })
+
+    it("maps a fully valid row to the complete SavedTeamDraft (happy-path regression)", () => {
+        expect(mapTeamDraftRow(validRow)).toEqual({
+            id: "abc-123",
+            teamId: "team-456",
+            name: "My Draft",
+            note: "Good draft",
+            patch: "14.10",
+            bluePicks: [{ championName: "Zed", role: "mid" }],
+            redPicks: [],
+            blueBans: ["Jinx"],
+            redBans: [],
+            createdBy: "user-789",
+            createdAt: "2026-05-01T10:00:00Z",
+            updatedAt: "2026-05-02T12:00:00Z",
+        })
+    })
+
+    it("falls back to defaults for a partial object row without throwing", () => {
+        const result = mapTeamDraftRow({ id: "only-id" })
+        expect(result).toEqual({
+            id: "only-id",
+            teamId: "",
+            name: "",
+            note: "",
+            patch: null,
+            bluePicks: [],
+            redPicks: [],
+            blueBans: [],
+            redBans: [],
+            createdBy: null,
+            createdAt: "",
+            updatedAt: "",
+        })
     })
 })
 

@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase"
+import { isRecord } from "../lib/isRecord"
 import type { PickSlot } from "../draft/types"
 import type { TeamRole } from "./teamService"
 
@@ -37,8 +38,8 @@ export function normalizeDraftName(name: string): string {
 export function parsePickSlots(value: unknown): PickSlot[] {
     if (!Array.isArray(value)) return []
     return value.map((item) => {
-        if (typeof item !== "object" || item === null) return { championName: "", role: null }
-        const obj = item as Record<string, unknown>
+        if (!isRecord(item)) return { championName: "", role: null }
+        const obj = item
         return {
             championName: typeof obj.championName === "string" ? obj.championName : "",
             role: typeof obj.role === "string" ? (obj.role as PickSlot["role"]) : null,
@@ -52,8 +53,8 @@ export function parseBans(value: unknown): string[] {
 }
 
 export function mapTeamDraftRow(row: unknown): SavedTeamDraft {
-    if (typeof row !== "object" || row === null) throw new Error("Invalid row")
-    const r = row as Record<string, unknown>
+    if (!isRecord(row)) throw new Error("Invalid row")
+    const r = row
     return {
         id: typeof r.id === "string" ? r.id : "",
         teamId: typeof r.team_id === "string" ? r.team_id : "",
