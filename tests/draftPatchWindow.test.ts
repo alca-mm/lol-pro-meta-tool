@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { parsePatchParts, comparePatch, weightedPatchWindow } from "../src/draft/patchWindow"
 import { makeMatch } from "./helpers/matchFixtures"
+import type { Match } from "../src/domain/types"
 
 describe("parsePatchParts", () => {
     it("parses simple patch", () => {

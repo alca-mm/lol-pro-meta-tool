@@ -9,6 +9,7 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

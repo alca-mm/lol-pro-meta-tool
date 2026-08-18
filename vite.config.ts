@@ -3,7 +3,7 @@
 
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-import { normalizeBasePath } from './src/lib/normalizeBasePath'
+import { normalizeBasePath } from './src/lib/normalizeBasePath.ts'
 
 // The build targets the custom domain https://aatroxtool.de/ at the root,
 // so `base` is '/'.

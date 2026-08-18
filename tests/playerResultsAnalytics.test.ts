@@ -208,8 +208,11 @@ describe("applyLastNFilter", () => {
     })
 
     it("returns first N matches when limit is a number", () => {
-        expect(applyLastNFilter(ms, 2)).toHaveLength(2)
-        expect(applyLastNFilter(ms, 2)[0].match_id).toBe("m1")
+        // `ms` holds only 3 entries, but the smallest numeric LastNLimit is 10,
+        // so truncation is exercised against a longer, locally built list.
+        const many = Array.from({ length: 12 }, (_, i) => makeMatch({ match_id: `m${i + 1}` }))
+        expect(applyLastNFilter(many, 10)).toHaveLength(10)
+        expect(applyLastNFilter(many, 10)[0].match_id).toBe("m1")
     })
 
     it("returns all when N exceeds total", () => {

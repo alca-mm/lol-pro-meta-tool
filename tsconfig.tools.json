@@ -1,0 +1,41 @@
+// Typecheck für die Node-Tools in scripts/ (npm run typecheck:tools).
+// tsconfig.json deckt nur src/ ab, tsconfig.node.json nur vite.config.ts —
+// scripts/ war bis dahin von keinem Typecheck erfasst (tsx und Vitest strippen
+// Typen nur, sie prüfen sie nicht).
+//
+// Bewusst eine eigene Config statt einer Erweiterung von tsconfig.node.json:
+// jene ist "composite": true und Project Reference von tsconfig.json; scripts/
+// dort einzumischen würde den Referenzgraphen und das Build-Verhalten ändern.
+// Hier deshalb kein "composite" — es wird nur geprüft, nie emittiert, also
+// entsteht auch keine .tsbuildinfo.
+//
+// tests/ ist NICHT enthalten: Die Tests importieren aus src/components/*.tsx
+// und aus Modulen mit import.meta.env, bräuchten also "jsx": "react-jsx" und
+// vite/client (und damit DOM-Typen). Zusätzlich stecken in den Testdateien
+// selbst noch vorbestehende Typfehler (implizites any, fehlende Props). Ein
+// Test-Typecheck ist ein eigenes Thema und gehört nicht in diese Tool-Config.
+//
+// Achtung, latente Kopplung: scripts/syncData.ts importiert aus src/import/*
+// und src/domain/types.ts (die wiederum src/lib/isRecord.ts ziehen). TypeScript
+// prüft importierte Module mit, dieser Typecheck deckt sie also mit ab — und
+// zwar unter "lib": ["ES2023"] OHNE DOM und ohne vite/client. Diese Module
+// müssen deshalb DOM-frei bleiben und dürfen kein import.meta.env nutzen.
+// Täten sie es, bräche typecheck:tools, während npm run build grün bliebe.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "types": ["node"],
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["scripts"]
+}

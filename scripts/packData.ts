@@ -11,7 +11,7 @@
  *   git add public/data/importedMatches.json.gz
  *   git commit -m "chore: update last-known-good data fallback"
  */
-import { readFileSync, writeFileSync, statSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { gzip as gzipCallback, gunzip as gunzipCallback } from "node:zlib"
 import { promisify } from "node:util"

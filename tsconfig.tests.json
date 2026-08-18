@@ -1,0 +1,61 @@
+// Typecheck für die Testsuite in tests/ (npm run typecheck:tests).
+// tsconfig.json deckt nur src/ ab, tsconfig.tools.json nur scripts/,
+// tsconfig.node.json nur vite.config.ts — tests/ war bis dahin von keinem
+// Typecheck erfasst (Vitest strippt Typen nur, es prüft sie nicht).
+//
+// Bewusst eine eigene Config und keine Erweiterung der bestehenden:
+// tsconfig.json ist auf die App zugeschnitten (kein "node" in types) und
+// Referenz-Root für tsconfig.node.json; tsconfig.tools.json läuft absichtlich
+// ohne DOM und ohne vite/client (siehe Kommentar dort). Die Tests brauchen die
+// Vereinigung beider Welten: Node-Typen (sie importieren node:fs/os/path und
+// aus scripts/), DOM- und React-Typen (sie importieren aus
+// src/components/DraftHelper.tsx) sowie vite/client (importierte src-Module
+// nutzen import.meta.env). Diese Mischung in eine der bestehenden Configs zu
+// zwingen, würde deren bewusste Schärfe aufweichen.
+//
+// WICHTIG — DOM und JSX sind hier reine Compile-Time-Typen:
+// "lib": [... "DOM", "DOM.Iterable"] und "jsx": "react-jsx" existieren nur,
+// damit tsc die transitiv importierten React-Komponenten prüfen kann. An der
+// Laufzeit ändert das nichts: vite.config.ts bleibt bei test.environment:
+// 'node', Vitest führt die Tests weiterhin in Node aus. Es gibt kein jsdom und
+// keine zusätzliche Test-Library. Ein Test, der echte DOM-Objekte zur Laufzeit
+// anfasst, würde also weiterhin fehlschlagen — der Typecheck deckt das nicht ab
+// und soll es auch nicht.
+//
+// Hinweis zu "target"/"lib": Beide liegen hier höher als in tsconfig.json
+// (ES2022/ES2023 statt ES2020/ES2020). Da src/ über die Test-Imports transitiv
+// mitgeprüft wird, würde ein ES2021-ES2023-API-Aufruf in src/ unter
+// typecheck:tests durchgehen. Das ist kein Loch: npm run build und
+// npm run typecheck setzen die schärfere App-Grenze durch, und im CI läuft
+// "Typecheck tests" vor "Build". Hier bewusst nicht angeglichen, damit die
+// Tests selbst moderne APIs nutzen dürfen.
+//
+// Kein "composite" und kein "incremental": Es wird nur geprüft, nie emittiert,
+// also entsteht auch keine .tsbuildinfo.
+//
+// "include" listet nur tests — src/ und scripts/ werden über die Imports der
+// Tests transitiv mitgeprüft. Sie zusätzlich aufzunehmen wäre redundant zu
+// typecheck und typecheck:tools.
+//
+// "types" ist bewusst minimal: "vitest" fehlt hier absichtlich, weil alle 45
+// Testdateien describe/it/expect explizit aus "vitest" importieren (keine
+// Globals). Empirisch geprüft: Ergänzen von "vitest" ändert das Ergebnis nicht.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["tests"]
+}

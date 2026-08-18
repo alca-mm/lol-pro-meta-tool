@@ -23,6 +23,10 @@ const rec = (
     winRate: 0.55,
     sampleSizeLabel: "medium",
     reasons: [],
+    // Neutral default: matches what buildRecommendations in
+    // src/analysis/draftHelper.ts emits when no team pool is loaded.
+    teamPoolScore: null,
+    teamPoolRating: null,
 })
 
 const emptySlots = (): PickSlot[] =>

@@ -24,6 +24,9 @@ public/data/latest-sync-report.json
 # Claude/local tooling
 .claude/
 
+# TypeScript incremental build cache (composite projects)
+*.tsbuildinfo
+
 # Markdown docs are local by default.
 *.md
 !README.md
