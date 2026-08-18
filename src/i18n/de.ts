@@ -7,6 +7,7 @@ export const de = {
     tab_matchups: "Matchups",
     tab_roles: "Rollen",
     tab_patches: "Patches",
+    tab_tournamentScout: "Turnier Scout",
 
     filter_title: "Filter",
     filter_reset: "Zurücksetzen",
@@ -419,4 +420,241 @@ export const de = {
     tbl_noPatchesNeeded: "Mindestens 2 verschiedene Patches nötig für Vergleich.",
     tbl_selectDifferentPatches: "Bitte zwei unterschiedliche Patches auswählen.",
     tbl_noPatchCompData: "Keine Daten für diesen Patch-Vergleich.",
+
+    // Tournament Scout — header
+    scout_title: "Turnier Scout",
+    scout_intro: "Füge OP.GG-Multilinks oder einzelne Profil-Links deiner Gegner ein — das Tool erkennt daraus die Spieler und sortiert sie nach Rolle. Ergänze die Scout-Daten, die du auf den verlinkten Seiten findest, und du bekommst Ban-Empfehlungen mit Begründung. Je mehr du einträgst, desto belastbarer wird der Vorschlag.",
+    scout_dataHonesty: "Dieser Tab liest OP.GG, League of Graphs, DeepLoL oder DPM nicht selbst aus — eine Browser-App darf das nicht, und die Seiten erlauben es auch nicht. Das Tool erkennt deshalb die Spieler und baut dir die passenden Links. Champion, Games und Winrate schaust du dort nach und trägst sie hier ein. Gerechnet wird ausschließlich mit dem, was wirklich eingetragen ist — nichts wird geschätzt oder ergänzt.",
+
+    // Tournament Scout — input
+    scout_inputLabel: "Links oder Spielerzeilen einfügen",
+    scout_inputPlaceholder: "https://www.op.gg/multisearch/euw?summoners=Spieler1%23EUW,Spieler2%23EUW\nhttps://www.leagueofgraphs.com/summoner/euw/Spieler3-EUW\nMid: Spieler4#EUW\nSupport Spieler5#EUW1",
+    scout_parseButton: "Spieler erkennen",
+    scout_clearButton: "Eingabe leeren",
+    scout_exampleButton: "Beispiel einfügen",
+    scout_exampleHint: "Das Beispiel zeigt nur, wie die Eingabe aussehen kann. Namen und Links sind erfunden und enthalten keine echten Spielerdaten.",
+
+    // Tournament Scout — parse result
+    scout_parsedPlayers: "Erkannte Spieler",
+    scout_noPlayers: "Noch keine Spieler erkannt. Füge oben Links oder Spielerzeilen ein und starte die Erkennung.",
+    scout_unparsedLines: "Nicht erkannte Zeilen",
+    scout_unparsedHint: "Diese Zeilen konnten keinem Spieler zugeordnet werden. Ergänze die Riot-ID im Format Name#TAG oder füge einen vollständigen Profil-Link ein.",
+    scout_duplicatesMerged: "Mehrfach genannte Spieler wurden zu einem Eintrag zusammengeführt.",
+    scout_countPlayers: "Erkannte Spieler: {count}",
+    scout_countUnparsed: "Nicht erkannte Zeilen: {count}",
+    scout_countDuplicates: "Zusammengeführte Doppelnennungen: {count}",
+
+    // Tournament Scout — reasons for unparsed lines (UnparsedLineReason)
+    scout_unparsed_no_riot_id: "Keine Riot-ID gefunden — erwartet wird Name#TAG.",
+    scout_unparsed_invalid_riot_id: "Riot-ID unvollständig — Name oder Tag fehlt.",
+    scout_unparsed_malformed_url: "Link ist unvollständig oder fehlerhaft.",
+    scout_unparsed_unknown_url_host: "Unbekannte Seite — unterstützt werden OP.GG, League of Graphs, DeepLoL und DPM.",
+    scout_unparsed_unsupported_url_shape: "Seite erkannt, aber diese Unterseite enthält keine Riot-ID — nutze den direkten Profil-Link.",
+    scout_unparsed_empty_multilink: "Multilink erkannt, aber ohne Spieler darin.",
+
+    // Tournament Scout — player card
+    scout_player_riotId: "Riot-ID",
+    scout_player_region: "Region",
+    scout_player_role: "Rolle",
+    scout_player_sources: "Quellen",
+    scout_player_noSources: "Kein Profil-Link vorhanden. Suche den Spieler direkt auf OP.GG und trage die Werte unten ein.",
+    scout_player_openSource: "Profil auf {source} öffnen",
+    scout_player_remove: "Spieler entfernen",
+    scout_player_removeConfirm: "Diesen Spieler wirklich entfernen? Seine Scout-Daten — alle Champions, Games, Winrates und Notizen — werden mitgelöscht und lassen sich nicht wiederherstellen.",
+
+    // Tournament Scout — roles
+    scout_role_top: "Top",
+    scout_role_jungle: "Jungle",
+    scout_role_mid: "Mid",
+    scout_role_bot: "ADC",
+    scout_role_support: "Support",
+    scout_role_unknown: "Unbekannt",
+    // Rolle, die nur aus der Eingabe gelesen wurde — kein Platz in der Aufstellung.
+    scout_roleGuessed: "{role} (vermutet)",
+
+    // Tournament Scout — sources
+    scout_source_opgg: "OP.GG",
+    scout_source_leagueofgraphs: "League of Graphs",
+    scout_source_deeplol: "DeepLoL",
+    scout_source_dpm: "DPM",
+    scout_source_manual: "Aus dem Kopf",
+    scout_source_other: "Andere Quelle",
+
+    // Tournament Scout — source status
+    scout_status_parsed_from_url: "Aus dem Link übernommen — Name, Tag und Region stehen fest.",
+    scout_status_source_link_only: "Nur Link — öffne die Seite und trage die Werte unten selbst ein.",
+    scout_status_manual_required: "Manuelle Eingabe nötig — ohne Scout-Daten fließt dieser Spieler nicht in die Analyse ein.",
+    scout_status_not_supported_in_browser: "Automatisches Auslesen ist im Browser nicht möglich — nutze den Link.",
+    scout_status_error: "Link konnte nicht verarbeitet werden — bitte prüfen oder neu einfügen.",
+
+    // Tournament Scout — source notes (ScoutSourceNoteCode)
+    scout_note_identity_from_url: "Spieler aus diesem Link gelesen.",
+    scout_note_profile_link_generated: "Profil-Link aus Name, Tag und Region gebaut.",
+    scout_note_url_format_heuristic: "Link-Format ist geraten — er kann ins Leere führen.",
+    scout_note_region_unknown: "Region unbekannt — ohne sie lässt sich kein Link bauen.",
+    scout_note_tagline_unknown: "Tag fehlt — ohne #TAG lässt sich kein Link bauen.",
+    scout_note_identity_incomplete: "Name unvollständig oder unbrauchbar.",
+    scout_note_direct_fetch_not_supported: "Diese Seite wird nicht abgerufen, nur verlinkt.",
+    scout_note_unknown_url_shape: "Seite erkannt, das Adressformat aber nicht.",
+
+    // Tournament Scout — why a source is not fetched (ScoutFetchBlockedCode)
+    scout_blocked_no_public_api: "Für diese Seite ist keine öffentliche Schnittstelle dokumentiert.",
+    scout_blocked_cors_blocked: "Die Schnittstelle erlaubt keine Zugriffe aus einer fremden Webseite heraus.",
+    scout_blocked_anti_bot_protection: "Die Seite ist gegen automatische Zugriffe geschützt — ein Abruf wäre unzuverlässig.",
+    scout_blocked_html_scraping_only: "Die Werte stehen nur im Seiten-HTML. Sie dort auszulesen wäre fehleranfällig und von den Nutzungsbedingungen nicht gedeckt.",
+    scout_blocked_undocumented_private_api: "Technisch gäbe es einen Zugang, aber es ist die interne Schnittstelle der Seite: nicht dokumentiert, ohne Zusage der Betreiber, jederzeit änderbar. Sie wird deshalb bewusst nicht genutzt.",
+    scout_blocked_unverified: "Nicht geprüft — wird bis auf Weiteres als nicht abrufbar behandelt.",
+    // Tournament Scout — manual scouting data
+    scout_manualTitle: "Scout-Daten",
+    scout_manualHint: "Trage ein, was du auf den verlinkten Seiten siehst. Champion und Games reichen für einen ersten Vorschlag, Winrate und Aktualität machen ihn genauer.",
+    scout_manual_champion: "Champion",
+    scout_manual_championInvalid: "Ohne Championnamen geht die Zeile beim nächsten Laden verloren.",
+    scout_manual_games: "Games",
+    scout_manual_gamesPlaceholder: "z. B. 14",
+    scout_manual_gamesInvalid: "Games als ganze Zahl ab 0 eintragen.",
+    scout_manual_winrate: "Winrate",
+    scout_manual_winratePlaceholder: "z. B. 62",
+    scout_manual_winrateInvalid: "Winrate als Wert zwischen 0 und 100 eintragen.",
+    scout_manual_note: "Notiz",
+    scout_manual_source: "Quelle",
+    scout_manual_recency: "Aktualität",
+    scout_manual_recencyHint: "Aktuellere Einträge zählen in der Analyse stärker — ältere fließen abgeschwächt mit ein.",
+    scout_manual_role: "Rolle",
+    scout_manual_add: "Eintrag hinzufügen",
+    scout_manual_remove: "Eintrag entfernen",
+    scout_manual_removeConfirm: "Diesen Eintrag wirklich entfernen? Games, Winrate und Notiz gehen dabei verloren.",
+    scout_manual_empty: "Noch keine Scout-Daten für diesen Spieler.",
+
+    // Tournament Scout — recency
+    scout_recency_current: "Aktueller Patch",
+    scout_recency_recent: "Letzte Wochen",
+    scout_recency_old: "Älter (nur Tendenz)",
+
+    // Tournament Scout — lineup (starting five + substitutes)
+    scout_lineupTitle: "Team-Aufstellung",
+    scout_lineupHint: "Weise jedem Spieler seinen Platz zu: fünf Startplätze und bis zu drei Substitutes. Mit einer Aufstellung weiß die Analyse, welche Rolle wirklich zu wem gehört — Ban-Empfehlungen bekommen dann eine Lane („gegen Mid“), und Einträge aus einer anderen Rolle werden als solche gekennzeichnet. Ohne Aufstellung rechnet das Tool weiter, nur ohne Rollenbezug.",
+    scout_startingFive: "Startaufstellung",
+    scout_substitutes: "Substitutes",
+    scout_unassigned: "Nicht zugewiesen",
+    scout_unassignedHint: "Erkannte Spieler, die auf keinem Platz stehen. Sie bleiben erhalten und behalten ihre Scout-Daten — ohne Platz lässt sich ihre Rolle aber nicht abgleichen.",
+    scout_lineupEmptySlot: "Frei — Spieler zuweisen",
+    scout_assignTo: "Platz zuweisen",
+    scout_moveToPool: "Aus der Aufstellung nehmen",
+    scout_alreadyAssigned: "Dieser Spieler steht bereits auf einem anderen Platz — nimm ihn dort zuerst heraus.",
+    scout_lineupComplete: "Startaufstellung vollständig — alle fünf Rollen sind besetzt.",
+    scout_lineupIncomplete: "Startaufstellung noch unvollständig — besetze die freien Rollen, damit der Banplan jede Lane abdeckt.",
+    scout_lineupAutofill: "Aus erkannten Rollen füllen",
+    scout_lineupAutofillHint: "Übernimmt die Rollen, die beim Erkennen aus deinen Zeilen und Links gelesen wurden. Das ist eine Vermutung aus der Eingabe, keine gesicherte Aufstellung — prüfe jeden Platz nach, bevor du dich darauf verlässt.",
+    scout_lineupClear: "Aufstellung leeren",
+    scout_includeSubstitutes: "Substitutes mitwerten",
+    scout_includeSubstitutesHint: "Aus: Substitutes werden angezeigt und bleiben editierbar, liefern aber keine Signale und keine Ban-Kandidaten. An: Ihre Daten zählen mit, allerdings abgeschwächt — ein Substitute verdrängt damit keinen vergleichbar starken Starter.",
+    scout_substituteRisk: "Substitute-Risiko",
+    scout_onlyIfPlayerStarts: "Zahlt sich nur aus, wenn dieser Spieler tatsächlich spielt.",
+
+    // Tournament Scout — substitute slots (ScoutSubstituteSlot); starting slots reuse scout_role_*
+    scout_lineup_sub1: "Substitute 1",
+    scout_lineup_sub2: "Substitute 2",
+    scout_lineup_sub3: "Substitute 3",
+
+    // Tournament Scout — lineup membership (ScoutLineupMembership)
+    scout_membership_starter: "Starter",
+    scout_membership_substitute: "Substitute",
+    scout_membership_unassigned: "Nicht zugewiesen",
+
+    // Tournament Scout — analysis
+    scout_analysisTitle: "Ban-Analyse",
+    scout_topThreats: "Größte Bedrohungen",
+    scout_banCandidates: "Ban-Kandidaten",
+    scout_comfortPicks: "Comfort Picks",
+    scout_weaknesses: "Schwachstellen",
+    scout_confidence: "Aussagekraft",
+    scout_sourceHint: "Basiert ausschließlich auf den Scout-Daten, die du eingetragen hast.",
+    scout_lowData: "Dünne Datenlage — trage mehr Champions oder Games ein, damit die Empfehlung belastbar wird.",
+    scout_noAnalysis: "Noch keine Analyse möglich. Trage für mindestens einen Spieler Scout-Daten ein.",
+
+    // Tournament Scout — confidence levels
+    scout_confidence_high: "Hoch",
+    scout_confidence_medium: "Mittel",
+    scout_confidence_low: "Niedrig",
+    scout_confidence_none: "Keine Daten",
+
+    // Tournament Scout — role fit of a signal (ScoutRoleFit), short badge labels
+    scout_rolefit_onrole: "Eigene Rolle",
+    scout_rolefit_offrole: "Andere Rolle",
+    scout_rolefit_flex: "Flex",
+    scout_rolefit_unknown: "Rolle unklar",
+
+    // Tournament Scout — reason codes (ScoutReasonCode)
+    scout_reason_high_winrate_many_games: "{winrate}% Winrate auf {games} Games — belastbares Sample.",
+    scout_reason_high_winrate_small_sample: "{winrate}% Winrate, aber nur {games} Games.",
+    scout_reason_signature_pick: "Signature Pick — großer Anteil der erfassten Games.",
+    scout_reason_one_trick: "One-Trick-Niveau auf diesem Champion.",
+    scout_reason_high_games_low_winrate: "{games} Games, aber nur {winrate}% Winrate — eher Schwachstelle als Bedrohung.",
+    scout_reason_flex_across_roles: "Flex — wird auf mehreren Rollen gespielt.",
+    scout_reason_played_recently: "Im aktuellen Patch gespielt.",
+    scout_reason_stale_data: "Nur ältere Daten — als Tendenz werten.",
+    scout_reason_small_sample: "Nur {games} Games — kleine Sample Size.",
+    scout_reason_no_data: "Keine Scout-Daten eingetragen.",
+    scout_reason_manual_entry_only: "Manuell eingetragen — nichts automatisch abgerufen.",
+    scout_reason_hits_multiple_players: "Trifft {count} Spieler im gegnerischen Team.",
+    scout_reason_meta_priority: "Hohe Priorität im Pro Play der gewichteten Patches.",
+    scout_reason_role_specific_threat: "Bedrohung vor allem auf {role}.",
+    scout_reason_user_marked_priority: "Von dir als Priorität markiert.",
+    scout_reason_onrole_signal: "Auf {role} gespielt und dort auch aufgestellt — ein Ban trifft genau diese Lane.",
+    scout_reason_offrole_signal: "Auf {signalRole} gespielt, aufgestellt aber als {lineupRole} — ein Ban trifft die geplante Lane möglicherweise nicht.",
+    scout_reason_role_unknown_or_flex: "Rolle unklar oder Flex — Signal: {signalRole}, Lineup: {lineupRole}. Welche Lane ein Ban hier trifft, steht nicht fest.",
+    scout_reason_substitute_risk: "Stammt von einem Substitute, der möglicherweise gar nicht ins Spiel kommt — das Signal wird deshalb auf {weight} abgeschwächt gewertet.",
+    scout_reason_player_without_lineup_role: "Spieler steht auf keinem Platz im Lineup — die Daten sind als {role} erfasst, bestätigt ist diese Rolle damit aber nicht. Ohne Platz ist kein Rollenabgleich möglich.",
+
+    // Tournament Scout — warning codes (ScoutWarningCode)
+    scout_warning_player_without_data: "Für mindestens einen Spieler fehlen Scout-Daten — er bleibt in der Analyse außen vor. Trage seine Champions nach.",
+    scout_warning_small_sample_overall: "Insgesamt wenige Games erfasst. Ein paar Einträge mehr machen den Banplan deutlich belastbarer.",
+    scout_warning_stale_data_overall: "Die meisten Einträge sind älter. Prüfe auf den verlinkten Seiten, was gerade gespielt wird.",
+    scout_warning_flex_pick_warning: "Mindestens ein Champion taucht auf mehreren Rollen auf — ein Ban trifft dann eventuell nicht die Rolle, die du meinst.",
+    scout_warning_meta_shift_possible: "Zwischen den erfassten Games und dem aktuellen Patch kann sich die Meta verschoben haben. Nur zur Einordnung — nichts zu tun.",
+    scout_warning_source_not_fetchable: "Mindestens eine Quelle lässt sich nicht direkt abrufen. Öffne den Link und trage die Werte selbst ein.",
+    scout_warning_conflicting_entries: "Für denselben Champion stehen sich widersprechende Einträge gegenüber. Prüfe Games und Winrate.",
+    scout_warning_duplicate_players_merged: "Mehrfach genannte Spieler wurden zusammengeführt. Nichts zu tun — prüfe im Zweifel die Riot-IDs.",
+    scout_warning_incomplete_starting_five: "Noch freie Startplätze: {missing}. Der Banplan deckt nur die besetzten Rollen ab — weise die übrigen Spieler zu.",
+    scout_warning_player_without_lineup_role: "Spieler mit Scout-Daten ohne Platz im Lineup: {count}. Ihre Signale lassen sich keiner Rolle zuordnen — setze sie in die Startaufstellung oder auf die Bank.",
+    scout_warning_offrole_data_present: "Signale aus einer anderen Rolle als der im Lineup: {count}. Ein Ban darauf trifft eventuell nicht die Lane, die du im Blick hast — prüfe die Platzzuweisung oder die Rolle der Einträge.",
+    scout_warning_substitute_risk_active: "Substitutes werden mitgewertet, betroffen sind {count} Einträge. Wer auf der Bank sitzt, spielt vielleicht nicht — schalte Substitutes ab, wenn der Banplan nur die Startaufstellung treffen soll.",
+    scout_warning_data_loss_on_reparse: "Aus der Eingabe verschwunden: {count} Spieler mit Scout-Daten. Gelöscht wurde nichts — die Daten liegen im Archiv, wo du sie zurückholen oder endgültig verwerfen kannst.",
+
+    // Tournament Scout — team ban plan
+    scout_teamPlanTitle: "Team-Banplan",
+    scout_safeBans: "Sichere Bans",
+    scout_targetBans: "Gezielte Bans",
+    scout_situationalBans: "Situative Bans",
+    scout_overlapBans: "Bans gegen mehrere Spieler",
+    scout_banAgainstRole: "gegen {role}",
+    scout_banHitsRoles: "trifft {roles}",
+    scout_banSubstituteOnly: "Nur Bank-Daten — dieser Ban verpufft, wenn der Spieler nicht aufgestellt wird.",
+    scout_flexWarning: "Flex-Gefahr: Dieser Champion taucht bei mehreren Spielern oder Rollen auf.",
+    scout_teamPlanEmpty: "Für einen Banplan fehlen noch Scout-Daten.",
+
+    // Tournament Scout — export
+    scout_export_copy: "Banplan kopieren",
+    scout_export_header: "Draft-Vorbereitung — Turnier Scout",
+    scout_export_copied: "Banplan kopiert",
+    scout_export_failed: "Kopieren nicht möglich",
+
+    // Tournament Scout — re-parse protection & archive of removed players
+    scout_reparseConfirmTitle: "Erneut erkennen — Scout-Daten betroffen",
+    scout_reparseConfirmBody: "Die Erkennung baut die Spielerliste komplett neu aus dem Eingabefeld auf. Für Spieler, die dort nicht mehr stehen, sind bereits Scout-Daten erfasst — Champions, Games, Winrates und Notizen. Diese Daten verschwinden aus der Liste und aus der Analyse. Leg sie ins Archiv, wenn du sie behalten willst.",
+    scout_reparseKeepData: "Daten ins Archiv legen",
+    scout_reparseDiscard: "Daten verwerfen",
+    scout_reparseCancel: "Abbrechen",
+    scout_removedPlayersTitle: "Archiv entfernter Spieler",
+    scout_removedPlayersHint: "Spieler, die bei einer Neuerkennung aus der Eingabe gefallen sind. Ihre Scout-Daten liegen hier unangetastet und zählen nicht in die Analyse. Zurückholen bringt Spieler samt Daten wieder in die Liste, Verwerfen löscht sie endgültig.",
+    scout_removedPlayersCapped: "Das Archiv fasst {max} Spieler. Kommt einer dazu, fällt der jeweils älteste Eintrag heraus — hol dir also zurück, was du noch brauchst.",
+    scout_restorePlayer: "Zurückholen",
+    scout_restoreOverwriteConfirm: "Für diesen Spieler sind bereits Scout-Daten eingetragen. Zurückholen ersetzt sie vollständig durch die archivierten Champions, Games, Winrates und Notizen — was jetzt in der Liste steht, ist danach weg. Trotzdem zurückholen?",
+    scout_discardRemovedPlayer: "Endgültig verwerfen",
+
+    // Tournament Scout — reset & errors
+    scout_reset: "Zurücksetzen",
+    scout_resetConfirm: "Wirklich alles zurücksetzen? Eingabe, erkannte Spieler und Scout-Daten gehen verloren.",
+    scout_error_noInput: "Bitte zuerst Links oder Spielerzeilen einfügen.",
+    scout_error_unrecognized: "Aus der Eingabe konnte kein Spieler gelesen werden. Prüfe die Links oder nutze das Format Name#TAG.",
 } as const

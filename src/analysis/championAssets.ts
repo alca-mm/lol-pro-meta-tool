@@ -1,4 +1,8 @@
-const DATA_DRAGON_VERSION = "16.10.1"
+// Data Dragon asset version. Must be >= the patch that introduced the newest
+// champion in championCatalog.ts, otherwise that champion's icon 404s/403s and
+// ChampionIcon falls back to initials. 16.16.1 matches ALL_CHAMPIONS exactly
+// (173/173 ids). Locke was added in 16.13.1.
+const DATA_DRAGON_VERSION = "16.16.1"
 
 const SPECIAL_CHAMPION_IMAGE_IDS: Record<string, string> = {
     "aurelion sol": "AurelionSol",

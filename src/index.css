@@ -1952,3 +1952,815 @@ body::-webkit-scrollbar {
   font-size: 0.82rem;
   color: var(--text-dim);
 }
+
+/* ==========================================================================
+ * Tournament Scout ("Turnier Scout" tab)
+ *
+ * Appended block — no existing rule above is modified. Uses the same tokens
+ * and the same visual language as the panels above (--surface / --surface2 /
+ * --border cards, uppercase dim section headings, .secondary-button).
+ * ========================================================================== */
+
+.scout-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scout-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scout-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.scout-intro {
+  font-size: 13px;
+  color: var(--text-dim);
+  max-width: 90ch;
+}
+
+/* The honesty note is the one thing that must never be missed. */
+.scout-honesty {
+  background: var(--surface2);
+  border: 1px solid var(--accent-dim);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  max-width: 100ch;
+}
+
+.scout-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scout-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scout-subheading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scout-group-heading {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 6px;
+}
+
+.scout-field-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scout-textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-family: var(--font);
+  resize: vertical;
+}
+
+.scout-textarea:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.scout-textarea-small {
+  font-size: 12px;
+}
+
+.scout-button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.scout-primary-button {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scout-primary-button:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.scout-example-hint {
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--surface2);
+  border: 1px dashed var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+
+.scout-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.scout-counts {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.scout-count {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.scout-multilink a,
+.scout-source-link {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.scout-multilink a:hover,
+.scout-source-link:hover {
+  text-decoration: underline;
+}
+
+.scout-unparsed {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scout-unparsed h4 {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--red);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scout-unparsed-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.scout-unparsed-list code {
+  color: var(--text);
+  background: var(--surface2);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11.5px;
+}
+
+/* Players */
+.scout-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scout-player-card {
+  background: var(--surface2);
+}
+
+.scout-player-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.scout-player-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scout-player-name {
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.scout-player-remove {
+  margin-left: auto;
+}
+
+.scout-source-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scout-source {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-size: 11.5px;
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+}
+
+.scout-source-parsed_from_url {
+  border-left-color: var(--green);
+}
+
+.scout-source-source_link_only {
+  border-left-color: var(--blue);
+}
+
+.scout-source-manual_required,
+.scout-source-not_supported_in_browser {
+  border-left-color: var(--accent-dim);
+}
+
+.scout-source-error {
+  border-left-color: var(--red);
+}
+
+.scout-source-status {
+  color: var(--text-dim);
+}
+
+.scout-source-note {
+  font-style: italic;
+}
+
+/* Manual data editor */
+.scout-data-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scout-entry-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scout-entry-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.scout-entry-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scout-entry-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scout-entry-row input,
+.scout-entry-row select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.scout-entry-row input:focus,
+.scout-entry-row select:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.scout-entry-champion input {
+  width: 150px;
+}
+
+.scout-entry-number input {
+  width: 72px;
+}
+
+.scout-entry-note {
+  flex: 1;
+  min-width: 140px;
+}
+
+.scout-entry-note input {
+  width: 100%;
+}
+
+/* Higher specificity than `.scout-entry-row input` above, so the invalid
+   state actually wins without needing !important. */
+.scout-entry-row input.scout-input-invalid {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.scout-entry-remove {
+  margin-left: auto;
+  align-self: center;
+}
+
+/* Analysis */
+.scout-analysis-grid,
+.scout-phase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.scout-analysis-card,
+.scout-ban-group {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scout-signal-list,
+.scout-ban-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scout-signal,
+.scout-ban {
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+}
+
+.scout-signal-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.scout-signal-champion {
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.scout-signal-facts {
+  font-style: normal;
+}
+
+.scout-ban-rank {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.scout-reason-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.scout-reason-list li {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.scout-reason-list li::before {
+  content: "\00b7 ";
+  color: var(--accent-dim);
+}
+
+.scout-flex-warning {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.scout-nodata {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* Chips and confidence */
+.scout-chip,
+.scout-confidence {
+  font-size: 10.5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 8px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.scout-chip-high,
+.scout-confidence-high {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.scout-chip-medium,
+.scout-confidence-medium {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.scout-chip-low,
+.scout-confidence-low {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.scout-chip-none,
+.scout-confidence-none {
+  border-style: dashed;
+}
+
+/* Warnings */
+.scout-warning-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scout-warning {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11.5px;
+  border-left: 2px solid var(--border);
+  padding: 2px 0 2px 8px;
+}
+
+.scout-warning-icon {
+  font-weight: 700;
+  width: 12px;
+  text-align: center;
+  flex: none;
+}
+
+.scout-warning-info {
+  border-left-color: var(--blue);
+  color: var(--text-dim);
+}
+
+.scout-warning-warning {
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+
+.scout-warning-danger {
+  border-left-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Footer actions */
+.scout-footer-actions {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.scout-copy-state {
+  font-size: 12px;
+  color: var(--green);
+}
+
+.scout-copy-state.scout-error {
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .scout-entry-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .scout-entry-champion input,
+  .scout-entry-number input {
+    width: 100%;
+  }
+
+  .scout-entry-remove {
+    margin-left: 0;
+    align-self: flex-end;
+  }
+}
+
+/* ==========================================================================
+   Tournament Scout — lineup builder, removed-player archive, re-parse dialog
+   and the role-aware badges of the analysis panels.
+
+   Appended block: it only adds selectors, it changes none of the rules above.
+   Everything reuses the existing tokens (--surface2, --border, --accent, …)
+   and the established .scout-* naming.
+   ========================================================================== */
+
+/* Lineup builder */
+.scout-lineup-autofill-hint {
+  font-size: 11.5px;
+  max-width: 100ch;
+}
+
+.scout-lineup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.scout-lineup-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+/* The bench is visibly secondary to the starting five. */
+.scout-lineup-slot-substitute {
+  border-style: dashed;
+}
+
+.scout-lineup-slot select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 4px 6px;
+  font-size: 12.5px;
+  font-family: var(--font);
+  width: 100%;
+}
+
+.scout-lineup-slot select:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.scout-lineup-release {
+  align-self: flex-start;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+.scout-lineup-state {
+  font-size: 12px;
+}
+
+.scout-lineup-complete {
+  color: var(--green);
+}
+
+.scout-lineup-incomplete {
+  color: var(--accent);
+}
+
+.scout-lineup-missing {
+  font-size: 11.5px;
+}
+
+.scout-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.scout-toggle input {
+  cursor: pointer;
+}
+
+.scout-pool-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scout-pool-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* Role fit and lineup membership badges */
+.scout-rolefit-onrole {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.scout-rolefit-offrole {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.scout-rolefit-flex {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.scout-membership-starter {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.scout-membership-substitute {
+  border-style: dashed;
+}
+
+.scout-chip-substitute {
+  border-style: dashed;
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* The lane a ban hits — hangs directly off the champion name. */
+.scout-ban-lane {
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.scout-substitute-note {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  border-left: 2px solid var(--accent-dim);
+  padding-left: 8px;
+}
+
+/* Removed-player archive */
+.scout-archive-panel {
+  border-left: 3px solid var(--accent-dim);
+}
+
+.scout-archive-cap {
+  font-size: 11.5px;
+}
+
+.scout-archive-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scout-archive-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+
+.scout-archive-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scout-archive-facts {
+  font-size: 11.5px;
+}
+
+.scout-archive-discard {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Re-parse dialog */
+.scout-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 17, 23, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.scout-dialog {
+  max-width: 720px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-color: var(--accent-dim);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.scout-dialog-head {
+  justify-content: space-between;
+}
+
+.scout-dialog-close {
+  line-height: 1;
+  padding: 2px 10px;
+  font-size: 15px;
+}
+
+.scout-dialog-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.scout-dialog-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.scout-dialog-discard {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .scout-lineup-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scout-archive-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

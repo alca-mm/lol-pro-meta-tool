@@ -9,11 +9,16 @@
 // Hier deshalb kein "composite" — es wird nur geprüft, nie emittiert, also
 // entsteht auch keine .tsbuildinfo.
 //
-// tests/ ist NICHT enthalten: Die Tests importieren aus src/components/*.tsx
-// und aus Modulen mit import.meta.env, bräuchten also "jsx": "react-jsx" und
-// vite/client (und damit DOM-Typen). Zusätzlich stecken in den Testdateien
-// selbst noch vorbestehende Typfehler (implizites any, fehlende Props). Ein
-// Test-Typecheck ist ein eigenes Thema und gehört nicht in diese Tool-Config.
+// Geltungsbereich: NUR scripts/ und dessen transitive Imports. tests/ ist hier
+// nicht enthalten, wird aber sehr wohl typgeprüft — separat durch
+// tsconfig.tests.json (npm run typecheck:tests). Der Test-Typecheck existiert
+// also, er ist nur bewusst von diesem getrennt: Die Tests importieren aus
+// src/components/*.tsx und aus Modulen mit import.meta.env und brauchen deshalb
+// "jsx": "react-jsx" sowie vite/client (und damit DOM-Typen). Genau diese
+// Typen gehören in die Test-Config und nicht hierher. scripts/ sind reine
+// Node-Tools, also bleibt diese Config absichtlich schlank auf Node-Typen; eine
+// Vermischung würde ihre bewusste Schärfe aufweichen. Gegenstelle und
+// Begründung dort: siehe Kommentarkopf in tsconfig.tests.json.
 //
 // Achtung, latente Kopplung: scripts/syncData.ts importiert aus src/import/*
 // und src/domain/types.ts (die wiederum src/lib/isRecord.ts ziehen). TypeScript

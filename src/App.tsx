@@ -35,6 +35,9 @@ const TeamStatusPanel = lazy(() =>
 const DraftHelper = lazy(() =>
     import("./components/DraftHelper").then((m) => ({ default: m.DraftHelper }))
 )
+const TournamentScout = lazy(() =>
+    import("./components/scout/TournamentScout").then((m) => ({ default: m.TournamentScout }))
+)
 const PlayerResultsPage = lazy(() =>
     import("./components/player-results/PlayerResultsPage").then((m) => ({ default: m.PlayerResultsPage }))
 )
@@ -58,7 +61,7 @@ const DISCORD_INVITE_URL = "https://discord.gg/8cdFSGy9qT"
 
 const sampleMatches = parseMatches(sampleData)
 
-type TabId = "champions" | "draft" | "team-dashboard" | "player-results" | "synergies" | "matchups" | "roles" | "patches"
+type TabId = "champions" | "draft" | "tournament-scout" | "team-dashboard" | "player-results" | "synergies" | "matchups" | "roles" | "patches"
 
 function AppContent() {
     const { filters } = useFilters()
@@ -133,6 +136,7 @@ function AppContent() {
     const ALL_TABS: { id: TabId; label: string }[] = [
         { id: "champions",      label: t("tab_champions") },
         { id: "draft",          label: t("tab_draftHelper") },
+        { id: "tournament-scout", label: t("tab_tournamentScout") },
         { id: "team-dashboard", label: t("tab_teamDashboard") },
         { id: "player-results", label: t("tab_playerResults") },
         { id: "synergies",      label: t("tab_synergies") },
@@ -280,6 +284,14 @@ function AppContent() {
                     ) : activeTab === "player-results" ? (
                         <section className="section">
                             <PlayerResultsPage />
+                        </section>
+                    ) : activeTab === "tournament-scout" ? (
+                        // Deliberately above the `allMatches.length === 0` guard:
+                        // the scout tab works on pasted links and manually entered
+                        // numbers only, so it must stay usable when the pro-meta
+                        // dataset is empty or failed to load.
+                        <section className="section">
+                            <TournamentScout />
                         </section>
                     ) : allMatches.length === 0 ? (
                         <p className="empty-state error">{t("app_noMatches")}</p>
