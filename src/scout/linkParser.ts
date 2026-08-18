@@ -11,6 +11,7 @@
  *   - DPM.LOL profile links               dpm.lol/<Name>-<TAG>
  *   - free text                           `EUW player#tag top`,
  *                                         `euw / playername#tag / jungle`,
+ *                                         `Bot: playername#tag`, `top - playername#tag`,
  *                                         `playername#tag`
  *
  * Design rules:
@@ -544,13 +545,43 @@ function splitIntoIdChunks(segment: string): string[] {
   return segment.split(/\s+/).filter((part) => part.length > 0)
 }
 
+/** A token that is nothing but punctuation between a label and its name. */
+const LABEL_SEPARATOR_TOKEN = /^[-–—:·|]+$/
+
+/** A label carrying its separator on the word itself: `Top:`, `Top-`, `Top–`. */
+const TRAILING_LABEL_SEPARATOR = /[-–—:·|]$/
+
 /**
  * Parse one chunk that contains a `#`, e.g. `EUW player#tag top`.
  *
- * A leading region word is consumed (only when a name is left over), a trailing
- * role word after the tagline is consumed. A leading *role* word is
- * deliberately NOT consumed: names like `Jungle Diff#EUW` are more common than
- * the `top Name#TAG` spelling, and `/`-separated input covers that case anyway.
+ * Everything in front of the name may be a label: a region word, a role word,
+ * or both in either order (`EUW top Name#TAG` and `top EUW Name#TAG` are the
+ * same input). A role word behind the tagline is read as well.
+ *
+ * Two rules keep real names out of the label reader:
+ *
+ *  - WORD GRANULAR, NEVER A PREFIX. The whole whitespace token has to be an
+ *    alias, so `Topfather#EUW` and `Supportive#EUW` stay names.
+ *  - A LABEL NEEDS A NAME BEHIND IT. With nothing left in front of the `#` the
+ *    word *is* the name: `Bot#EUW` is the player `Bot`, not a role label. The
+ *    single exception is an explicit label — `Top:` and `ADC - ` carry a
+ *    separator and cannot be a Riot ID, so they are consumed and the missing
+ *    name is reported as `invalid_riot_id` instead of inventing a player
+ *    called `Top:`. That exception is role-only on purpose — a lone region word
+ *    keeps the behaviour it always had, so `EUW: #TAG` still parses as a player
+ *    named `EUW:`. Widening it would change a shape this reader never owned.
+ *
+ * Deliberately NOT supported, because each shape would cost more names than it
+ * gains labels:
+ *  - a role word *behind* the name but before the `#` (`Player top#TAG`) — that
+ *    is part of the name
+ *  - a label written without a space (`Bot:DemoBot#EUW` is one token, so the
+ *    name stays `Bot:DemoBot`)
+ *  - a second role word (the first one wins)
+ *
+ * Accepted trade-off: `Jungle Diff#EUW` now yields role `jungle` and the name
+ * `Diff`. A label in front of the name is by far the more common shape in scrim
+ * and tournament sheets, and such a name can still be pasted without it.
  */
 function parseRiotIdChunk(
   chunk: string,
@@ -564,12 +595,31 @@ function parseRiotIdChunk(
   let role: ScoutRole = "unknown"
 
   const beforeWords = value.slice(0, hashIndex).trim().split(/\s+/).filter(Boolean)
-  if (beforeWords.length > 1) {
-    const leading = normalizeScoutRegion(stripDecorations(beforeWords[0]))
-    if (leading !== SCOUT_REGION_UNKNOWN) {
-      region = leading
-      beforeWords.shift()
+  // Peel labels off the front, in whichever order they were typed. Every pass
+  // either shifts a word or stops, so this terminates on `#TAG` (no words at
+  // all) exactly as it does on a 5000 character name.
+  while (beforeWords.length > 0) {
+    const word = beforeWords[0]
+    const key = stripDecorations(word)
+    const leadingRegion = normalizeScoutRegion(key)
+    const leadingRole = normalizeScoutRole(key)
+
+    if (region === SCOUT_REGION_UNKNOWN && leadingRegion !== SCOUT_REGION_UNKNOWN) {
+      if (beforeWords.length === 1) break
+      region = leadingRegion
+    } else if (role === "unknown" && leadingRole !== "unknown") {
+      const explicitLabel =
+        TRAILING_LABEL_SEPARATOR.test(word) ||
+        (beforeWords.length > 1 && LABEL_SEPARATOR_TOKEN.test(beforeWords[1]))
+      if (beforeWords.length === 1 && !explicitLabel) break
+      role = leadingRole
+    } else {
+      break
     }
+
+    beforeWords.shift()
+    // `EUW - Player#TAG`: the separator belongs to the label, not to the name.
+    while (beforeWords.length > 0 && LABEL_SEPARATOR_TOKEN.test(beforeWords[0])) beforeWords.shift()
   }
   const riotName = beforeWords.join(" ")
 
