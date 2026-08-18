@@ -22,8 +22,13 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # Force first-party JS actions onto the Node 24 runtime to clear the
-      # "Node.js 20 is deprecated" Actions warnings. Remove if any action misbehaves.
+      # Every action referenced directly below already declares the node24
+      # runtime. actions/upload-pages-artifact@v4 is a composite action that
+      # internally pins actions/upload-artifact@v4.6.2, which still declares
+      # node20 - this flag forces that transitive action onto Node 24 and
+      # keeps the "Node.js 20 is deprecated" warnings out of the log.
+      # Remove only if an action misbehaves. Never set
+      # ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION.
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
@@ -66,15 +71,19 @@ jobs:
         run: npm run build
         env:
           # Custom domain at root (aatroxtool.de) → build with base '/'.
-          # vite.config.ts defaults to '/' when VITE_BASE_PATH is unset, so we
-          # deliberately do NOT set it here. Do NOT set VITE_BASE_PATH=/ — the
-          # config normalizes a bare '/' to '//' (broken). For a GitHub Pages
-          # project subpath instead, set VITE_BASE_PATH=/<repo-name>/.
+          # src/lib/normalizeBasePath.ts already maps an unset VITE_BASE_PATH
+          # to '/', so we deliberately do NOT set it here.
+          # Do NOT set VITE_BASE_PATH=/lol-pro-meta-tool/ — a repo subpath
+          # would break every asset URL on the custom domain. That value only
+          # applies to a github.io project site, which this deployment is not.
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
 
+      - name: Verify dist for custom domain
+        run: npm run check:dist
+
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
         with:
           enablement: 'true'
 
@@ -85,4 +94,4 @@ jobs:
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
