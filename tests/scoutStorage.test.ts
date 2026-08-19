@@ -1299,3 +1299,179 @@ describe("unknown extra fields", () => {
     expect("coach" in state.lineup).toBe(false)
   })
 })
+
+/* ==========================================================================
+ * 19. LEGACY provenance `source: "riot"` (the removed Riot auto-import)
+ *
+ * WHAT HAPPENED: for a short while `ScoutManualSource` carried a `"riot"`
+ * member, written by an optional Riot auto-import that went through a backend
+ * proxy. That import was deliberately removed on 2026-08-19 (the app must not
+ * depend on a Riot key, an edge function, a login or a proxy), and `"riot"`
+ * went with it. It was never part of a public deployment, so the only browser
+ * that can still hold such a row is one that ran the auto-import locally.
+ *
+ * WHAT THIS SECTION PINS DOWN — the *reverse* of what it used to assert:
+ *   1. a stored `"riot"` row still loads, without a crash and WITHOUT LOSING
+ *      DATA: champion, games, winrate, note, role and recency all survive
+ *      unchanged, and only the provenance *label* degrades to `"other"`. That
+ *      is `readManualSource()`'s ordinary unknown-value path, and it is the
+ *      wanted behaviour — a mislabelled source chip, not a dropped row;
+ *   2. {@link SCOUT_SCHEMA_VERSION} stays at 2 across that load. Bumping it
+ *      would make every still-open older tab reject the whole blob and fall
+ *      back to an EMPTY state — trading one wrong chip for the user's entire
+ *      scouting session;
+ *   3. removing the member did not turn the closed set into a sieve: every
+ *      near miss (`"riot-api"`, `"RIOT"`, `" riot"`, `7`, `null`, …) still
+ *      degrades to `"other"` too — `"riot"` itself is now simply one of them.
+ * ========================================================================== */
+
+/**
+ * A row exactly as the removed auto-import wrote it into localStorage.
+ *
+ * Deliberately NOT typed as `ManualChampionEntry`: `"riot"` is not a member of
+ * `ScoutManualSource` any more, so this is legacy JSON from an older bundle,
+ * not data this build could construct. Typing it would be a compile error —
+ * which is the point.
+ */
+const legacyRiotKarmaRow: Readonly<Record<string, unknown>> = {
+  championName: "Karma",
+  games: 17,
+  winrate: 64.7,
+  note: "flexed to support in game 2",
+  source: "riot",
+  recency: "current",
+  role: "support",
+}
+
+/** What the loader must make of it: the same row, with the label degraded. */
+const migratedKarmaEntry: ManualChampionEntry = {
+  championName: "Karma",
+  games: 17,
+  winrate: 64.7,
+  note: "flexed to support in game 2",
+  source: "other",
+  recency: "current",
+  role: "support",
+}
+
+describe('legacy manual entry provenance "riot"', () => {
+  /** Normalise one raw entry for `playerRekkles` and hand back what survived. */
+  function firstEntry(rawEntry: unknown): ManualChampionEntry | undefined {
+    const state = normalizeScoutState({
+      schemaVersion: 2,
+      players: [playerRekkles],
+      playerData: { [playerRekkles.id]: { playerId: playerRekkles.id, entries: [rawEntry] } },
+    })
+    return state.playerData[playerRekkles.id]?.entries[0]
+  }
+
+  it("loads without crashing and keeps every field except the source label", () => {
+    expect(firstEntry(legacyRiotKarmaRow)).toEqual(migratedKarmaEntry)
+  })
+
+  it("survives a real JSON blob written by the older bundle (load from storage)", () => {
+    // A browser holds a STRING, not an object graph. Seeding the raw blob is
+    // the only faithful reproduction of the legacy situation - the in-memory
+    // check above would still pass if the JSON path lost the row entirely.
+    seedJson({
+      schemaVersion: 2,
+      players: [playerRekkles],
+      playerData: {
+        [playerRekkles.id]: {
+          playerId: playerRekkles.id,
+          entries: [legacyRiotKarmaRow],
+        },
+      },
+      lineup: emptyLineup(),
+      includeSubstitutes: false,
+      removedPlayers: {},
+    })
+
+    const loaded = loadScoutState()
+    expect(loaded.players).toEqual([playerRekkles])
+    expect(loaded.playerData[playerRekkles.id].entries).toEqual([migratedKarmaEntry])
+    // Spelled out field by field: `toEqual` above would also pass if BOTH
+    // sides were wrong in the same way, and "no data loss" is the whole claim.
+    const entry = loaded.playerData[playerRekkles.id].entries[0]
+    expect(entry.championName).toBe("Karma")
+    expect(entry.games).toBe(17)
+    expect(entry.winrate).toBe(64.7)
+    expect(entry.note).toBe("flexed to support in game 2")
+    expect(entry.role).toBe("support")
+    expect(entry.recency).toBe("current")
+    expect(entry.source).toBe("other")
+  })
+
+  it("keeps the schema version at 2 across that load", () => {
+    seedJson({
+      schemaVersion: 2,
+      players: [playerRekkles],
+      playerData: {
+        [playerRekkles.id]: { playerId: playerRekkles.id, entries: [legacyRiotKarmaRow] },
+      },
+      lineup: emptyLineup(),
+      includeSubstitutes: false,
+      removedPlayers: {},
+    })
+
+    expect(SCOUT_SCHEMA_VERSION).toBe(2)
+    expect(loadScoutState().schemaVersion).toBe(2)
+
+    // And a save right after the load still writes version 2 - the degraded
+    // row must not push the blob onto a version older tabs would reject.
+    saveScoutState(loadScoutState())
+    expect(store[SCOUT_STORAGE_KEY]).toContain('"schemaVersion":2')
+    expect(store[SCOUT_STORAGE_KEY]).not.toContain('"source":"riot"')
+  })
+
+  it("mixes freely with rows from the paste import and from memory", () => {
+    const state = normalizeScoutState({
+      schemaVersion: 2,
+      players: [playerRekkles],
+      playerData: {
+        [playerRekkles.id]: {
+          playerId: playerRekkles.id,
+          entries: [
+            legacyRiotKarmaRow,
+            { ...legacyRiotKarmaRow, championName: "Lulu", source: "opgg" },
+            { ...legacyRiotKarmaRow, championName: "Nami", source: "manual" },
+          ],
+        },
+      },
+    })
+
+    // Three rows in, three rows out: the legacy one is relabelled, not dropped.
+    expect(state.playerData[playerRekkles.id].entries.map((entry) => entry.championName)).toEqual([
+      "Karma",
+      "Lulu",
+      "Nami",
+    ])
+    expect(state.playerData[playerRekkles.id].entries.map((entry) => entry.source)).toEqual([
+      "other",
+      "opgg",
+      "manual",
+    ])
+  })
+
+  it("degrades every unrecognised source to other, near misses and riot itself", () => {
+    const unknownSources: readonly unknown[] = [
+      "riot",
+      "riot-api",
+      "riotgames",
+      "riot_api",
+      "RIOT",
+      "Riot",
+      " riot",
+      "riot ",
+      "",
+      null,
+      7,
+      { source: "riot" },
+    ]
+
+    for (const source of unknownSources) {
+      const entry = firstEntry({ ...legacyRiotKarmaRow, source })
+      expect(entry?.source, JSON.stringify(source)).toBe("other")
+    }
+  })
+})

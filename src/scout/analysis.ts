@@ -307,6 +307,31 @@ const RECENCY_VALUES: readonly string[] = ["current", "recent", "old"]
 
 const ROLE_VALUES: readonly string[] = ["top", "jungle", "mid", "bot", "support", "unknown"]
 
+/**
+ * Accepted `ScoutManualSource` values.
+ *
+ * KEEP IN SYNC — this is the **third** copy of this list, and the three are
+ * deliberately separate because each guards a different boundary:
+ *   1. `MANUAL_SOURCES` in src/scout/storage.ts — what may be *loaded*
+ *   2. `SCOUT_MANUAL_SOURCE_VALUES` in src/components/scout/scoutUiHelpers.ts —
+ *      what the editor *offers*
+ *   3. this one — what the engine *believes* about an entry it is handed
+ * A value missing here does not throw and does not change a score: it silently
+ * degrades to `"other"` in `ChampionSignal.sources`. THE LESSON IS STILL LIVE,
+ * only its example is now historical: when the (since removed) Riot
+ * auto-import added `"riot"`, the other two lists got it and this one did not,
+ * so every auto-imported row reported its provenance as "some other source".
+ * Nothing broke loudly — the feature just started lying about where its
+ * numbers came from. When a source is added or removed, all three change
+ * together, in the same change.
+ *
+ * `"riot"` itself is gone from all three since 2026-08-19 (the auto-import was
+ * removed; see the closing note of section 9 in src/scout/types.ts). A row a
+ * local build already stored with it arrives here as an unknown value and is
+ * reported as `"other"` — the same, deliberate degradation the loader applies
+ * in `readManualSource()` (src/scout/storage.ts), and no reason to keep a
+ * seventh entry in this list.
+ */
 const MANUAL_SOURCE_VALUES: readonly string[] = [
   "opgg",
   "leagueofgraphs",
@@ -1084,8 +1109,15 @@ function buildSignalContext(
     reasons.push(reason("no_data"))
   }
 
-  // Always true in this feature (nothing is ever fetched), so it doubles as the
-  // guaranteed fallback: no signal ever ships without a reason.
+  // `reasons.length === 0` is the guaranteed fallback: no signal ever ships
+  // without a reason.
+  //
+  // `allManual` is NOT "always true" — an earlier version of this comment
+  // claimed that, and it was wrong even then: a row the user marks as read off
+  // OP.GG fails it, and so does every row applied from a paste import, which
+  // carries the site it was copied from. Do not "simplify" this back to an
+  // unconditional push — that would tell the user numbers they read off a
+  // scouting site were typed in from memory.
   if (allManual || reasons.length === 0) {
     reasons.push(reason("manual_entry_only", { entries: entries.length }))
   }

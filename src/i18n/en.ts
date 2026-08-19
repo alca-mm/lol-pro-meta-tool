@@ -658,4 +658,135 @@ export const en: Translations = {
     scout_resetConfirm: "Reset everything? The input, the detected players and the scouting data will be lost.",
     scout_error_noInput: "Please paste links or player lines first.",
     scout_error_unrecognized: "No player could be read from the input. Check the links or use the Name#TAG format.",
+
+    // Tournament Scout — stats import: panel frame
+    scout_import_title: "Stats import",
+    scout_import_hint: "Bring a player's champion stats over in one go: set the role, open the source, copy the table, paste it here. The tool reads the rows and puts them in front of you for checking before anything is taken over.",
+    scout_import_honesty: "Nothing is fetched from OP.GG, League of Graphs, DeepLoL or DPM automatically — a browser app is not allowed to, and those sites do not permit it. Nothing is estimated and nothing is extrapolated: if a value is missing from the pasted text, it stays empty. Everything is calculated from what you took over here, and nothing else.",
+    scout_import_step_player: "1. Pick the player",
+    scout_import_step_role: "2. Set the role",
+    scout_import_step_source: "3. Open the source",
+    scout_import_step_paste: "4. Paste the stats",
+    scout_import_step_preview: "5. Check the preview and apply",
+
+    // Tournament Scout — stats import: player & link
+    scout_import_playerLabel: "Player",
+    scout_import_playerPlaceholder: "Select a player",
+    scout_import_playerNone: "No players detected yet. Paste links or player lines above and run the detection — after that you can import stats for each player here.",
+    scout_import_linkLabel: "Profile link or Riot ID",
+    scout_import_linkPlaceholder: "https://www.op.gg/summoners/euw/Player-EUW  or  Player#EUW",
+    scout_import_linkButton: "Add player",
+    scout_import_linkResolved: "Recognised: {player}",
+    scout_import_linkAdded: "{player} was added to the player list.",
+    scout_import_linkNotResolved: "No player could be read from that. Use a full profile link or the Name#TAG format.",
+
+    // Tournament Scout — stats import: role, source, recency
+    scout_import_roleLabel: "Role",
+    scout_import_roleHint: "The role is set before the import, not after. Otherwise numbers from another lane land as a threat on this one: Karma out of 40 support games would suddenly be a jungle ban. Every row from this import is recorded under the role you pick here.",
+    scout_import_roleRequired: "No role, no import — pick the role this player is fielded in first.",
+    scout_import_sourceLabel: "Source",
+    scout_import_sourceHint: "Record where the numbers came from. It changes nothing in the scoring, but it keeps it traceable later what you read off where.",
+    scout_import_source_unknown: "Source unknown / not stated",
+    scout_import_recencyLabel: "Recency",
+
+    // Tournament Scout — stats import: paste field
+    scout_import_pasteLabel: "Paste champion stats",
+    scout_import_pasteHint: "Select the champion table on the open page and paste it here. The header row may come along and surplus lines do no harm — whatever is not a stat row is listed separately below.",
+    scout_import_pastePlaceholder: "Champion\tGames\tWin Rate\tKDA\nLee Sin\t24\t62%\t3.1\nViego\t18\t55%\t2.8",
+    scout_import_parseButton: "Detect rows",
+    scout_import_clearButton: "Clear input",
+    scout_import_exampleButton: "Insert example",
+    scout_import_exampleHint: "The example only shows the structure the tool expects. The champions, games and winrates in it are made up and belong to no real player.",
+
+    // Tournament Scout — stats import: import routes & automatic fetch
+    scout_import_modeLabel: "Import route",
+    scout_import_mode_manual_paste: "Copy and paste",
+    scout_import_mode_source_links: "Open the sources",
+    scout_import_autoFetchTitle: "Automatic fetch",
+    scout_import_autoFetchUnavailable: "Reading {source} out directly is not reliably possible in the browser.",
+    scout_import_autoFetchSummary: "None of the four sites — OP.GG, League of Graphs, DeepLoL, DPM — can be read from the browser: anti-bot protection, no public endpoint, no access from another site. So the honest route is: open the page, copy the champion stats, paste them here.",
+    scout_import_openSourcesTitle: "Open the sources",
+
+    // Tournament Scout — stats import: detected layout & columns
+    scout_import_layoutLabel: "Detected format",
+    scout_import_layout_tabular_with_header: "Table with a header row",
+    scout_import_layout_tabular_no_header: "Table without a header row",
+    scout_import_layout_loose_lines: "Loose lines without fixed columns",
+    scout_import_layout_unrecognized: "Format not recognised",
+    scout_import_columnsDetected: "Columns detected: {columns}",
+    scout_import_column_champion: "Champion",
+    scout_import_column_games: "Games",
+    scout_import_column_winrate: "Winrate",
+    scout_import_column_kda: "KDA",
+    scout_import_column_cs: "CS",
+    scout_import_column_csPerMin: "CS/min",
+    scout_import_column_killParticipation: "KP",
+    scout_import_column_damage: "Damage",
+    scout_import_column_role: "Role",
+
+    // Tournament Scout — stats import: preview & apply
+    scout_import_previewTitle: "Preview",
+    scout_import_previewHint: "This is how the rows would land on this player. Nothing is saved before you confirm below — take out whatever does not fit first.",
+    scout_import_previewEmpty: "Nothing detected yet. Paste the champion stats above and run the detection.",
+    scout_import_rowsDetected: "Rows detected: {count}",
+    scout_import_selectAll: "Select all",
+    scout_import_selectNone: "Select none",
+    scout_import_rowInclude: "Take this row",
+    scout_import_rowMissing: "not stated",
+    scout_import_row_detectedRole: "Source says: {role}",
+    scout_import_row_appliedRole: "Recorded as: {role}",
+    scout_import_row_unknownChampion: "Not in the champion catalogue",
+    scout_import_confidenceLabel: "Detection confidence",
+    scout_import_applyModeLabel: "Apply as",
+    scout_import_applyMode_append: "Append",
+    scout_import_applyMode_replace: "Replace the rows of this role",
+    scout_import_applyModeHint: "Append leaves the existing rows standing. If a row for the same champion in the same role is already there, it takes the imported numbers — it is updated rather than added a second time, otherwise the champion would count twice and skew the ban priority. Replace instead throws away every existing row of this player in the selected role and puts the imported ones in their place. Rows in other roles are left untouched either way.",
+    scout_import_applyButton: "Apply to scouting data",
+    scout_import_applied: "{count} champion rows applied.",
+    scout_import_applyBlocked: "Not ready to apply yet: pick the role above and select at least one row.",
+    scout_import_unparsedTitle: "Unrecognised lines",
+    scout_import_unparsedHint: "These lines were not read as a stat row and stay out. Usually that is page furniture — if a champion is hiding in one, add it by hand.",
+
+    // Tournament Scout — stats import: why a line was not parsed
+    scout_import_unparsed_header: "Header row detected and skipped.",
+    scout_import_unparsed_no_champion: "No champion name found in the line.",
+    scout_import_unparsed_no_numbers: "No numbers found in the line — without games or winrate it is not a stat row.",
+    scout_import_unparsed_noise: "Looks like page content that came along — navigation, ads or footer.",
+
+    // Tournament Scout — stats import: warnings (scout_import_warning_<code>)
+    scout_import_warning_empty_input: "The input field is empty. Copy the champion stats from the open page and paste them here.",
+    scout_import_warning_no_rows_detected: "There is no recognisable stat row in the pasted text. Copy the champion table including its numbers — prose alone is not enough.",
+    scout_import_warning_header_not_recognized: "The header row was not recognised. Copy it along and the column mapping is settled.",
+    scout_import_warning_columns_guessed: "With no header row recognised, the columns were guessed from the shape of the values — percent signs as winrate, whole numbers as games. Check the preview before you apply.",
+    scout_import_warning_unknown_champion: "“{champion}” is not in the champion catalogue — check the spelling. Otherwise the row is taken over exactly as it stands.",
+    scout_import_warning_missing_games: "No games count for {champion} was in the pasted text. It is not guessed — without it the row cannot be applied.",
+    scout_import_warning_missing_winrate: "No winrate for {champion} was in the pasted text. It is not guessed — without it the row cannot be applied.",
+    scout_import_warning_value_out_of_range: "A value on {champion} is outside what is allowed — a winrate above 100, for instance. Check the row in the preview.",
+    scout_import_warning_duplicate_champion: "{champion} appears more than once in the pasted text. Take only one of the rows, otherwise the champion counts twice.",
+    scout_import_warning_role_mismatch: "The source says {detectedRole}, but the rows are recorded as {selectedRole}. Your choice wins — nothing is overwritten silently.",
+    scout_import_warning_row_not_parsed: "At least one line was not read as a stat row. What was skipped is listed under the unrecognised lines.",
+    scout_import_warning_source_mismatch: "The text looks like {detected}, but {selected} is selected. Correct the source so it stays traceable later where the numbers came from.",
+
+    // Tournament Scout — stats import: OP.GG raw copy of the champions page
+    scout_import_layout_opgg_raw_champion_page: "Raw copy of the OP.GG champions page — the values sit line by line underneath each other instead of in columns.",
+    scout_import_warning_winrate_mismatch: "For {champion} OP.GG states {stated}%, but the wins and losses work out to {computed}%. The OP.GG value is the one taken over — nothing is corrected silently here. Have a look at the row.",
+    scout_import_unparsed_matchup_row: "A “vs …” line: a matchup inside one champion, not a row of the champion pool in its own right. Skipped.",
+    scout_import_unparsed_recommended_champion: "A champion from the recommendation area at the top of the page. That is a suggestion from OP.GG, not a played statistic — so it is not taken over.",
+    scout_import_unparsed_aggregate_row: "The summary row “All Champions”: a total across every champion, not a single champion.",
+    scout_import_opggHowTo: "OP.GG: open the profile, switch to the “Champions” tab, select everything from “All Champions” downwards, copy it and paste it here. The rest of the page may come along — whatever is not a champion row is listed separately below.",
+    scout_import_opggRawDetected: "OP.GG raw copy of the champions page detected",
+    scout_import_opggRawChampions: "{count} champions detected.",
+    scout_import_opggRawRoleNote: "The OP.GG champion list names no reliable role per champion. So every row taken over gets the role you picked above — none is guessed.",
+
+    // Tournament Scout — stats import: compact skipped summary
+    scout_import_unparsed_page_noise: "A pure structure or separator line of the page — a “-”, a dash or a decorative marker without any data in it. It is kept out of the preview and only shown here under “Show details”.",
+    scout_import_skippedTitle: "Skipped",
+    scout_import_skippedAggregate: "The summary row “All Champions” was ignored — it is a total across every champion and not a single champion.",
+    scout_import_skippedMatchups: "{count} matchup blocks ignored — they belong to a champion but are not rows of the champion pool in their own right.",
+    scout_import_skippedRecommended: "{count} recommended champions ignored — suggestions from OP.GG, not played statistics.",
+    // DELIBERATELY WITHOUT {count}: the counter behind it only sees separators at
+    // a block-start position, not every hidden line. So the sentence states no
+    // number rather than a wrong one — see ScoutStatsImportPanel.
+    scout_import_skippedNoise: "Pure separator and structure lines of the page were hidden — they carry no data.",
+    scout_import_skippedDetails: "Show details",
 }

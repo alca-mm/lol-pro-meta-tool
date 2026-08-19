@@ -268,7 +268,43 @@ export interface ScoutPlayer extends ScoutPlayerIdentity {
   sources: ScoutSourceRef[]
 }
 
-/** Where a manually entered champion row came from. */
+/**
+ * Where a champion row for a player came from — the provenance a user reads
+ * back weeks later when deciding how far to trust a number.
+ *
+ * The four {@link ScoutSourceKind} values are the scouting sites, `"manual"`
+ * means "typed in from memory", and `"other"` means "from somewhere this app
+ * does not model" (it is also the fallback for anything unreadable).
+ *
+ * NOTE the deliberate asymmetry with {@link ScoutImportSourceKind}: that type
+ * has an `"unknown"` member, this one does not. `"unknown"` is a legitimate
+ * *parser* answer, never a legitimate stored provenance.
+ *
+ * ---------------------------------------------------------------------------
+ * REMOVED MEMBER `"riot"` — HISTORY, SO NOBODY RESTORES IT BY REFLEX.
+ * A seventh member `"riot"` existed briefly, for rows fetched through the
+ * optional Riot auto-import (a backend proxy). That import was deliberately
+ * removed on 2026-08-19 — see the closing note at the end of section 9 — and
+ * with nothing able to produce such a row any more, the member would only
+ * offer a provenance no user can honestly claim.
+ *
+ * A row already stored with `source: "riot"` is NOT lost. `readManualSource()`
+ * in src/scout/storage.ts degrades every value outside this union to `"other"`,
+ * so champion, games, winrate, note, role and recency all survive untouched and
+ * only the provenance *label* changes to "other source". That is a LABEL LOSS,
+ * NOT A DATA LOSS, and it is the wanted behaviour.
+ *
+ * {@link SCOUT_SCHEMA_VERSION} therefore stays at 2. The full argument is on
+ * `readManualSource()`; in short, the version gate in `normalizeScoutState()`
+ * rejects anything *higher* than a build understands and falls back to an EMPTY
+ * state — so a bump would trade one mislabelled source chip for the total loss
+ * of the scout data in every still-open older tab.
+ * ---------------------------------------------------------------------------
+ *
+ * ADDITIVE ONLY — every member maps mechanically to a `scout_source_<value>`
+ * i18n key via `scoutSourceKey()` in src/components/scout/scoutUiHelpers.ts,
+ * so a rename is a compile error there, and a removal orphans stored rows.
+ */
 export type ScoutManualSource = ScoutSourceKind | "manual" | "other"
 
 /**
@@ -1136,3 +1172,792 @@ export type ScoutState = ScoutStateV2
  * {@link ScoutState}; nothing else should accept a `ScoutStateV1`.
  */
 export type AnyScoutState = ScoutStateV1 | ScoutStateV2
+
+/* ==========================================================================
+ * 9. Stats import (paste a champion table, review it, then apply it)
+ *
+ * WHAT THIS SECTION MODELS
+ * The user opens a scouting site in a second tab, selects the champion table
+ * of ONE player for ONE role, copies it, and pastes it into the scout. The
+ * import parses that text into reviewable rows, shows what it understood and
+ * what it did not, and only turns the rows the user confirms into ordinary
+ * `ManualChampionEntry` records.
+ *
+ * WHY THIS IS STILL "MANUAL" DATA UNDER RULE (A)
+ * Nothing here fetches anything. The text arrives because a human copied it,
+ * exactly like typing the numbers by hand — only faster and with fewer typos.
+ * The parser therefore reports what the text *said*, never what it thinks the
+ * text meant: a column it could not find stays `null` (see
+ * {@link ScoutImportRow}), a line it could not read is kept verbatim in
+ * `unparsedLines` instead of being dropped, and every judgement it makes is
+ * attached to the row as a machine-readable {@link ScoutImportWarning} rather
+ * than being silently applied.
+ *
+ * NO SCHEMA BUMP — {@link SCOUT_SCHEMA_VERSION} STAYS AT 2, AND THAT IS CORRECT
+ * There is nothing new to persist:
+ *  - applying an import produces plain {@link ManualChampionEntry} rows that go
+ *    into the existing `ScoutStateV2.playerData`. A saved state after an import
+ *    has byte-for-byte the same shape as one the user typed by hand — an older
+ *    build reading it sees rows it already understands.
+ *  - the import panel's own state (the selected role, the pasted text, the
+ *    parsed preview, the chosen source/recency, the apply mode) is transient UI
+ *    state and is deliberately NOT persisted: a half-reviewed paste is not a
+ *    scouting result, and restoring one after a reload would re-present
+ *    unconfirmed numbers as if the user had accepted them.
+ * So there is no new persisted field, no new version and therefore no migration
+ * branch. Do not bump the version "to be safe" — a bump without a matching
+ * `ScoutStateV*` and a migration branch in `normalizeScoutState()` is exactly
+ * what makes existing users lose their scout data.
+ *
+ * ADDITIVE ONLY, LIKE {@link ScoutReasonCode}: {@link ScoutImportWarningCode},
+ * {@link ScoutImportUnparsedReason}, {@link ScoutImportColumn} and
+ * {@link ScoutImportLayout} each map mechanically onto an i18n key
+ * (`scout_import_warning_<code>`, `scout_import_unparsed_<reason>`,
+ * `scout_import_column_<column>`, `scout_import_layout_<layout>` in
+ * src/i18n/de.ts + en.ts). Never remove or rename a member — the key lookup is
+ * typed, so a rename becomes a compile error in the i18n layer instead of a
+ * silent hole in the UI. New members go at the end.
+ * ========================================================================== */
+
+/**
+ * The role the user picks *before* pasting — the whole point of the feature.
+ *
+ * DECISION — {@link ScoutLineupSlot}, NOT {@link ScoutRole}:
+ * `ScoutRole` carries `"unknown"`, and "unknown" is not something a user can
+ * choose. Importing is an explicit statement ("this table is the enemy
+ * support's champion pool"), so the type must not offer a way to import
+ * role-less data. This is the requirement itself: a Karma table copied from a
+ * support/mid profile must never end up scored as a jungle threat. The five
+ * real roles are the only legal answers, and
+ * {@link ScoutImportRoleMatchesDomainRole} keeps that set tied to the domain
+ * `Role`.
+ *
+ * Derived, never retyped — same reasoning as {@link ScoutLineupSlot} itself.
+ */
+export type ScoutImportRole = ScoutLineupSlot
+
+/**
+ * Compile-time guard: the importable roles are exactly the five domain roles —
+ * no more (nothing role-less sneaks in) and no fewer (a new domain role must be
+ * importable too). Same tuple-wrapped both-directions check as
+ * {@link ScoutLineupSlotMatchesDomainRole}; purely type-level, no runtime cost.
+ */
+export type ScoutImportRoleMatchesDomainRole = Assert<
+  [Role] extends [ScoutImportRole] ? ([ScoutImportRole] extends [Role] ? true : false) : false
+>
+
+/**
+ * Which site a pasted block appears to come from.
+ *
+ * `"unknown"` is a first-class answer, not a failure: the layouts of the four
+ * supported sites overlap heavily once the text is stripped of markup, and
+ * claiming "this is OP.GG" from a coincidence would put a wrong provider into
+ * `ManualChampionEntry.source` — a value the user later reads as provenance.
+ * When detection is not conclusive the importer says `"unknown"` and lets the
+ * user pick; {@link ScoutStatsImportOptions.source} is the user's override, and
+ * a disagreement between the two is reported as `source_mismatch`, never
+ * resolved silently.
+ */
+export type ScoutImportSourceKind = ScoutSourceKind | "unknown"
+
+/**
+ * The overall shape the importer recognised in the pasted text.
+ *
+ * - `tabular_with_header` columns plus a header row it could read — the only
+ *                         case where the column mapping is certain.
+ * - `tabular_no_header`   consistent columns, but no header: the mapping was
+ *                         inferred from value shapes and ships with
+ *                         `columns_guessed`.
+ * - `loose_lines`         one champion per line, values scattered in prose
+ *                         (`"Karma 34 games 61% WR"`). Best-effort, per line.
+ * - `unrecognized`        nothing table-like was found. `rows` is empty and the
+ *                         input is preserved in `unparsedLines` — the importer
+ *                         never returns a plausible-looking empty success.
+ * - `opgg_raw_champion_page`
+ *                         the raw copy of the OP.GG summoner **Champions** page
+ *                         — the user selects from "Alle Champions" downwards and
+ *                         pastes that.
+ *
+ * ADDITIVE ONLY — i18n key `scout_import_layout_<layout>`, built by
+ * `scoutImportLayoutKey()` in src/components/scout/scoutImportHelpers.ts, so a
+ * new member requires a matching `scout_import_layout_*` key in src/i18n/de.ts
+ * + en.ts (a missing key is a compile error there, not a hole in the UI). New
+ * members go at the end.
+ *
+ * ---------------------------------------------------------------------------
+ * `opgg_raw_champion_page` IS THE ONE LAYOUT THAT IS NOT MADE OF COLUMNS.
+ *
+ * The other four all describe a *table*: values sit side by side on one line and
+ * the importer's job is to map positions onto {@link ScoutImportColumn}s. A
+ * browser copy of the OP.GG champions page loses every column boundary, so the
+ * values arrive one per line, as a repeating block:
+ *
+ *     1
+ *     Ahri
+ *     Ahri
+ *     36S
+ *     36N
+ *     50%
+ *     2.60:1
+ *
+ * It is therefore recognised by a **line-block pattern**, never by a column
+ * mapping, and {@link ScoutStatsImportResult.columns} stays empty for it exactly
+ * as it does for `loose_lines`. This is also why {@link ScoutImportColumn} is
+ * NOT extended for this layout: there is no column to name.
+ * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * NOT A SCRAPER — READ THIS BEFORE "AUTOMATING" IT.
+ * This layout exists **solely because a human copied something and pasted it**.
+ * Nothing is requested, nothing is fetched, no page is loaded, no markup is
+ * read. The name mentions OP.GG only to describe the *shape of a text the user
+ * already has in their clipboard*.
+ *
+ * Turning this into "the tool fetches the page itself" means building a
+ * scraper, and that is ruled out in this project — see `SCOUT_DIRECT_FETCH_INFO`
+ * in src/scout/sources.ts, which records per provider *why* a direct read from
+ * the browser is not available (no public API, no CORS, bot protection, brittle
+ * ToS-sensitive HTML). {@link ScoutAutoFetchStatus} renders exactly that
+ * statement in the UI. A parser for pasted text does not weaken it.
+ * ---------------------------------------------------------------------------
+ *
+ * A member `"riot_api"` existed while the Riot auto-import did; it was
+ * removed with it on 2026-08-19 (see the closing note at the end of this
+ * section). Every value left here answers "what shape did the pasted text
+ * have?", which is the only question there is once nothing is fetched.
+ */
+export type ScoutImportLayout =
+  | "tabular_with_header"
+  | "tabular_no_header"
+  | "loose_lines"
+  | "unrecognized"
+  | "opgg_raw_champion_page"
+
+/**
+ * A column the importer claims to have identified, in the canonical order of
+ * {@link SCOUT_IMPORT_COLUMNS}.
+ *
+ * This is a *report*, not a schema: {@link ScoutStatsImportResult.columns} says
+ * which columns were found, so the preview can label what it shows and the user
+ * can see at a glance that, say, `winrate` was never located. Columns that have
+ * no home on {@link ManualChampionEntry} (`kda`, `cs`, `csPerMin`,
+ * `killParticipation`, `damage`, `role`) are still parsed and still shown —
+ * they are what makes a misread table obvious to a human reviewer — but they do
+ * not invent new persisted fields.
+ *
+ * `cs` and `csPerMin` are separate members on purpose: sites print either an
+ * absolute creep score or a per-minute rate, and treating one as the other
+ * would turn `7.8` into `7.8 CS` (or `212` into `212 CS/min`). Only `csPerMin`
+ * has a home on {@link ScoutImportRow}; a `cs` column is reported as found but
+ * never silently converted, because converting needs a game length nobody
+ * pasted.
+ *
+ * ADDITIVE ONLY — i18n key `scout_import_column_<column>`.
+ */
+export type ScoutImportColumn =
+  | "champion"
+  | "games"
+  | "winrate"
+  | "kda"
+  | "cs"
+  | "csPerMin"
+  | "killParticipation"
+  | "damage"
+  | "role"
+
+/**
+ * THE canonical column order for the preview table, the column-mapping UI and
+ * the tests. One constant instead of an array per consumer — the same reasoning
+ * as {@link SCOUT_LINEUP_SLOTS}: three independently declared orders is how
+ * three subtly different tables end up on screen.
+ *
+ * Order is champion first (the identity of the row), then the two columns that
+ * decide whether a row is applicable at all (`games`, `winrate`), then the
+ * informational ones, then `role` last (it does not describe performance, it
+ * describes provenance).
+ */
+export const SCOUT_IMPORT_COLUMNS = [
+  "champion",
+  "games",
+  "winrate",
+  "kda",
+  "cs",
+  "csPerMin",
+  "killParticipation",
+  "damage",
+  "role",
+] as const satisfies readonly ScoutImportColumn[]
+
+/** Compile-time guard: the tuple above lists *every* {@link ScoutImportColumn}. */
+export type ScoutImportColumnsAreComplete = Assert<
+  [ScoutImportColumn] extends [(typeof SCOUT_IMPORT_COLUMNS)[number]] ? true : false
+>
+
+/**
+ * Why the importer is unhappy about something it parsed. Machine-readable, so
+ * the UI translates it and the importer never emits a sentence (rule B).
+ *
+ * - `empty_input`            nothing was pasted (or only whitespace).
+ * - `no_rows_detected`       text was present but no champion row came out.
+ * - `header_not_recognized`  a header-looking line was found but not understood.
+ * - `columns_guessed`        the column mapping was inferred, not read — the
+ *                            honest counterpart of `tabular_no_header`.
+ * - `unknown_champion`       the name did not resolve against
+ *                            src/analysis/championCatalog.ts. The row is kept
+ *                            with `championResolved: false`; it is never
+ *                            auto-corrected to the nearest catalog entry.
+ * - `missing_games`          no games value — the row cannot be applied as is.
+ * - `missing_winrate`        no winrate value — same consequence.
+ * - `value_out_of_range`     a number parsed but is impossible (negative games,
+ *                            winrate outside 0–100, kill participation > 100).
+ *                            Reported, not clamped: a clamp would turn a
+ *                            misparse into a plausible-looking fact.
+ * - `duplicate_champion`     the same champion appears twice in one paste.
+ * - `role_mismatch`          the row's own role contradicts the role the user
+ *                            selected — see {@link ScoutImportRow.detectedRole}.
+ * - `row_not_parsed`         a line looked like a row but could not be turned
+ *                            into one (it also appears in `unparsedLines`).
+ * - `source_mismatch`        the detected source and the user-selected source
+ *                            disagree.
+ * - `winrate_mismatch`       the paste states a winrate that does not match the
+ *                            one implied by its own win/loss counts — see the
+ *                            rule below.
+ *
+ * ---------------------------------------------------------------------------
+ * THE `winrate_mismatch` RULE — THE PARSER MUST IMPLEMENT EXACTLY THIS.
+ * The OP.GG raw champion page prints a win count, a loss count *and* a rounded
+ * winrate ("36S / 36N / 50%"). The three can disagree, because the site rounds
+ * and because a copy can span a table that updated between two of its columns.
+ * Three separate decisions follow, and none of them may be softened:
+ *
+ *  1. `games` ALWAYS comes from `wins + losses`. Two counted integers are the
+ *     more load-bearing number; a rounded percentage is not evidence of a game
+ *     count. Never reconstruct games from the winrate.
+ *  2. `winrate` is TAKEN FROM THE PASTE UNCHANGED. It is never quietly replaced
+ *     by `wins / (wins + losses) * 100`, and it is never rounded, clamped or
+ *     "corrected". Rewriting it would present the tool's arithmetic as
+ *     something the source said (rule A at the top of this file).
+ *  3. When the recomputed winrate differs from the stated one by more than a
+ *     plausible rounding difference, THIS WARNING IS RAISED and the row is kept
+ *     as it is. The user decides what to do about it — the tool states the
+ *     disagreement, it does not resolve it.
+ *
+ * `params`:
+ *  - `champion` the champion the row is about,
+ *  - `stated`   the winrate OP.GG printed (percent 0–100),
+ *  - `computed` the winrate recomputed from `wins`/`losses` (percent 0–100).
+ * Both numbers travel so the UI can show them side by side; the message text
+ * itself lives in i18n, never here (rule B).
+ * ---------------------------------------------------------------------------
+ *
+ * ADDITIVE ONLY — i18n key `scout_import_warning_<code>`.
+ */
+export type ScoutImportWarningCode =
+  | "empty_input"
+  | "no_rows_detected"
+  | "header_not_recognized"
+  | "columns_guessed"
+  | "unknown_champion"
+  | "missing_games"
+  | "missing_winrate"
+  | "value_out_of_range"
+  | "duplicate_champion"
+  | "role_mismatch"
+  | "row_not_parsed"
+  | "source_mismatch"
+  | "winrate_mismatch"
+
+/**
+ * One import caveat. Shaped exactly like {@link ScoutWarning} (same `severity`
+ * ladder, same `params` type) so the UI can render both with one component; it
+ * anchors to a row rather than to a player, because at parse time no player id
+ * is involved yet — the target player is chosen when the result is applied.
+ *
+ * `severity` convention — the authoritative table is `WARNING_SEVERITY` in
+ * src/scout/statsImport.ts; this is what it means:
+ *  - `info`    = "nothing is wrong, this is just what happened"
+ *                (`empty_input`, `row_not_parsed`, `source_mismatch`)
+ *  - `warning` = "check this before you apply it"
+ *                (`columns_guessed`, `header_not_recognized`, `no_rows_detected`,
+ *                 `unknown_champion`, `role_mismatch`, `duplicate_champion`,
+ *                 `value_out_of_range`, `winrate_mismatch`)
+ *  - `danger`  = "this row cannot be applied at all"
+ *                (`missing_games`, `missing_winrate`)
+ *
+ * TWO PLACEMENTS THAT LOOK WRONG AND ARE NOT — do not "fix" them back:
+ *  - `empty_input` is `info`, NOT `danger`. It fires while the paste box is
+ *    still empty, i.e. before the user has done anything. A red alert on an
+ *    untouched field trains people to ignore red alerts.
+ *  - `columns_guessed` is `warning`, NOT `info`. No header was recognised, so
+ *    which number is "games" and which is "winrate" was inferred from the shape
+ *    of the values. That is precisely the case where the preview has to be read
+ *    before applying — an `info` pill would undersell a real chance of a
+ *    silently swapped column.
+ */
+export interface ScoutImportWarning {
+  code: ScoutImportWarningCode
+  severity: "info" | "warning" | "danger"
+  params?: ScoutReasonParams
+  /** Index into {@link ScoutStatsImportResult.rows}; absent for whole-paste warnings. */
+  rowIndex?: number
+  /** Champion the warning is about, when one is known. Raw name, not resolved. */
+  championName?: string
+}
+
+/**
+ * Why a pasted line produced no row. Same job as {@link UnparsedLineReason} on
+ * the link-parser side: the importer must never swallow input silently.
+ *
+ * - `header`       recognised as the table header, intentionally not a row.
+ * - `no_champion`  no champion-like token in the line.
+ * - `no_numbers`   a champion was found but the line carried no numbers.
+ * - `noise`        UI chrome copied along with the table (pagination, filter
+ *                  labels, "show more", ad text).
+ * - `matchup_row`  a `vs <Champion>` line out of a matchup sub-block: an
+ *                  opponent matchup *inside* one champion's section, not a
+ *                  champion-pool row of the scouted player.
+ * - `recommended_champion`
+ *                  a champion out of the recommendation area at the top of the
+ *                  page ("Empfohlene Champions" / "Recommended champions").
+ * - `aggregate_row`
+ *                  the "Alle Champions" / "All champions" summary line.
+ * - `page_noise`   a pure STRUCTURE OR SEPARATOR line of the page: `-`, `–`,
+ *                  `—`, a run of hyphens, `_`, `•`, `·`, `|`, `/`, or any mix
+ *                  of them. It carries NO DATA CONTENT and describes NO
+ *                  DECISION — it is the dash a site prints where a column is
+ *                  empty.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE LAST THREE ARE OWN CATEGORIES AND NOT JUST `noise`.
+ * `noise` says "something was thrown away and we cannot tell you what". For a
+ * paste of a whole OP.GG champions page that would be most of the input, and the
+ * preview could then only report a number. The honesty rule (A) at the top of
+ * this file works line by line: a line never disappears without a word, and the
+ * preview must be able to say *what* was skipped and how much of it — "18
+ * matchup lines, 5 recommended champions, 1 total row" instead of "24 lines
+ * ignored". A user who sees their champion counted as "recommended" learns
+ * immediately that they copied the wrong part of the page; a user who only sees
+ * "noise" learns nothing and blames the parser.
+ *
+ * Each of them is skipped for its own, different reason:
+ *  - `matchup_row` is real data about the *opponent*, not about the scouted
+ *    player's pool. Importing it would attribute enemy champions to them.
+ *  - `recommended_champion` IS THE DANGEROUS ONE: those entries are OP.GG's own
+ *    SUGGESTIONS, not games anybody played. They carry no honest sample at all,
+ *    so importing them would fabricate scouting data out of a site's
+ *    recommendation widget — precisely what rule (A) forbids.
+ *  - `aggregate_row` is a sum over every champion, not a champion. Applied as a
+ *    row it would create a phantom champion with the player's whole game count.
+ * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * WHY `page_noise` IS ITS OWN CATEGORY AND NOT `noise` — AND NOT ONE OF THE
+ * THREE ABOVE EITHER.
+ *
+ * `noise` says: "this line looked like it might be data and turned out not to
+ * be." That is a statement worth reading, and it is why `noise` still raises
+ * `row_not_parsed`. `page_noise` says: "that was a dash." OP.GG prints a bare
+ * `-` in every column it has no value for, so a single copied profile carries
+ * DOZENS of them. Listed one by one they bury the two or three lines the user
+ * actually has to look at, and they turn `row_not_parsed` into a warning that
+ * fires on every ordinary paste — which is how a user learns to ignore it.
+ * The UI therefore COUNTS `page_noise` instead of listing it.
+ *
+ * It is deliberately NOT folded into `aggregate_row` / `matchup_row` /
+ * `recommended_champion`: each of those describes a DECISION the parser made
+ * about real content ("these numbers are the opponent's", "this is the site's
+ * suggestion, not a game anybody played"). A separator carries no content to
+ * decide about, so grouping it with them would dilute exactly the three
+ * statements the preview exists to make.
+ *
+ * IT BELONGS IN `DELIBERATE_NON_ROW_REASONS` (src/scout/statsImport.ts) and
+ * therefore raises NO `row_not_parsed` — same reasoning as the table header
+ * and the aggregate row: a line every well-formed paste of its kind contains
+ * must not produce a permanent warning.
+ *
+ * CONSERVATIVE BY CONSTRUCTION: the character class behind it
+ * (`isPageNoiseLine` in src/scout/statsImport.ts) contains no letter and no
+ * digit, so `-5`, `A-` and `36S` can never match it. Wrongly hiding a line
+ * that carried something is worse than showing one line too many, so anything
+ * in doubt stays `noise`.
+ *
+ * A BARE `vs` BADGE IS NOT PAGE NOISE. It stays `matchup_row`, because "a
+ * matchup sub-block starts here" is a real decision about the lines that
+ * follow, not a decoration.
+ * ---------------------------------------------------------------------------
+ *
+ * ADDITIVE ONLY — i18n key `scout_import_unparsed_<reason>`. New members go at
+ * the end.
+ */
+export type ScoutImportUnparsedReason =
+  | "header"
+  | "no_champion"
+  | "no_numbers"
+  | "noise"
+  | "matchup_row"
+  | "recommended_champion"
+  | "aggregate_row"
+  | "page_noise"
+
+/** A pasted line that produced no row, kept verbatim for user review. */
+export interface ScoutImportUnparsedLine {
+  /** The original line, trimmed. Never normalised beyond trimming. */
+  raw: string
+  reason: ScoutImportUnparsedReason
+}
+
+/**
+ * One parsed champion row, *before* it becomes scout data.
+ *
+ * DECISION — WHY EVERY NUMBER HERE IS `| null` WHILE
+ * `ManualChampionEntry.games` / `.winrate` ARE PLAIN NUMBERS:
+ * These two types answer different questions. A `ScoutImportRow` describes what
+ * a foreign text *contained*; a `ManualChampionEntry` describes a fact the user
+ * has accepted into their scouting data. A column the paste did not contain has
+ * no value, and the honest representation of that is `null` — never a `0`, and
+ * never an average or a carried-over neighbour value. A `0` here would be
+ * indistinguishable from a real "0 games" / "0 % winrate" and would flow
+ * straight into a threat score.
+ *
+ * The bridge between the two is {@link ScoutImportApplyOptions}: a row whose
+ * `games` or `winrate` is `null` is NOT APPLICABLE and must be filtered out
+ * before an entry is built (it carries `missing_games` / `missing_winrate` at
+ * `danger` severity and counts into {@link ScoutImportApplyResult.skipped}).
+ * That is precisely why `ManualChampionEntry` can keep its two plain numbers:
+ * a row that cannot supply them never becomes an entry in the first place.
+ * The remaining fields (`kda`, `csPerMin`, `killParticipation`, `damage`) have
+ * no home on `ManualChampionEntry` at all — they exist so the reviewer can see
+ * that the right table was parsed, and are dropped on apply.
+ */
+export interface ScoutImportRow {
+  /**
+   * Deterministic row id: `"row-"` plus the 0-based index of the row in
+   * {@link ScoutStatsImportResult.rows}.
+   *
+   * Deterministic for the same reason as {@link ScoutPlayerId}: React keys,
+   * per-row selection state, warning anchors
+   * ({@link ScoutImportWarning.rowIndex}) and the tests must all agree, and
+   * re-parsing the same text twice must yield the same ids. Never
+   * `Math.random()`, never `Date.now()`, never a counter that survives across
+   * parses.
+   */
+  id: string
+  /** The original line this row came from, trimmed. Shown next to the parse. */
+  raw: string
+  /**
+   * Champion name as it appeared, or the catalog spelling once it resolved.
+   * Never blank — a line without a champion is an unparsed line, not a row.
+   */
+  championName: string
+  /**
+   * `true` when `championName` matched src/analysis/championCatalog.ts.
+   * `false` keeps the row visible and applicable-with-a-warning rather than
+   * dropping it: catalogs lag behind new releases, and losing a row the user
+   * can plainly see in their paste would be the same silent data loss
+   * {@link ScoutRemovedPlayer} exists to prevent. It never triggers a fuzzy
+   * auto-correction.
+   */
+  championResolved: boolean
+  /**
+   * Games behind the winrate, or `null` when the paste had no games column.
+   *
+   * THE LEADING FIELD, AND IT STAYS THAT WAY. For the
+   * `opgg_raw_champion_page` layout it is `wins + losses`; for every other
+   * layout it comes from the games column exactly as before. A consumer that
+   * only reads `games` keeps working unchanged — which is the whole reason
+   * `wins`/`losses` below were added *next to* it instead of replacing it.
+   */
+  games: number | null
+  /**
+   * Wins behind the winrate, or `null` when the paste did not state them.
+   *
+   * `null`, NEVER `0`. `0` means "zero wins", `null` means "the text did not
+   * say" — the same distinction every other nullable field on this type makes.
+   * Only the `opgg_raw_champion_page` layout prints separate win/loss counts;
+   * every other layout leaves both `wins` and `losses` at `null` and keeps
+   * getting its `games` from the games column.
+   *
+   * NOT PERSISTED: {@link ManualChampionEntry} deliberately does not gain these
+   * two fields. Persistence keeps storing `games` + `winrate`, so an applied
+   * import still produces byte-for-byte the same entry shape an older build
+   * understands — {@link SCOUT_SCHEMA_VERSION} stays at 2 and there is no
+   * migration. The win/loss split is preview information; if it should survive
+   * the apply, it belongs in the language-neutral
+   * {@link ManualChampionEntry.note} (e.g. `"36W/36L"`), never in a new field.
+   */
+  wins: number | null
+  /**
+   * Losses behind the winrate, or `null` when the paste did not state them.
+   * Same rules as {@link ScoutImportRow.wins} in every respect — in particular
+   * `null` rather than `0`, and not persisted.
+   */
+  losses: number | null
+  /**
+   * Winrate in **percent, 0–100** — the same unit as {@link WinratePercent} and
+   * {@link ManualChampionEntry.winrate}, because percent is what every source
+   * prints and what the user is looking at while pasting. `null` when absent.
+   *
+   * NEVER a domain fraction 0–1 (`ChampionStats.winRate` and friends in
+   * src/domain/types.ts use that unit). A `"0.61"` read out of a paste is a
+   * misparse to report via `value_out_of_range`, not a fraction to multiply by
+   * 100 — guessing the unit is how 61 % silently becomes 0.61 %.
+   *
+   * TAKEN FROM THE PASTE UNCHANGED, even when `wins`/`losses` imply a different
+   * number. The disagreement is reported as `winrate_mismatch` (see
+   * {@link ScoutImportWarningCode}) and left for the user to judge; it is never
+   * recomputed away.
+   */
+  winrate: WinratePercent | null
+  /** KDA ratio as printed (e.g. `3.4`), or `null`. Review aid only. */
+  kda: number | null
+  /** Creep score per minute, or `null`. An absolute CS column is not converted. */
+  csPerMin: number | null
+  /** Kill participation in **percent, 0–100**, or `null`. Same unit rule as `winrate`. */
+  killParticipation: number | null
+  /** Damage figure as printed (absolute or per minute, unconverted), or `null`. */
+  damage: number | null
+  /**
+   * The role this row *claims*, read out of the pasted text (a role column, a
+   * position icon's alt text, a heading). `"unknown"` — hence {@link ScoutRole},
+   * not {@link ScoutImportRole} — whenever the text says nothing, which is the
+   * common case.
+   *
+   * INVARIANT: this NEVER overrides the role the user selected. It exists to
+   * contradict the user out loud, not behind their back: when it is neither
+   * `"unknown"` nor equal to {@link ScoutStatsImportOptions.role}, the row gets
+   * `roleMismatch: true` plus a `role_mismatch` warning, and the user decides.
+   * The applied {@link ManualChampionEntry.role} is *always*
+   * {@link ScoutImportApplyOptions.role}.
+   */
+  detectedRole: ScoutRole
+  /**
+   * `true` exactly when `detectedRole` is not `"unknown"` and differs from the
+   * selected import role. Precomputed so the UI does not re-derive the
+   * comparison per render and reach a different answer.
+   */
+  roleMismatch: boolean
+  /**
+   * How much trust this single row deserves: `high` for a fully mapped row from
+   * a recognised header, down to `none` for a row where nothing but a champion
+   * name survived. `none` means "we have no basis", not "a bit weak" — the same
+   * reading as everywhere else in this file (see {@link ScoutConfidence}).
+   */
+  confidence: ScoutConfidence
+  /** Row-scoped warnings; the same objects also appear in the result's list. */
+  warnings: ScoutImportWarning[]
+}
+
+/**
+ * Everything one paste produced. Returned by the parser, rendered as the
+ * preview, and never persisted.
+ *
+ * Honest by construction: `rows` and `unparsedLines` together account for every
+ * non-empty line of the input, so "we understood 12 of 17 lines" is a statement
+ * the UI can make truthfully instead of showing 12 rows and implying that was
+ * all there was.
+ */
+export interface ScoutStatsImportResult {
+  /** Parsed rows in input order. Ids follow that order (`row-0`, `row-1`, …). */
+  rows: ScoutImportRow[]
+  /** Every non-empty input line that produced no row. Never silently dropped. */
+  unparsedLines: ScoutImportUnparsedLine[]
+  layout: ScoutImportLayout
+  /**
+   * Columns the importer believes it identified, in {@link SCOUT_IMPORT_COLUMNS}
+   * order and deduped. Empty for the `unrecognized` layout, for `loose_lines`
+   * and for `opgg_raw_champion_page` — in all three no column structure exists
+   * to report (see {@link ScoutImportLayout}).
+   */
+  columns: ScoutImportColumn[]
+  /** What the text looks like it came from; `"unknown"` when not conclusive. */
+  detectedSource: ScoutImportSourceKind
+  /**
+   * Whole-paste warnings plus every row warning (row-scoped ones keep their
+   * `rowIndex`). One flat list so the UI can render a single summary without
+   * walking all rows; the duplication with {@link ScoutImportRow.warnings} is
+   * intentional and cheap.
+   */
+  warnings: ScoutImportWarning[]
+  /** Aggregate confidence over the whole paste, not the maximum over rows. */
+  confidence: ScoutConfidence
+}
+
+/**
+ * Inputs to the parse step.
+ *
+ * `role` is required and deliberately not defaulted: the importer must not be
+ * callable without the user having answered "which role is this table?".
+ */
+export interface ScoutStatsImportOptions {
+  /** The role the user selected before pasting — see {@link ScoutImportRole}. */
+  role: ScoutImportRole
+  /**
+   * The source the user says this is. Optional: when omitted the importer only
+   * reports its own `detectedSource`. When supplied and different from what was
+   * detected, the *user's* choice wins for the applied entries and the
+   * disagreement is reported as `source_mismatch` — the parser never overrides
+   * an explicit human statement about provenance.
+   */
+  source?: ScoutImportSourceKind
+}
+
+/**
+ * What applying an import does to the rows a player already has.
+ *
+ * - `append`  THE DEFAULT. New rows are added; existing rows stay untouched.
+ *             Nothing the user typed before can be lost by importing.
+ * - `replace` Replaces the player's existing rows **of the imported role
+ *             only** — the rows whose {@link ManualChampionEntry.role} equals
+ *             {@link ScoutImportApplyOptions.role}. Rows of every other role,
+ *             and rows with `role: "unknown"`, are kept.
+ *
+ * CONTRACT FOR THE IMPLEMENTER — `replace` is role-scoped, never global.
+ * Importing a fresh support table must not delete the mid data the user
+ * collected for the same player; that would be exactly the silent loss
+ * {@link ScoutRemovedPlayer} was introduced to stop. `"unknown"`-role rows are
+ * kept too: they were never claimed to belong to the imported role, so
+ * replacing that role says nothing about them.
+ */
+export type ScoutImportApplyMode = "append" | "replace"
+
+/**
+ * The user's decisions at the moment they press "apply". Everything here is
+ * required — applying is the step where guessing is least acceptable.
+ */
+export interface ScoutImportApplyOptions {
+  /**
+   * The role every produced entry gets. Authoritative: it overrides
+   * {@link ScoutImportRow.detectedRole} in all cases, including rows with
+   * `roleMismatch: true` that the user chose to apply anyway.
+   */
+  role: ScoutImportRole
+  /**
+   * Provenance written to {@link ManualChampionEntry.source}. A
+   * {@link ScoutManualSource}, not a {@link ScoutImportSourceKind}: `"unknown"`
+   * is a legitimate *parser* answer but not a legitimate stored provenance —
+   * the honest stored value for "pasted from somewhere unidentified" is
+   * `"other"`, which already exists.
+   */
+  source: ScoutManualSource
+  /** How current the pasted numbers are. The user states it; never read off a clock. */
+  recency: ScoutRecency
+  /** See {@link ScoutImportApplyMode}. `append` is the default the UI preselects. */
+  mode: ScoutImportApplyMode
+}
+
+/**
+ * The outcome of applying an import — a report, not a mutation log.
+ *
+ * `entries` is the player's **complete resulting** `ManualChampionEntry[]`
+ * (existing rows merged with the applied ones according to
+ * {@link ScoutImportApplyMode}), so the caller assigns it to
+ * `ScoutPlayerData.entries` without re-implementing the merge.
+ *
+ * The three counters exist so the UI can say what actually happened instead of
+ * "import successful": `added + replaced + skipped` accounts for every row that
+ * was offered. `skipped` is the honest half — it counts rows that could not
+ * become entries (missing `games` / `winrate`, see {@link ScoutImportRow}) or
+ * that the user deselected.
+ */
+export interface ScoutImportApplyResult {
+  /** The player's full entry list after the merge, ready to store. */
+  entries: ManualChampionEntry[]
+  /** Rows that became new entries. */
+  added: number
+  /** Existing entries removed by this apply (`replace` mode, same role only). */
+  replaced: number
+  /** Rows deliberately not applied. Never reported as zero just because it looks nicer. */
+  skipped: number
+}
+
+/**
+ * How champion data can reach the scout. Reported by the import panel so the UI
+ * can state, per mode, what is possible *today* rather than offering a button
+ * that quietly does nothing.
+ *
+ * - `manual_paste`  implemented: this section — the user copies a champion
+ *                   table out of a second browser tab and pastes it here.
+ * - `source_links`  implemented: the generated profile links the user opens in
+ *                   a second tab (see {@link ScoutSourceRef}). Not a fetch.
+ *
+ * THERE IS NO THIRD MODE, AND THAT IS A DECISION, NOT AN OMISSION: a
+ * `"riot_api"` member existed while the optional Riot auto-import did, and was
+ * removed with it on 2026-08-19 (closing note at the end of this section).
+ * Why the four scouting sites cannot simply be fetched instead is stated, per
+ * provider, by {@link ScoutAutoFetchStatus} — that type is the reason this
+ * feature is a copy/paste flow at all.
+ */
+export type ScoutImportMode = "manual_paste" | "source_links"
+
+/** Canonical mode order for the import panel. Same reasoning as {@link SCOUT_IMPORT_COLUMNS}. */
+export const SCOUT_IMPORT_MODES = [
+  "manual_paste",
+  "source_links",
+] as const satisfies readonly ScoutImportMode[]
+
+/** Compile-time guard: the tuple above lists *every* {@link ScoutImportMode}. */
+export type ScoutImportModesAreComplete = Assert<
+  [ScoutImportMode] extends [(typeof SCOUT_IMPORT_MODES)[number]] ? true : false
+>
+
+/**
+ * Per-provider "can this be fetched automatically?" line, rendered inside the
+ * import panel next to each source link.
+ *
+ * WHY THIS EXISTS NEXT TO {@link ScoutDirectFetchInfo} — IT IS A VIEW, NOT A
+ * SECOND TRUTH: `ScoutDirectFetchInfo` is the adapter layer's statement and
+ * lives in `SCOUT_DIRECT_FETCH_INFO` (src/scout/sources.ts), which stays the
+ * only place those facts are recorded. This type is what the import panel
+ * renders, and every instance of it is **derived from that map** — `supported`
+ * is `supportedInBrowser`, `status` / `reason` / `publicApi` are carried
+ * through unchanged. It is named for the question the UI asks ("is auto-fetch
+ * available for this source?") and deliberately adds nothing and drops nothing,
+ * so a future provider change stays a one-line edit in
+ * `SCOUT_DIRECT_FETCH_INFO` that reaches the UI automatically. Never hard-code
+ * a value here: two independently maintained answers to "is OP.GG fetchable?"
+ * is precisely the drift this feature's honesty rule cannot afford.
+ */
+export interface ScoutAutoFetchStatus {
+  kind: ScoutSourceKind
+  /** Mirrors `ScoutDirectFetchInfo.supportedInBrowser` — `false` for all four today. */
+  supported: boolean
+  status: ScoutSourceStatus
+  reason: ScoutFetchBlockedCode
+  publicApi: ScoutPublicApiState
+}
+
+/* --------------------------------------------------------------------------
+ * CLOSING NOTE OF SECTION 9 — THE REMOVED RIOT AUTO-IMPORT (2026-08-19)
+ *
+ * There was, for a short while, an optional Riot auto-import: a section 10 in
+ * this file plus an adapter that talked to a backend proxy, which held the Riot
+ * API key server-side and returned aggregated champion rows. It was REMOVED ON
+ * PURPOSE on 2026-08-19. It did not rot away and it was not lost in a merge —
+ * it was taken out deliberately, at the product owner's request. Nothing here
+ * is "missing".
+ *
+ * WHY: the app must not depend on a Riot API key, on an edge function, on a
+ * user login or on any proxy configuration. Everything this tool does has to
+ * keep working from a static bundle on a public domain, for a user who
+ * configured nothing. An optional feature that is unavailable in every default
+ * deployment carries real cost — types, i18n keys, UI states, tests — for a
+ * path almost nobody can take.
+ *
+ * WHAT SURVIVES, AND WHY NONE OF IT IS A LEFTOVER:
+ *  - The whole manual copy/paste import above. It was never part of the Riot
+ *    path; the fetch merely fed the *same* preview.
+ *  - {@link ScoutAutoFetchStatus}. NOT a remnant: it carries the honest,
+ *    per-provider statement that OP.GG, League of Graphs, DeepLoL and DPM
+ *    cannot be read from a browser (no public API, no CORS, bot protection).
+ *    That statement is exactly what justifies a copy/paste flow existing at
+ *    all, and it is derived from `SCOUT_DIRECT_FETCH_INFO` in
+ *    src/scout/sources.ts, which has nothing to do with Riot.
+ *  - {@link ScoutManualSource} keeps six members; the seventh, `"riot"`, is
+ *    gone. A row a local build already stored with it degrades to `"other"` on
+ *    load without losing a single number — see the note on that type.
+ *
+ * IF IT IS EVER WANTED AGAIN: build it NEW and ADDITIVELY — its own proxy, its
+ * own types, its own review of what a key, a login and a shared rate budget
+ * imply. Do not resurrect fragments of the removed version, and do not assume
+ * any of the vocabulary above was shaped for a fetch; it was not.
+ * -------------------------------------------------------------------------- */

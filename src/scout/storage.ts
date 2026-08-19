@@ -153,6 +153,18 @@ const SCOUT_ROLES: ReadonlySet<string> = new Set<string>([
 
 const SCOUT_RECENCIES: ReadonlySet<string> = new Set<string>(["current", "recent", "old"])
 
+/**
+ * Every legal {@link ScoutManualSource}, as a runtime set.
+ *
+ * The four site kinds are spread in from `SCOUT_SOURCE_KINDS` rather than
+ * retyped, so a new provider reaches this guard by itself.
+ *
+ * `"riot"` is deliberately NOT in here any more: it was the provenance of a row
+ * fetched through the optional Riot auto-import, which was removed on
+ * 2026-08-19. A stored `"riot"` row therefore takes the ordinary unknown-value
+ * path of `readManualSource()` below - which is exactly what it should do, and
+ * which is spelled out there.
+ */
 const MANUAL_SOURCES: ReadonlySet<string> = new Set<string>([
   ...SCOUT_SOURCE_KINDS,
   "manual",
@@ -263,6 +275,39 @@ function readRecency(value: unknown): ScoutRecency {
  * Manual-entry provenance from a closed set. Unknown values become `"other"`
  * ("a source this app does not model") rather than `"manual"`, which would
  * claim the number was typed in from memory.
+ *
+ * ---------------------------------------------------------------------------
+ * LEGACY VALUE `"riot"` LANDS HERE ON PURPOSE, AND {@link SCOUT_SCHEMA_VERSION}
+ * STAYS AT 2.
+ *
+ * `ScoutManualSource` briefly carried a seventh member, `"riot"`, written by
+ * the optional Riot auto-import (a backend proxy). That import was removed on
+ * 2026-08-19 and the member with it - see the closing note of section 9 in
+ * src/scout/types.ts. It never shipped in a public build, so the only browser
+ * that can hold such a row is one that ran the auto-import locally.
+ *
+ * Such a row is NOT rejected and NOT dropped. It is unknown, so it degrades to
+ * `"other"` right here, and that is the wanted behaviour:
+ *
+ *  - no crash: the loader has always treated provenance as a closed set with a
+ *    fallback, and one more value outside the set changes nothing;
+ *  - NO DATA LOSS: championName, games, winrate, note, role and recency are
+ *    read by their own guards and survive untouched. The row stays visible,
+ *    stays editable and stays scoreable by `analyzeScout()`;
+ *  - the only thing that changes is the provenance *label*, from "Riot API" to
+ *    "other source". A LABEL LOSS, NOT A DATA LOSS.
+ *
+ * WHY BUMPING THE SCHEMA VERSION WOULD BE ACTIVELY HARMFUL HERE.
+ * The version gate in `normalizeScoutState()` rejects any state whose
+ * `schemaVersion` is *higher* than this build understands and falls back to an
+ * EMPTY state. Nothing about the persisted *shape* changed - removing a member
+ * from a string union adds no field, removes no field and needs no migration -
+ * so a bump would buy nothing and cost everything: it would trade one
+ * mislabelled source chip for the total loss of that user's scouted players in
+ * every tab still running the previous bundle. A bump also demands a new
+ * `ScoutStateV*` plus a migration branch, and there is neither, because there
+ * is nothing to migrate. Do not "bump it to be safe".
+ * ---------------------------------------------------------------------------
  */
 function readManualSource(value: unknown): ScoutManualSource {
   return typeof value === "string" && MANUAL_SOURCES.has(value)

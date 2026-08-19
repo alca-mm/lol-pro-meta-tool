@@ -121,6 +121,28 @@ export const SCOUT_ROLE_VALUES: readonly ScoutRole[] = [
 
 export const SCOUT_RECENCY_VALUES: readonly ScoutRecency[] = ["current", "recent", "old"]
 
+/**
+ * Provenance values in display order - this *is* the order of the source
+ * dropdown in the data editor.
+ *
+ * ORDER IS PART OF THE CONTRACT: users pick a source by position, and a
+ * dropdown whose entries move under the cursor between two releases is how a
+ * row ends up labelled with the wrong source. These six have never moved.
+ *
+ * A seventh value, `"riot"`, was appended here while the optional Riot
+ * auto-import existed and was removed with it on 2026-08-19 (see the closing
+ * note of section 9 in src/scout/types.ts). It was the LAST entry, so dropping
+ * it left the other six exactly where they were. Offering it now would let a
+ * user claim a provenance nothing in this build can produce; a row still stored
+ * with it degrades to `"other"` on load, keeping every number and losing only
+ * the label (`readManualSource()` in src/scout/storage.ts).
+ *
+ * ADDITIVE ONLY, and complete: every value maps through {@link scoutSourceKey}
+ * to a `scout_source_<value>` key, and tests/scoutUiHelpers.test.ts resolves the
+ * whole list against both languages, so a member without a translation fails
+ * there (and, because the return type is `TranslationKey`, already at compile
+ * time).
+ */
 export const SCOUT_MANUAL_SOURCE_VALUES: readonly ScoutManualSource[] = [
   "opgg",
   "leagueofgraphs",

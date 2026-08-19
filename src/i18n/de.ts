@@ -657,4 +657,135 @@ export const de = {
     scout_resetConfirm: "Wirklich alles zurücksetzen? Eingabe, erkannte Spieler und Scout-Daten gehen verloren.",
     scout_error_noInput: "Bitte zuerst Links oder Spielerzeilen einfügen.",
     scout_error_unrecognized: "Aus der Eingabe konnte kein Spieler gelesen werden. Prüfe die Links oder nutze das Format Name#TAG.",
+
+    // Tournament Scout — Stats-Import: Panel-Rahmen
+    scout_import_title: "Stats-Import",
+    scout_import_hint: "Hol die Champion-Stats eines Spielers in einem Rutsch herein: Rolle festlegen, Quelle öffnen, Tabelle kopieren, hier einfügen. Das Tool erkennt die Zeilen und legt sie dir zur Kontrolle vor, bevor irgendetwas übernommen wird.",
+    scout_import_honesty: "Nichts wird automatisch von OP.GG, League of Graphs, DeepLoL oder DPM geholt — eine Browser-App darf das nicht, und die Seiten lassen es nicht zu. Nichts wird geschätzt und nichts hochgerechnet: Fehlt ein Wert im eingefügten Text, bleibt er leer. Gerechnet wird ausschließlich mit dem, was du hier übernommen hast.",
+    scout_import_step_player: "1. Spieler wählen",
+    scout_import_step_role: "2. Rolle festlegen",
+    scout_import_step_source: "3. Quelle öffnen",
+    scout_import_step_paste: "4. Stats einfügen",
+    scout_import_step_preview: "5. Vorschau prüfen und übernehmen",
+
+    // Tournament Scout — Stats-Import: Spieler & Link
+    scout_import_playerLabel: "Spieler",
+    scout_import_playerPlaceholder: "Spieler auswählen",
+    scout_import_playerNone: "Noch keine Spieler erkannt. Füge oben Links oder Spielerzeilen ein und starte die Erkennung — danach kannst du hier für jeden Spieler Stats importieren.",
+    scout_import_linkLabel: "Profil-Link oder Riot-ID",
+    scout_import_linkPlaceholder: "https://www.op.gg/summoners/euw/Spieler-EUW  oder  Spieler#EUW",
+    scout_import_linkButton: "Spieler übernehmen",
+    scout_import_linkResolved: "Erkannt: {player}",
+    scout_import_linkAdded: "{player} wurde zur Spielerliste hinzugefügt.",
+    scout_import_linkNotResolved: "Daraus ließ sich kein Spieler lesen. Nutze einen vollständigen Profil-Link oder das Format Name#TAG.",
+
+    // Tournament Scout — Stats-Import: Rolle, Quelle, Aktualität
+    scout_import_roleLabel: "Rolle",
+    scout_import_roleHint: "Die Rolle wird vor dem Import festgelegt, nicht danach. Sonst landen Zahlen aus einer anderen Lane als Bedrohung auf dieser: Karma aus 40 Support-Games wäre plötzlich ein Jungle-Ban. Alle Zeilen aus diesem Import werden der hier gewählten Rolle zugeordnet.",
+    scout_import_roleRequired: "Ohne Rolle kein Import — wähle zuerst die Rolle, auf der dieser Spieler antritt.",
+    scout_import_sourceLabel: "Quelle",
+    scout_import_sourceHint: "Halte fest, woher die Zahlen stammen. Das ändert nichts an der Wertung, macht aber später nachvollziehbar, was du wo abgelesen hast.",
+    scout_import_source_unknown: "Quelle unbekannt / nicht angegeben",
+    scout_import_recencyLabel: "Aktualität",
+
+    // Tournament Scout — Stats-Import: Paste-Feld
+    scout_import_pasteLabel: "Champion-Stats einfügen",
+    scout_import_pasteHint: "Markiere auf der geöffneten Seite die Champion-Tabelle und füge sie hier ein. Die Kopfzeile darf mit dabei sein, überflüssige Zeilen stören nicht — was keine Stat-Zeile ist, wird unten getrennt aufgelistet.",
+    scout_import_pastePlaceholder: "Champion\tGames\tWin Rate\tKDA\nLee Sin\t24\t62%\t3.1\nViego\t18\t55%\t2.8",
+    scout_import_parseButton: "Zeilen erkennen",
+    scout_import_clearButton: "Eingabe leeren",
+    scout_import_exampleButton: "Beispiel einfügen",
+    scout_import_exampleHint: "Das Beispiel zeigt nur die Struktur, die das Tool erwartet. Champions, Games und Winrates darin sind erfunden und stammen von keinem echten Spieler.",
+
+    // Tournament Scout — Stats-Import: Importwege & automatischer Abruf
+    scout_import_modeLabel: "Importweg",
+    scout_import_mode_manual_paste: "Kopieren und einfügen",
+    scout_import_mode_source_links: "Quellen öffnen",
+    scout_import_autoFetchTitle: "Automatischer Abruf",
+    scout_import_autoFetchUnavailable: "Direktes Auslesen von {source} ist im Browser nicht zuverlässig möglich.",
+    scout_import_autoFetchSummary: "Keine der vier Seiten — OP.GG, League of Graphs, DeepLoL, DPM — lässt sich aus dem Browser heraus auslesen: Anti-Bot-Schutz, keine öffentliche Schnittstelle, kein Zugriff von einer fremden Seite aus. Deshalb der ehrliche Weg: Seite öffnen, Champion-Stats kopieren, hier einfügen.",
+    scout_import_openSourcesTitle: "Quellen öffnen",
+
+    // Tournament Scout — Stats-Import: erkanntes Format & Spalten
+    scout_import_layoutLabel: "Erkanntes Format",
+    scout_import_layout_tabular_with_header: "Tabelle mit Kopfzeile",
+    scout_import_layout_tabular_no_header: "Tabelle ohne Kopfzeile",
+    scout_import_layout_loose_lines: "Freie Zeilen ohne feste Spalten",
+    scout_import_layout_unrecognized: "Format nicht erkannt",
+    scout_import_columnsDetected: "Erkannte Spalten: {columns}",
+    scout_import_column_champion: "Champion",
+    scout_import_column_games: "Games",
+    scout_import_column_winrate: "Winrate",
+    scout_import_column_kda: "KDA",
+    scout_import_column_cs: "CS",
+    scout_import_column_csPerMin: "CS/min",
+    scout_import_column_killParticipation: "KP",
+    scout_import_column_damage: "Schaden",
+    scout_import_column_role: "Rolle",
+
+    // Tournament Scout — Stats-Import: Vorschau & Übernahme
+    scout_import_previewTitle: "Vorschau",
+    scout_import_previewHint: "So würden die Zeilen bei diesem Spieler landen. Gespeichert wird nichts, bevor du unten bestätigst — nimm vorher raus, was nicht passt.",
+    scout_import_previewEmpty: "Noch nichts erkannt. Füge oben die Champion-Stats ein und starte die Erkennung.",
+    scout_import_rowsDetected: "Erkannte Zeilen: {count}",
+    scout_import_selectAll: "Alle auswählen",
+    scout_import_selectNone: "Auswahl aufheben",
+    scout_import_rowInclude: "Zeile übernehmen",
+    scout_import_rowMissing: "keine Angabe",
+    scout_import_row_detectedRole: "Quelle sagt: {role}",
+    scout_import_row_appliedRole: "Wird übernommen als: {role}",
+    scout_import_row_unknownChampion: "Nicht im Champion-Katalog",
+    scout_import_confidenceLabel: "Erkennungssicherheit",
+    scout_import_applyModeLabel: "Übernahme",
+    scout_import_applyMode_append: "Ergänzen",
+    scout_import_applyMode_replace: "Zeilen dieser Rolle ersetzen",
+    scout_import_applyModeHint: "Ergänzen lässt die vorhandenen Zeilen stehen. Steht für denselben Champion in derselben Rolle schon eine Zeile, bekommt sie die importierten Zahlen — sie wird also aktualisiert, nicht ein zweites Mal angelegt, sonst zählte der Champion doppelt und die Ban-Priorität wäre verfälscht. Ersetzen wirft stattdessen alle bisherigen Zeilen dieses Spielers in der gewählten Rolle weg und setzt die importierten an ihre Stelle. Zeilen anderer Rollen bleiben in beiden Fällen unangetastet.",
+    scout_import_applyButton: "In Scout-Daten übernehmen",
+    scout_import_applied: "Übernommen: {count} Champion-Zeilen.",
+    scout_import_applyBlocked: "Noch nicht übernehmbar: Wähle oben die Rolle und mindestens eine Zeile aus.",
+    scout_import_unparsedTitle: "Nicht erkannte Zeilen",
+    scout_import_unparsedHint: "Diese Zeilen wurden nicht als Stat-Zeile gelesen und bleiben außen vor. Meist ist das Beiwerk der Seite — steckt doch ein Champion darin, trage ihn von Hand nach.",
+
+    // Tournament Scout — Stats-Import: Gründe für nicht erkannte Zeilen
+    scout_import_unparsed_header: "Kopfzeile erkannt und übersprungen.",
+    scout_import_unparsed_no_champion: "Kein Championname in der Zeile gefunden.",
+    scout_import_unparsed_no_numbers: "Keine Zahlen in der Zeile gefunden — ohne Games oder Winrate ist es keine Stat-Zeile.",
+    scout_import_unparsed_noise: "Sieht nach mitkopiertem Seiteninhalt aus — Navigation, Werbung oder Fußzeile.",
+
+    // Tournament Scout — Stats-Import: Warnungen (scout_import_warning_<code>)
+    scout_import_warning_empty_input: "Das Eingabefeld ist leer. Kopiere die Champion-Stats von der geöffneten Seite und füge sie hier ein.",
+    scout_import_warning_no_rows_detected: "Im eingefügten Text steckt keine erkennbare Stat-Zeile. Kopiere die Champion-Tabelle mitsamt Zahlen — Fließtext allein reicht nicht.",
+    scout_import_warning_header_not_recognized: "Die Kopfzeile wurde nicht erkannt. Kopiere sie mit, dann steht die Spaltenzuordnung fest.",
+    scout_import_warning_columns_guessed: "Ohne erkannte Kopfzeile wurden die Spalten aus der Form der Werte geraten — Prozentzeichen als Winrate, ganze Zahlen als Games. Prüfe die Vorschau, bevor du übernimmst.",
+    scout_import_warning_unknown_champion: "„{champion}“ steht nicht im Champion-Katalog — prüfe die Schreibweise. Die Zeile wird sonst genau so übernommen, wie sie dasteht.",
+    scout_import_warning_missing_games: "Für {champion} stand keine Games-Zahl im eingefügten Text. Sie wird nicht geraten — ohne sie lässt sich die Zeile nicht übernehmen.",
+    scout_import_warning_missing_winrate: "Für {champion} stand keine Winrate im eingefügten Text. Sie wird nicht geraten — ohne sie lässt sich die Zeile nicht übernehmen.",
+    scout_import_warning_value_out_of_range: "Bei {champion} liegt ein Wert außerhalb des Erlaubten — etwa eine Winrate über 100. Prüfe die Zeile in der Vorschau.",
+    scout_import_warning_duplicate_champion: "{champion} kommt im eingefügten Text mehrfach vor. Übernimm nur eine der Zeilen, sonst zählt der Champion doppelt.",
+    scout_import_warning_role_mismatch: "Die Quelle nennt {detectedRole}, übernommen wird aber {selectedRole}. Deine Auswahl gilt — still überschrieben wird nichts.",
+    scout_import_warning_row_not_parsed: "Mindestens eine Zeile wurde nicht als Stat-Zeile gelesen. Was übersprungen wurde, steht unter den nicht erkannten Zeilen.",
+    scout_import_warning_source_mismatch: "Der Text sieht nach {detected} aus, ausgewählt ist aber {selected}. Korrigiere die Quelle, damit später nachvollziehbar bleibt, woher die Zahlen kommen.",
+
+    // Tournament Scout — Stats-Import: OP.GG Roh-Copy der Champions-Seite
+    scout_import_layout_opgg_raw_champion_page: "Roh kopierte OP.GG-Champions-Seite — die Werte stehen zeilenweise untereinander statt in Spalten.",
+    scout_import_warning_winrate_mismatch: "Für {champion} nennt OP.GG {stated}%, aus Siegen und Niederlagen ergeben sich aber {computed}%. Übernommen wird der Wert von OP.GG — still korrigiert wird hier nichts. Sieh dir die Zeile an.",
+    scout_import_unparsed_matchup_row: "Eine „vs …“-Zeile: ein Matchup innerhalb eines Champions, keine eigene Zeile des Championpools. Wird übersprungen.",
+    scout_import_unparsed_recommended_champion: "Ein Champion aus dem Empfehlungsbereich oben auf der Seite. Das ist ein Vorschlag von OP.GG, keine gespielte Statistik — deshalb nicht übernommen.",
+    scout_import_unparsed_aggregate_row: "Die Summenzeile „Alle Champions“: ein Gesamtwert über alle Champions, kein einzelner Champion.",
+    scout_import_opggHowTo: "OP.GG: Profil öffnen, auf den Reiter „Champions“ wechseln, den Bereich ab „Alle Champions“ markieren, kopieren und hier einfügen. Der Rest der Seite darf mit dabei sein — was keine Champion-Zeile ist, wird unten getrennt aufgeführt.",
+    scout_import_opggRawDetected: "OP.GG Roh-Copy der Champions-Seite erkannt",
+    scout_import_opggRawChampions: "{count} Champions erkannt.",
+    scout_import_opggRawRoleNote: "Die OP.GG-Championliste nennt keine verlässliche Rolle pro Champion. Deshalb bekommen alle übernommenen Zeilen die Rolle, die du oben ausgewählt hast — geraten wird keine.",
+
+    // Tournament Scout — Stats-Import: kompakte Übersprungen-Summary
+    scout_import_unparsed_page_noise: "Eine reine Struktur- oder Trennzeichen-Zeile der Seite — ein „-“, ein Gedankenstrich oder ein dekorativer Marker ohne jeden Dateninhalt. Sie steht nicht in der Vorschau, sondern nur hier unter „Details anzeigen“.",
+    scout_import_skippedTitle: "Übersprungen",
+    scout_import_skippedAggregate: "Die Summenzeile „Alle Champions“ wurde ignoriert — sie ist ein Gesamtwert über alle Champions und kein einzelner Champion.",
+    scout_import_skippedMatchups: "{count} Matchup-Blöcke ignoriert — sie gehören zu einem Champion, sind aber keine eigenen Zeilen des Championpools.",
+    scout_import_skippedRecommended: "{count} empfohlene Champions ignoriert — Vorschläge von OP.GG, keine gespielten Statistiken.",
+    // BEWUSST OHNE {count}: der Zähler dahinter erfasst nur Trennzeichen an einer
+    // Blockstart-Position, nicht jede ausgeblendete Zeile. Der Satz nennt deshalb
+    // keine Anzahl, statt eine falsche zu behaupten — siehe ScoutStatsImportPanel.
+    scout_import_skippedNoise: "Reine Trennzeichen- und Strukturzeilen der Seite wurden ausgeblendet — sie tragen keine Daten.",
+    scout_import_skippedDetails: "Details anzeigen",
 } as const

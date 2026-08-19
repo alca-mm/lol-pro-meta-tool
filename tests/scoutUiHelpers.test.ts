@@ -385,17 +385,19 @@ describe("SCOUT_EXAMPLE_INPUT", () => {
     // The reason the block was NOT moved into src/i18n: it is parser input, and
     // this is the check that keeps it honest after any rename.
     //
-    // Roles are NOT asserted here, and that is not an oversight: a *leading*
-    // role word is deliberately not consumed by `parseRiotIdChunk()` (a name
-    // like "Jungle Diff#EUW" is the more common shape), so "Bot: Name#EUW"
-    // parses as a player called "Bot: Name" with role `unknown`. That was
-    // already true of the previous German block — the rename changed nothing
-    // about it.
+    // The roles ARE asserted: the block teaches the "Bot: Name#EUW" and
+    // "Support Name#EUW" syntax in the visible textarea, and `parseRiotIdChunk()`
+    // consumes a leading role label since 2026-08-18. An example that no longer
+    // produces the role it advertises is a bug in the example, not a detail.
     const result = parseScoutInput(SCOUT_EXAMPLE_INPUT)
 
     expect(result.players.length).toBe(5)
     expect(result.unparsedLines).toEqual([])
     expect(result.duplicatesMerged).toBe(0)
+
+    const roleByName = new Map(result.players.map((player) => [player.riotName, player.role]))
+    expect(roleByName.get("DemoBot")).toBe("bot")
+    expect(roleByName.get("DemoSupport")).toBe("support")
   })
 })
 
@@ -1368,5 +1370,51 @@ describe("buildScoutExportText with a lineup", () => {
     expect(text).not.toMatch(/\b(onrole_signal|offrole_signal|substitute_risk|sub1)\b/)
     // Role codes must be translated, never printed raw.
     expect(text).not.toMatch(/\bjungle\b/)
+  })
+})
+/* ==========================================================================
+ * 10. The source dropdown after the Riot auto-import was removed
+ *
+ * `ScoutManualSource` briefly carried a seventh member, `"riot"`, added with
+ * the optional Riot auto-import. That import was removed on 2026-08-19, and
+ * the member with it: with nothing able to produce a fetched row any more, an
+ * option labelled "Riot API" in the source dropdown would offer a provenance
+ * the user cannot honestly claim.
+ *
+ * Two things have to hold, and neither is covered by the generic "every union
+ * value resolves" test above:
+ *  - `"riot"` is really gone from the list the editor offers;
+ *  - removing it did not disturb the six values that were there before it. The
+ *    array *is* the visual order of the select, and a dropdown whose entries
+ *    move between releases is how a row ends up tagged with the wrong source.
+ *
+ * A stored `"riot"` row is not this file's problem: `readManualSource()` in
+ * src/scout/storage.ts degrades it to `"other"` on load, keeping every number
+ * and losing only the label (see section 19 of tests/scoutStorage.test.ts).
+ * ========================================================================== */
+
+describe("SCOUT_MANUAL_SOURCE_VALUES without riot", () => {
+  it("does not offer riot any more", () => {
+    expect(SCOUT_MANUAL_SOURCE_VALUES).not.toContain("riot")
+  })
+
+  it("keeps the six remaining values in unchanged order", () => {
+    // Spelled out as a literal on purpose: deriving the expectation from the
+    // implementation would make this assertion true by construction and stop it
+    // catching exactly the reordering it exists to catch.
+    expect(SCOUT_MANUAL_SOURCE_VALUES).toEqual([
+      "opgg",
+      "leagueofgraphs",
+      "deeplol",
+      "dpm",
+      "manual",
+      "other",
+    ])
+    expect(SCOUT_MANUAL_SOURCE_VALUES).toHaveLength(6)
+  })
+
+  it("still ends on other, the fallback a legacy riot row degrades to", () => {
+    expect(SCOUT_MANUAL_SOURCE_VALUES[SCOUT_MANUAL_SOURCE_VALUES.length - 1]).toBe("other")
+    expect(scoutSourceKey("other")).toBe("scout_source_other")
   })
 })

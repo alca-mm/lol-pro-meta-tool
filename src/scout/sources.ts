@@ -28,9 +28,12 @@
  *   this module emits exactly one canonical shape per host.
  */
 
+import { SCOUT_IMPORT_MODES } from "./types"
 import type {
+  ScoutAutoFetchStatus,
   ScoutDirectFetchInfo,
   ScoutFetchBlockedCode,
+  ScoutImportMode,
   ScoutPlayerIdentity,
   ScoutPublicApiState,
   ScoutRegion,
@@ -483,37 +486,50 @@ function directFetchInfo(
  * Why each provider is not read directly. Machine-readable on purpose: the UI
  * translates `reason`/`publicApi`, so this file contains no user-facing prose.
  *
- * State of research (checked 2026-08-18, deliberately conservative — an
- * unverified claim counts as blocked):
+ * State of research (first checked 2026-08-18, **re-verified 2026-08-19** for
+ * the stats-import feature; deliberately conservative — an unverified claim
+ * counts as blocked). The re-check matters because the import panel now renders
+ * `reason` per provider: a wrong code here is a false statement on screen.
  *
- *  - OP.GG — profile pages send no `Access-Control-Allow-Origin`, and the old
- *    internal host `lol-web-api.op.gg` no longer resolves. The only official
- *    programmatic offering found is an MCP server (`mcp-api.op.gg`), which is
- *    server-to-server, not browser-callable. → `anti_bot_protection` /
- *    `none_documented`.
- *  - League of Graphs — every stats page answers 403 behind a Cloudflare
- *    managed challenge; robots.txt disallows `/api/*` and `/api/` returns 404
- *    without CORS headers. → `anti_bot_protection` / `none_documented`.
- *  - DeepLoL — its private frontend backend (`b2c-api-cdn.deeplol.gg`) *does*
- *    answer cross-origin simple GETs with `access-control-allow-origin: *`
- *    (e.g. a summoner lookup and a per-champion stats endpoint). It is
- *    undocumented, unversioned, not covered by any ToS, and its OPTIONS
- *    preflight is rejected, so any non-simple request fails. This is therefore
- *    recorded as a *possible future adapter*, not used here.
+ *  - OP.GG — profile pages answer 200 (nginx). A request carrying an `Origin`
+ *    header comes back with **zero** `access-control-*` headers, and no
+ *    Cloudflare challenge was observed — so the blocker is CORS, not bot
+ *    protection. (2026-08-18 recorded `anti_bot_protection`; that was the wrong
+ *    code for the same underlying fact.) The old internal host
+ *    `lol-web-api.op.gg` still does not resolve. There *is* one documented
+ *    programmatic offering — the official OP.GG MCP server (`mcp-api.op.gg`) —
+ *    but it is server-to-server and sends no CORS headers either, which is
+ *    exactly what `documented_no_cors` describes.
+ *    → `cors_blocked` / `documented_no_cors`.
+ *  - League of Graphs — unchanged: every stats page answers 403 behind a
+ *    Cloudflare managed challenge (`cf-mitigated: challenge`); robots.txt
+ *    disallows `/api/*` and the summoner stat pages.
+ *    → `anti_bot_protection` / `none_documented`.
+ *  - DeepLoL — unchanged: its private frontend backend
+ *    (`b2c-api-cdn.deeplol.gg`) *does* answer cross-origin simple GETs with
+ *    `access-control-allow-origin: *`. It is undocumented, unversioned, not
+ *    covered by any ToS, and its OPTIONS preflight is rejected, so any
+ *    non-simple request fails. Recorded as a *possible future adapter*, and
+ *    deliberately NOT used — `supportedInBrowser` stays `false`.
  *    → `undocumented_private_api` / `undocumented_cors_ok`.
- *  - DPM.LOL — no public API documentation, no `Access-Control-Allow-Origin`,
- *    data is delivered through Next.js server components. → `no_public_api` /
- *    `none_documented`.
+ *  - DPM.LOL — **changed since 2026-08-18**: the site now sits behind
+ *    Cloudflare. Root, profile pages, `/pro/…` and even `sitemap-all.xml`
+ *    answer 403 with `cf-mitigated: challenge` (reproduced twice). The previous
+ *    `no_public_api` is no longer the *first* thing that blocks a fetch — a
+ *    challenge is — and the panel should say so.
+ *    → `anti_bot_protection` / `none_documented`.
  *
  * If any of these ever ships a documented, CORS-enabled endpoint, the correct
  * change is a new adapter implementing `fetchSnapshot`, plus flipping the entry
- * here — not a scraper.
+ * here — not a scraper. Note that `supportedInBrowser` is `false` for all four
+ * regardless of `reason`: changing a reason code never changes what the app
+ * does, only what it honestly says about *why*.
  */
 export const SCOUT_DIRECT_FETCH_INFO: Readonly<Record<ScoutSourceKind, ScoutDirectFetchInfo>> = {
-  opgg: directFetchInfo("opgg", "anti_bot_protection", "none_documented"),
+  opgg: directFetchInfo("opgg", "cors_blocked", "documented_no_cors"),
   leagueofgraphs: directFetchInfo("leagueofgraphs", "anti_bot_protection", "none_documented"),
   deeplol: directFetchInfo("deeplol", "undocumented_private_api", "undocumented_cors_ok"),
-  dpm: directFetchInfo("dpm", "no_public_api", "none_documented"),
+  dpm: directFetchInfo("dpm", "anti_bot_protection", "none_documented"),
 }
 
 /** Honest per-provider statement about direct fetching. */
@@ -564,4 +580,83 @@ export function getScoutSourceAdapter(kind: ScoutSourceKind): ScoutSourceAdapter
   const adapter = SCOUT_SOURCE_ADAPTERS[kind]
   if (!adapter) throw new Error(`Unknown scout source kind: ${String(kind)}`)
   return adapter
+}
+
+/* ==========================================================================
+ * 6. Auto-fetch status + offerable import modes (views, never a second truth)
+ *
+ * WHERE THIS SECTION COMES FROM
+ * These four functions lived in `src/scout/riotImport.ts` until the Riot
+ * auto-import was removed. They were never part of that feature: they describe
+ * the *manual* route — the honest "none of the four sites can be read from the
+ * browser, so here is the copy/paste path instead" block the import panel
+ * renders. Their single data source is `SCOUT_DIRECT_FETCH_INFO`, which lives
+ * in this file, so they moved here rather than keeping a module named
+ * "riotImport" alive with no Riot import left in it.
+ * ========================================================================== */
+
+/**
+ * The auto-fetch line the import panel renders for one provider.
+ *
+ * Derived **strictly** from {@link getDirectFetchInfo}: `supported` is that
+ * record's `supportedInBrowser`, and `status`, `reason` and `publicApi` are
+ * carried through unchanged. Nothing is added, nothing is dropped and no value
+ * is hard-coded here.
+ *
+ * That is the whole point: {@link SCOUT_DIRECT_FETCH_INFO} stays the only place
+ * those facts are recorded, so if a provider ever ships a documented,
+ * CORS-enabled endpoint, flipping its entry there changes what this function
+ * returns — and therefore what the UI says — automatically. Two independently
+ * maintained answers to "is OP.GG fetchable?" is precisely the drift this
+ * feature cannot afford.
+ *
+ * Note in particular that DeepLoL reports `publicApi: "undocumented_cors_ok"`
+ * and still `supported: false`: a reachable *undocumented private* backend is
+ * recorded as a possible future adapter, not used.
+ */
+export function getScoutAutoFetchStatus(kind: ScoutSourceKind): ScoutAutoFetchStatus {
+  const info = getDirectFetchInfo(kind)
+  return {
+    kind: info.kind,
+    supported: info.supportedInBrowser,
+    status: info.status,
+    reason: info.reason,
+    publicApi: info.publicApi,
+  }
+}
+
+/** All four providers, in the canonical {@link SCOUT_SOURCE_KINDS} order. */
+export function getAllScoutAutoFetchStatuses(): ScoutAutoFetchStatus[] {
+  return SCOUT_SOURCE_KINDS.map((kind) => getScoutAutoFetchStatus(kind))
+}
+
+/**
+ * `true` when not a single provider can be fetched directly from the browser —
+ * the condition under which the UI shows the "auto-fetch is not possible, here
+ * is the manual route" explanation once instead of four times.
+ *
+ * Derived from {@link canFetchInBrowser}, so it flips by itself the day a
+ * provider becomes fetchable. `true` in this version.
+ */
+export function isAutoFetchUnavailableForAll(): boolean {
+  return SCOUT_SOURCE_KINDS.every((kind) => !canFetchInBrowser(kind))
+}
+
+/**
+ * The import modes the UI may present, in the canonical
+ * {@link SCOUT_IMPORT_MODES} order.
+ *
+ * Every mode this app has needs no configuration whatsoever — `manual_paste`
+ * is a textarea and `source_links` is a generated URL — which is what keeps the
+ * feature fully usable in a plain public build. There is therefore nothing left
+ * to filter on: the answer is the canonical list itself.
+ *
+ * The list is copied out of `SCOUT_IMPORT_MODES` rather than spelled out as a
+ * literal, so the canonical order stays defined in exactly one place and this
+ * function cannot drift away from the union it claims to enumerate.
+ *
+ * Never throws.
+ */
+export function availableScoutImportModes(): ScoutImportMode[] {
+  return [...SCOUT_IMPORT_MODES]
 }

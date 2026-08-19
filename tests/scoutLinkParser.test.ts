@@ -271,6 +271,294 @@ describe("parseScoutInput — free text", () => {
   })
 })
 
+describe("parseScoutInput — leading role word", () => {
+  it("reads `Rolle: Name#TAG`", () => {
+    const result = parseScoutInput("Bot: DemoBot#EUW")
+
+    expect(result.unparsedLines).toEqual([])
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({
+      riotName: "DemoBot",
+      tagline: "EUW",
+      region: SCOUT_REGION_UNKNOWN,
+      role: "bot",
+    })
+    expect(result.players[0].displayName).toBe("DemoBot#EUW")
+  })
+
+  it("reads `Rolle - Name#TAG`", () => {
+    const result = parseScoutInput("ADC - Shooter#EUW")
+
+    expect(result.unparsedLines).toEqual([])
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({
+      riotName: "Shooter",
+      tagline: "EUW",
+      role: "bot",
+    })
+  })
+
+  it("still reads `Rolle / Name#TAG`, where the slash already split the segments", () => {
+    const result = parseScoutInput("Jgl / Forest#EUW")
+
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({
+      riotName: "Forest",
+      tagline: "EUW",
+      role: "jungle",
+    })
+  })
+
+  it("reads `Rolle Name#TAG` without any separator", () => {
+    const result = parseScoutInput("Support Helper#EUW")
+
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({
+      riotName: "Helper",
+      tagline: "EUW",
+      role: "support",
+    })
+  })
+
+  it("never eats a role word that is only the PREFIX of the name", () => {
+    // Word granular, never prefix based: `Topfather` and `Supportive` are one
+    // whitespace token each and are no role aliases, so they stay names.
+    const result = parseScoutInput(["Topfather#EUW", "Supportive#EUW"].join("\n"))
+
+    expect(result.unparsedLines).toEqual([])
+    expect(result.players).toHaveLength(2)
+    expect(result.players[0]).toMatchObject({
+      riotName: "Topfather",
+      tagline: "EUW",
+      role: "unknown",
+    })
+    expect(result.players[1]).toMatchObject({
+      riotName: "Supportive",
+      tagline: "EUW",
+      role: "unknown",
+    })
+  })
+
+  it("keeps a bare Riot ID that happens to BE a role word", () => {
+    // A leading role word is only a label when at least one word is left in
+    // front of the `#` — otherwise the player is simply called `Bot`.
+    const result = parseScoutInput("Bot#EUW")
+
+    expect(result.unparsedLines).toEqual([])
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({
+      riotName: "Bot",
+      tagline: "EUW",
+      role: "unknown",
+    })
+  })
+
+  it("accepts `|`, `-` or nothing between the role label and the name", () => {
+    const result = parseScoutInput(
+      ["top Player#EUW", "top | Player2#EUW", "top - Player3#EUW"].join("\n"),
+    )
+
+    expect(result.unparsedLines).toEqual([])
+    expect(result.players.map((player) => player.riotName)).toEqual([
+      "Player",
+      "Player2",
+      "Player3",
+    ])
+    for (const player of result.players) expect(player.role).toBe("top")
+  })
+
+  it("is case insensitive on the leading role label", () => {
+    const result = parseScoutInput(["TOP: A#EUW", "jGl: B#EUW", "MiDlAnE C#EUW"].join("\n"))
+
+    expect(result.unparsedLines).toEqual([])
+    expect(result.players.map((player) => player.riotName)).toEqual(["A", "B", "C"])
+    expect(result.players.map((player) => player.role)).toEqual(["top", "jungle", "mid"])
+  })
+
+  it("accepts region and role in either order in front of the name", () => {
+    const result = parseScoutInput(["EUW top Player#TAG", "top EUW Player2#TAG"].join("\n"))
+
+    expect(result.unparsedLines).toEqual([])
+    expect(result.players[0]).toMatchObject({
+      riotName: "Player",
+      tagline: "TAG",
+      region: "EUW",
+      role: "top",
+    })
+    expect(result.players[1]).toMatchObject({
+      riotName: "Player2",
+      tagline: "TAG",
+      region: "EUW",
+      role: "top",
+    })
+  })
+
+  it("keeps a multi-word name behind a consumed region word", () => {
+    const result = parseScoutInput("EUW Some Player#TAG")
+
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({
+      riotName: "Some Player",
+      region: "EUW",
+      role: "unknown",
+    })
+  })
+
+  it("drops a separator token left over behind a consumed region word", () => {
+    const result = parseScoutInput("EUW - Player#TAG")
+
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({ riotName: "Player", tagline: "TAG", region: "EUW" })
+  })
+
+  it("reports a region word followed by nothing but a separator as invalid", () => {
+    // Same input class as the test above, minus the name. Dropping the leftover
+    // separator has to leave an *empty* name rather than a player called `-`.
+    const result = parseScoutInput("EUW -#TAG")
+
+    expect(result.players).toEqual([])
+    expect(result.unparsedLines).toEqual([{ raw: "EUW -#TAG", reason: "invalid_riot_id" }])
+  })
+
+  it("leaves a lone region word alone, unlike a lone role label", () => {
+    // The explicit-label exception is role-only: `Top: #EUW` is `invalid_riot_id`,
+    // but a region word behaves exactly as it did before this reader learned
+    // about roles. Asserted so widening that exception cannot happen silently.
+    const result = parseScoutInput("EUW: #TAG")
+
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({ riotName: "EUW:", tagline: "TAG", role: "unknown" })
+  })
+
+  it("still keeps spaces inside a name that follows a region word", () => {
+    const result = parseScoutInput("KR Hide on bush#KR1 mid")
+
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({
+      riotName: "Hide on bush",
+      tagline: "KR1",
+      region: "KR",
+      role: "mid",
+    })
+  })
+
+  it("still reads a role standing in its own `/` segment", () => {
+    const result = parseScoutInput("EUW / Player#TAG / jungle")
+
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({
+      riotName: "Player",
+      tagline: "TAG",
+      region: "EUW",
+      role: "jungle",
+    })
+  })
+
+  it("survives list numbering in front of the role label", () => {
+    const result = parseScoutInput("1. Bot: Agurin#EUW")
+
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({ riotName: "Agurin", role: "bot" })
+  })
+
+  it("merges a role-labelled line with the same player written region-first", () => {
+    const result = parseScoutInput(["Bot: Agurin#EUW", "EUW / Agurin#EUW"].join("\n"))
+
+    expect(result.players).toHaveLength(1)
+    expect(result.duplicatesMerged).toBe(1)
+    expect(result.players[0]).toMatchObject({ region: "EUW", role: "bot" })
+    expect(result.players[0].id).toBe("euw:agurin#euw")
+  })
+
+  it("takes a leading role label standing in front of a link", () => {
+    const result = parseScoutInput("Bot: https://dpm.lol/DemoBot-EUW")
+
+    expect(result.players).toHaveLength(1)
+    expect(result.players[0]).toMatchObject({
+      riotName: "DemoBot",
+      tagline: "EUW",
+      role: "bot",
+    })
+  })
+
+  it("reports a role label with no name left as an invalid Riot ID", () => {
+    // The `:` makes it an explicit label, so it is consumed even though nothing
+    // is left in front of the `#`. The honest answer is `invalid_riot_id`, not
+    // a player called `Top:`.
+    const result = parseScoutInput("Top: #EUW")
+
+    expect(result.players).toEqual([])
+    expect(result.unparsedLines).toEqual([{ raw: "Top: #EUW", reason: "invalid_riot_id" }])
+  })
+
+  it("reports a role label without any Riot ID at all", () => {
+    const result = parseScoutInput("Support:")
+
+    expect(result.players).toEqual([])
+    expect(result.unparsedLines).toEqual([{ raw: "Support:", reason: "no_riot_id" }])
+  })
+
+  it("leaves the link parsers untouched — OP.GG multisearch", () => {
+    const result = parseScoutInput(
+      "https://op.gg/lol/multisearch/euw?summoners=Agurin%23EUW,Nemesis%23EUW,Caps%23G2",
+    )
+
+    expect(result.unparsedLines).toEqual([])
+    expect(result.duplicatesMerged).toBe(0)
+    expect(result.players.map((player) => player.displayName)).toEqual([
+      "Agurin#EUW",
+      "Nemesis#EUW",
+      "Caps#G2",
+    ])
+    for (const player of result.players) {
+      expect(player.region).toBe("EUW")
+      expect(player.role).toBe("unknown")
+    }
+  })
+
+  it("leaves the link parsers untouched — DPM.LOL and an encoded OP.GG profile", () => {
+    const dpm = parseScoutInput("https://dpm.lol/NAgurin-EU1")
+
+    expect(dpm.players).toHaveLength(1)
+    expect(dpm.players[0]).toMatchObject({ riotName: "NAgurin", tagline: "EU1", role: "unknown" })
+    expect(dpm.players[0].sources.find((source) => source.kind === "dpm")?.status).toBe(
+      "parsed_from_url",
+    )
+
+    const opgg = parseScoutInput("https://www.op.gg/summoners/kr/Hide%20on%20bush-KR1")
+
+    expect(opgg.players).toHaveLength(1)
+    expect(opgg.players[0]).toMatchObject({
+      riotName: "Hide on bush",
+      tagline: "KR1",
+      region: "KR",
+    })
+  })
+
+  it("terminates on degenerate input with no words in front of the `#`", () => {
+    // Guards the leading-word loop: nothing to shift, nothing to loop over.
+    const nul = String.fromCharCode(0)
+    const inputs = ["#TAGONLY", "nameonly#", "###", nul, "a".repeat(5000)]
+    for (const input of inputs) expect(() => parseScoutInput(input)).not.toThrow()
+
+    expect(parseScoutInput("#TAGONLY").unparsedLines.map((line) => line.reason)).toEqual([
+      "invalid_riot_id",
+    ])
+    expect(parseScoutInput("nameonly#").unparsedLines.map((line) => line.reason)).toEqual([
+      "invalid_riot_id",
+    ])
+    expect(parseScoutInput("###").unparsedLines.map((line) => line.reason)).toEqual([
+      "invalid_riot_id",
+    ])
+    expect(parseScoutInput(nul).unparsedLines.map((line) => line.reason)).toEqual([
+      "no_riot_id",
+    ])
+    expect(parseScoutInput("a".repeat(5000)).unparsedLines.map((line) => line.reason)).toEqual([
+      "no_riot_id",
+    ])
+  })
+})
+
 describe("parseScoutInput — dedupe", () => {
   it("merges the same player from a link and from free text", () => {
     const result = parseScoutInput(

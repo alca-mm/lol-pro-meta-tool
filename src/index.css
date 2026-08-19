@@ -2764,3 +2764,308 @@ body::-webkit-scrollbar {
     align-items: stretch;
   }
 }
+
+/* ---- Tournament Scout — Stats Import ---- */
+
+.scout-import-panel {
+  gap: 14px;
+}
+
+/* One numbered step. The left border is the visual spine of the flow: the
+   panel is a sequence ("pick the player, then the role, then paste"), and a
+   flat stack of fields reads as five unrelated settings. */
+.scout-import-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+}
+
+.scout-import-step-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scout-import-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: flex-end;
+}
+
+.scout-import-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  flex: 1 1 180px;
+}
+
+.scout-import-field-wide {
+  flex: 2 1 280px;
+}
+
+.scout-import-field input,
+.scout-import-field select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 12px;
+  width: 100%;
+}
+
+.scout-import-field input:focus,
+.scout-import-field select:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.scout-import-field select:disabled,
+.scout-import-field input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scout-import-hint {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  max-width: 100ch;
+}
+
+.scout-import-status {
+  font-size: 12px;
+  color: var(--green);
+}
+
+/* The role step is the one the whole feature stands on, so its "you must
+   choose" note is the loudest text in the panel. */
+.scout-import-required {
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--surface2);
+  border: 1px dashed var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+
+.scout-import-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.scout-import-block-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scout-import-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.scout-import-source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scout-import-source-links a {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+}
+
+.scout-import-source-links a:hover {
+  border-color: var(--accent-dim);
+  text-decoration: underline;
+}
+
+.scout-import-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* The table can be wider than the panel on a phone. It scrolls inside this
+   wrapper so the page itself never scrolls sideways. */
+.scout-import-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.scout-import-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 720px;
+  font-size: 12px;
+}
+
+.scout-import-table th,
+.scout-import-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.scout-import-table th {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--surface2);
+  white-space: nowrap;
+}
+
+.scout-import-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.scout-import-table-check {
+  width: 34px;
+}
+
+.scout-import-champion {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* A row that cannot be applied stays visible — dropping it would hide input the
+   user can plainly see in their paste — but must not look selectable. */
+.scout-import-row-blocked {
+  opacity: 0.55;
+}
+
+.scout-import-row-blocked .scout-import-champion {
+  text-decoration: line-through;
+}
+
+/* The selected role wins and the source disagrees: both facts have to be
+   readable in the same cell, so the applied role stays plain text and only the
+   contradiction is marked. */
+.scout-import-applied-role {
+  color: var(--text);
+}
+
+.scout-import-rolemismatch {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+}
+
+.scout-import-cell-missing {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.scout-import-row-warnings {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.scout-import-unparsed-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+}
+
+.scout-import-unparsed-list code {
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.scout-import-apply-row {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+/* A HEIGHT CAP FOR THE SKIPPED LINES, in both places they are listed.
+   `.scout-import-unparsed-list` above carries no `max-height`, so a long list
+   pushed the apply step off the screen. The compact summary already keeps the
+   ordinary case to a handful of entries; this is the guard for the rest and for
+   the collapsed <details>, which shows every counted line at once. Purely
+   additive — the rule above is untouched. */
+.scout-import-block > .scout-import-unparsed-list,
+.scout-import-skipped-details > .scout-import-unparsed-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* THE APPLY STEP IS A SEQUENCE OF STATEMENTS, NOT A ROW OF CONTROLS: the mode
+   select · what the mode does · the button · the outcome, each its own block.
+   The gaps between the individual controls were never the problem —
+   `.scout-button-row` already carries `gap: 8px` — but the outcome message was
+   a <span> INSIDE that row, so it rendered beside the button rather than below
+   it, which is where the two contradicting messages met. Purely additive:
+   `.scout-import-apply-row` above keeps its separator rule untouched and this
+   class only stacks the blocks on top of it. */
+.scout-import-apply {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+/* The outcome is its own block under the button, never beside it. Exactly one
+   of the two ever renders — resolveApplyStatus() decides which. */
+.scout-import-apply-status {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* The counted skip lines: summarised above, still one click away here. Closed
+   by default — getting them out of the way is the whole point of the summary. */
+.scout-import-skipped-details > summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.scout-import-skipped-details[open] > summary {
+  margin-bottom: 6px;
+}
+
+@media (max-width: 900px) {
+  .scout-import-field {
+    flex-basis: 100%;
+  }
+
+  .scout-import-step {
+    padding-left: 8px;
+  }
+}

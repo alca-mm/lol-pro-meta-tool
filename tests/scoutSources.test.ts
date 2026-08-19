@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   SCOUT_DIRECT_FETCH_INFO,
@@ -6,20 +6,25 @@ import {
   SCOUT_SOURCE_ADAPTERS,
   SCOUT_SOURCE_DESCRIPTORS,
   SCOUT_SOURCE_KINDS,
+  availableScoutImportModes,
   buildNotSupportedRef,
   buildOpggMultiLink,
   buildProfileUrl,
   buildSourceLinks,
   canFetchInBrowser,
   detectSourceKind,
+  getAllScoutAutoFetchStatuses,
   getDirectFetchInfo,
+  getScoutAutoFetchStatus,
   getScoutSourceAdapter,
   getScoutSourceDescriptor,
+  isAutoFetchUnavailableForAll,
   isKnownScoutRegion,
   normalizeScoutRegion,
   scoutRegionSlug,
   toScoutUrl,
 } from "../src/scout/sources"
+import { SCOUT_IMPORT_MODES } from "../src/scout/types"
 import type { ScoutPlayerIdentity, ScoutSourceKind, ScoutSourceRef } from "../src/scout/types"
 
 // Offline and deterministic by construction: this module builds and inspects
@@ -277,5 +282,109 @@ describe("descriptors and adapters", () => {
       expect(descriptor.homeUrl.startsWith("https://")).toBe(true)
       expect(descriptor.hosts.length).toBeGreaterThan(0)
     }
+  })
+})
+
+/*
+ * The three blocks below moved here together with the functions they cover.
+ * They lived in tests/scoutRiotImport.test.ts until the Riot auto-import was
+ * removed; nothing in them ever touched the proxy, they describe the *manual*
+ * route — the honest "auto-fetch is impossible, here is the copy/paste path"
+ * block the import panel renders.
+ */
+
+describe("getScoutAutoFetchStatus -- derived from SCOUT_DIRECT_FETCH_INFO only", () => {
+  it("mirrors getDirectFetchInfo for every source, with no second truth", () => {
+    for (const kind of SCOUT_SOURCE_KINDS) {
+      // The expectation is DERIVED, never spelled out: a hard-coded table here
+      // would become the second answer to "is OP.GG fetchable?" that this
+      // feature must not have.
+      const expected = getDirectFetchInfo(kind)
+      expect(getScoutAutoFetchStatus(kind)).toEqual({
+        kind: expected.kind,
+        supported: expected.supportedInBrowser,
+        status: expected.status,
+        reason: expected.reason,
+        publicApi: expected.publicApi,
+      })
+    }
+  })
+
+  it("reports supported: false and not_supported_in_browser for all four sources", () => {
+    for (const kind of SCOUT_SOURCE_KINDS) {
+      const status = getScoutAutoFetchStatus(kind)
+      expect(status.supported).toBe(false)
+      expect(status.status).toBe("not_supported_in_browser")
+      expect(status.reason).toBe(getDirectFetchInfo(kind).reason)
+      expect(status.publicApi).toBe(getDirectFetchInfo(kind).publicApi)
+    }
+  })
+
+  it("does NOT auto-use DeepLoL although its private endpoint answers cross-origin", () => {
+    // Guard rail against a later "but we could just call it": DeepLoL's
+    // undocumented backend really does answer cross-origin GETs, and is still
+    // recorded as a possible future adapter rather than used.
+    const deeplol: ScoutSourceKind = "deeplol"
+    const status = getScoutAutoFetchStatus(deeplol)
+    expect(status.publicApi).toBe("undocumented_cors_ok")
+    expect(status.supported).toBe(false)
+    expect(status.reason).toBe(getDirectFetchInfo(deeplol).reason)
+  })
+
+  it("getAllScoutAutoFetchStatuses returns one entry per source in canonical order", () => {
+    const all = getAllScoutAutoFetchStatuses()
+    expect(all).toHaveLength(4)
+    expect(all).toHaveLength(SCOUT_SOURCE_KINDS.length)
+    expect(all.map((entry) => entry.kind)).toEqual([...SCOUT_SOURCE_KINDS])
+    for (const entry of all) {
+      expect(entry).toEqual(getScoutAutoFetchStatus(entry.kind))
+    }
+  })
+
+  it("isAutoFetchUnavailableForAll is true in this version", () => {
+    expect(isAutoFetchUnavailableForAll()).toBe(true)
+    expect(SCOUT_SOURCE_KINDS.every((kind) => !canFetchInBrowser(kind))).toBe(true)
+  })
+})
+
+describe("availableScoutImportModes", () => {
+  it("offers manual paste and source links, in that order, without any configuration", () => {
+    expect(availableScoutImportModes()).toEqual(["manual_paste", "source_links"])
+  })
+
+  it("offers no riot_api mode -- there is no proxy and no such mode any more", () => {
+    expect(availableScoutImportModes()).not.toContain("riot_api")
+  })
+
+  it("stays in sync with SCOUT_IMPORT_MODES instead of restating it", () => {
+    expect(availableScoutImportModes()).toEqual([...SCOUT_IMPORT_MODES])
+  })
+
+  it("returns a fresh array, so a caller cannot mutate the canonical order", () => {
+    const first = availableScoutImportModes()
+    first.pop()
+    expect(availableScoutImportModes()).toEqual(["manual_paste", "source_links"])
+  })
+})
+
+describe("auto-fetch status and import modes never touch the network", () => {
+  const globalWithFetch = globalThis as unknown as { fetch?: unknown }
+  const originalFetch = globalWithFetch.fetch
+
+  afterEach(() => {
+    globalWithFetch.fetch = originalFetch
+    vi.restoreAllMocks()
+  })
+
+  it("no function in this group ever calls fetch", () => {
+    const fetchSpy = vi.fn()
+    globalWithFetch.fetch = fetchSpy
+
+    for (const kind of SCOUT_SOURCE_KINDS) getScoutAutoFetchStatus(kind)
+    getAllScoutAutoFetchStatuses()
+    isAutoFetchUnavailableForAll()
+    availableScoutImportModes()
+
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 })

@@ -28,6 +28,15 @@
  *  - Removing a player asks first: `saveScoutState()` drops `playerData` whose
  *    player is gone, so the removal destroys that player's scout rows.
  *  - The clock lives here, not in the pure modules (`nowIso`).
+ *  - STATS IMPORT: `ScoutStatsImportPanel` parses a pasted champion table and
+ *    hands the confirmed rows back through `handleImportApply`, which writes
+ *    them with `updatePlayerData()` — the very same channel the hand-typed rows
+ *    of `ScoutPlayerCard` use. There is deliberately no second persistence or
+ *    analysis path: the `useEffect` above and the `analyzeScout` memo below pick
+ *    an import up exactly as they pick up a typed row. `handleAddImportedPlayer`
+ *    is the panel's only other write and it appends to `players` alone — it
+ *    touches neither `rawInput` nor the lineup, so an import can never trigger
+ *    the re-parse protection or silently seat somebody.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -61,6 +70,7 @@ import { ScoutLineupPanel } from "./ScoutLineupPanel"
 import { ScoutPlayerCard } from "./ScoutPlayerCard"
 import { ScoutRemovedPlayersPanel } from "./ScoutRemovedPlayersPanel"
 import { ScoutReparseDialog } from "./ScoutReparseDialog"
+import { ScoutStatsImportPanel } from "./ScoutStatsImportPanel"
 import { buildScoutExportText, copyTextToClipboard } from "./scoutExport"
 import {
     CHAMPION_DATALIST_ID,
@@ -417,6 +427,35 @@ export function TournamentScout() {
         updatePlayerData(playerId, { note })
     }
 
+    /* --------------------------------------------------------- stats import */
+
+    /**
+     * Take over the rows the import panel confirmed.
+     *
+     * `entries` is already the player's COMPLETE resulting list — the panel got
+     * it from `applyImportRows()`, which performed the append/replace merge —
+     * so this writes it through the one existing channel and nothing else.
+     * Persistence and analysis follow from that automatically; a second save
+     * path here is exactly how the two would drift apart.
+     */
+    function handleImportApply(playerId: ScoutPlayerId, entries: ManualChampionEntry[]) {
+        updatePlayerData(playerId, { entries: withEntryIds(entries) })
+    }
+
+    /**
+     * Add a player the import panel recognised from a profile link.
+     *
+     * Appends only when the id is new, and does nothing else on purpose: the
+     * player is NOT seated in the lineup (that stays a deliberate user action)
+     * and `rawInput` is left alone, so the next re-parse of the input box
+     * behaves exactly as it would have without the import.
+     */
+    function handleAddImportedPlayer(player: ScoutPlayer) {
+        setPlayers((current) =>
+            current.some((entry) => entry.id === player.id) ? current : [...current, player],
+        )
+    }
+
     /**
      * HARD RULE: ask before removing. The persistence layer drops manual data
      * whose player no longer exists, so this is not undoable — which is exactly
@@ -498,6 +537,14 @@ export function TournamentScout() {
                 onClear={handleClearLineup}
                 onIncludeSubstitutesChange={setIncludeSubstitutes}
                 assignError={assignError}
+            />
+
+            <ScoutStatsImportPanel
+                players={players}
+                playerData={playerData}
+                lineup={lineup}
+                onApply={handleImportApply}
+                onAddPlayer={handleAddImportedPlayer}
             />
 
             <ScoutRemovedPlayersPanel
