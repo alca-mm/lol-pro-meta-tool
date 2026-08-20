@@ -44,10 +44,32 @@
  *                  would say nothing about concentration, so NEUTRAL_SHARE is
  *                  used instead.
  *
- *   raw   = WEIGHT_VOLUME * volumeScore
- *         + WEIGHT_WINRATE * dampedWinrate
- *         + WEIGHT_SHARE  * shareScore                       (weights sum to 1)
- *   score = clamp01(raw * recencyWeight * conflictPenalty), 0 when games <= 0
+ *   raw       = WEIGHT_VOLUME * volumeScore
+ *             + WEIGHT_WINRATE * dampedWinrate
+ *             + WEIGHT_SHARE  * shareScore                   (weights sum to 1)
+ *   baseScore = clamp01(raw * recencyWeight * conflictPenalty), 0 when games <= 0
+ *
+ *   statStrength = championStatStrengthMultiplier({ games, winrate, kda })
+ *                  One extra, two-sided bounded factor (section 3b). It closes
+ *                  the two gaps `baseScore` leaves open: experience above
+ *                  SCOUT_TARGET_GAMES is flat there (20, 70 and 300 games used
+ *                  to score identically), and the KDA the import collects did
+ *                  not enter the scoring at all. The winrate and KDA parts are
+ *                  scaled by the *same* `sampleConfidence`, so a tiny sample
+ *                  can only ever move the factor a few percent.
+ *
+ *   score = round3(clamp01(clamp01(baseScore * statStrength) * roleWeight))
+ *           THE BRACKETING IS THE INVARIANT, not decoration: `statStrength`
+ *           reaches 1.2, so `baseScore * statStrength` can exceed 1 and the
+ *           outer `clamp01` would then bind on the ONROLE side only — the
+ *           offrole side, scaled by 0.4, never comes near the ceiling. That
+ *           lifts score(offrole)/score(onrole) above OFFROLE_SCORE_WEIGHT
+ *           (measured up to 0.477 before this was fixed, i.e. the offrole
+ *           damping quietly weakened by a fifth exactly where the numbers are
+ *           strongest). Clamping the stat-weighted base FIRST makes both sides
+ *           share one and the same saturated base, so the ratio is again
+ *           exactly `roleWeight` for every input. Do not "simplify" this into a
+ *           single product — that is the bug, not a shorter spelling of it.
  *
  *   recencyWeight: current 1.00 / recent 0.85 / old 0.60 — `old` is weighted
  *   down but never dropped, exactly what the UI promises the user
@@ -212,6 +234,129 @@ const CONFLICT_WINRATE_DELTA_PERCENT = 25
 
 /** Score multiplier applied to a champion with contradicting rows. */
 const CONFLICT_SCORE_PENALTY = 0.85
+
+/* --- champion stat strength (games / winrate / KDA) -----------------------
+ *
+ * THE PROBLEM THESE NUMBERS SOLVE:
+ * `volumeScore` saturates completely at SCOUT_TARGET_GAMES, so 20, 70 and 300
+ * games on the same winrate used to produce the *identical* score — experience
+ * beyond 20 games was worth exactly nothing. And the KDA the import collects
+ * did not enter the scoring at all. `championStatStrengthMultiplier()` below
+ * closes both gaps with ONE extra factor on the signal score.
+ *
+ * THREE PROPERTIES OF THE DESIGN, all deliberate:
+ *  - The small-sample brake is BUILT IN, not a special case: the winrate and
+ *    KDA effects are scaled by `sampleConfidence(games, SCOUT_TARGET_GAMES)`,
+ *    the very same curve `volumeScore` uses. "1 game, 100 %, KDA 8" therefore
+ *    moves the factor by a few percent at most — structurally, without an `if`.
+ *  - MULTIPLICATIVE, and applied to the base score *before*
+ *    `roleAdjustment.weight`, with a `clamp01` in between. An additive bonus
+ *    would partly bypass the offrole damping; multiplying into the already
+ *    saturated base keeps `score(offrole) / score(onrole)` exactly at
+ *    OFFROLE_SCORE_WEIGHT. Multiplying *after* the role weight does NOT: the
+ *    ceiling then trims the onrole side alone and the ratio drifts upward (see
+ *    the score formula in the module header).
+ *  - Every single factor is clamped on both sides, and the product is clamped
+ *    again — three bonuses can never compound into an unbounded push.
+ */
+
+/** Games at which the experience factor is exactly 1.0. Bewusst identical to
+ *  {@link SCOUT_TARGET_GAMES}: that is precisely where `volumeScore` stops
+ *  rewarding more games, so this curve takes over without a step. */
+const SCOUT_GAMES_IMPACT_NEUTRAL_GAMES = 20
+
+/** Slope on the log axis. 0.12 is chosen so that ~265 games just reach the cap:
+ *  the saturation comes out of the curve, not only out of the clamp. 80 → 300
+ *  games is worth a mere +4.4 % — visible, but unmistakably saturated. */
+const SCOUT_GAMES_IMPACT_SLOPE = 0.12
+
+/** Upper bound: raw game count is never worth more than +10 %. */
+const SCOUT_GAMES_IMPACT_MAX = 1.1
+
+/** Lower bound: a one-game sample loses at most 10 %. Harder would punish it
+ *  twice — `volumeScore` and `dampedWinrate` already brake small samples inside
+ *  the base score. */
+const SCOUT_GAMES_IMPACT_MIN = 0.9
+
+/** Winrate that carries no information. Identical to
+ *  {@link NEUTRAL_WINRATE_FRACTION} on purpose — two different zero points for
+ *  the same quantity in one module would be a maintenance trap. */
+const SCOUT_WINRATE_NEUTRAL_PERCENT = 50
+
+/** Percentage points above/below neutral at which the winrate cap is reached.
+ *  15 points = 65 % / 35 %, already the top/bottom end of real scout pools. */
+const SCOUT_WINRATE_IMPACT_SPAN_PERCENT = 15
+
+/** Largest winrate bonus (+12 %) — the strongest of the three single factors,
+ *  because winrate is the most direct measure of success. Above 65 % nothing
+ *  more happens: the difference between 70 % and 80 % is sample noise here. */
+const SCOUT_WINRATE_BOOST_CAP = 1.12
+
+/** Largest winrate penalty (−15 %). Deliberately not harsher: a weak champion
+ *  is valuable *as a weakness* and must not be damped into invisibility. */
+const SCOUT_WINRATE_PENALTY_FLOOR = 0.85
+
+/** KDA that is neither good nor bad — the usual middle of a solo-queue champion
+ *  list. At exactly this value the KDA factor is exactly 1.0. */
+const SCOUT_KDA_NEUTRAL = 2.5
+
+/** From here upwards the KDA bonus sits at its cap. 4.5 and 8.0 are therefore
+ *  worth the same: the difference between them is not carried by scout samples. */
+const SCOUT_KDA_STRONG = 4.5
+
+/** From here downwards the KDA penalty sits at its floor. `0` and `1.0` are
+ *  both simply "bad"; a finer resolution down there would be invented. */
+const SCOUT_KDA_WEAK = 1
+
+/** Largest KDA bonus (+10 %) — smaller than the winrate bonus because KDA is
+ *  ROLE-DEPENDENT (a support KDA is structurally higher than a top KDA) and the
+ *  multiplier does not know the role. */
+const SCOUT_KDA_BOOST_CAP = 1.1
+
+/** Largest KDA penalty (−10 %). Symmetric to the bonus: KDA should order the
+ *  list, not exclude anybody from it. */
+const SCOUT_KDA_PENALTY_FLOOR = 0.9
+
+/** Above this a "KDA" is a parse accident (OP.GG prints "Perfect KDA"), not a
+ *  ratio → scored neutrally instead of as an outlier. */
+const SCOUT_KDA_MAX_PLAUSIBLE = 100
+
+/** Lower bound of the combined factor. 0.75 rather than, say, 0.5 because a
+ *  weak champion has to stay visible — the weakness list is ordered by this very
+ *  score. NOTE: this bound never actually binds today (the measured effective
+ *  minimum is ≈0.765). It is a safety net against future constant changes, not
+ *  an active limit; do not "tune" it expecting an effect. */
+const SCOUT_STAT_MULTIPLIER_MIN = 0.75
+
+/** Upper bound of the combined factor. The product of the three single caps
+ *  would be 1.355; 1.20 stops three bonuses from compounding into a practically
+ *  unbounded push.
+ *
+ *  WHAT THIS CAP DOES **NOT** DO — an earlier version of this comment claimed
+ *  it keeps the top end below the `clamp01` ceiling "so ranking survives up
+ *  there". That is false and was measured: over the 1320-combination matrix of
+ *  section 10 in tests/scoutStatWeighting.test.ts, 82 combinations (6.2 %) land
+ *  exactly on 1.000 — `soloScore(200, 100, 6)` and `soloScore(300, 100, 8)` are
+ *  both 1.000 and are no longer distinguishable. At the very top, extreme lines
+ *  MERGE, because every boost runs into a hard ceiling.
+ *
+ *  Why that is accepted rather than re-curved: the merge zone starts at roughly
+ *  82 % winrate on a solid sample (below 80 % nothing in the sweep reaches
+ *  1.000 at all — the best value there is 0.996), and it needs a strong KDA on
+ *  top. Those are outliers, not ban candidates you have to sort: the picks the
+ *  ban plan actually orders sit well underneath (70g/61%/KDA 3.2 → 0.901,
+ *  120g/66%/KDA 4.5 → 0.937, 300g/73%/KDA 7.7 → 0.967) and keep their order.
+ *  And a champion at 1.000 is banned regardless of who else is at 1.000. */
+const SCOUT_STAT_MULTIPLIER_MAX = 1.2
+
+/** How far a single factor has to exceed 1.0 before it earns a reason line. A
+ *  factor of 1.005 is noise, not a statement. Measured derived thresholds:
+ *  `many_games_on_champion` from 44 games (43 → 1.029), `strong_kda` from KDA
+ *  3.1 at a full sample and 3.27 at the `SOLID_SAMPLE_GAMES` floor — the sample
+ *  scaling raises the bar for thin data all by itself. Those numbers
+ *  deliberately get NO constants of their own: they would be a second truth
+ *  that silently drifts apart the moment a cap changes. */
+const SCOUT_STAT_REASON_MIN_IMPACT = 1.03
 
 /** From here on a winrate counts as "strong". */
 const HIGH_WINRATE_PERCENT = 55
@@ -378,6 +523,9 @@ interface NormalizedEntry {
   games: number
   /** Percent 0–100, or null when the row carried no usable winrate. */
   winratePercent: WinratePercent | null
+  /** KDA ratio, or null when the row stated none. `0` is a real bad value and
+   *  is NOT the same as null — see {@link normalizeKda}. */
+  kda: number | null
   recency: ScoutRecency
   role: ScoutRole
   source: ScoutManualSource
@@ -391,6 +539,15 @@ function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0
   if (value < 0) return 0
   if (value > 1) return 1
+  return value
+}
+
+/** Generic two-sided clamp. Non-finite input collapses to `min`, mirroring the
+ *  defensive stance of {@link clamp01} — a NaN must never escape as a factor. */
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min
+  if (value < min) return min
+  if (value > max) return max
   return value
 }
 
@@ -487,6 +644,25 @@ function normalizeWinratePercent(value: unknown): WinratePercent | null {
 }
 
 /**
+ * A KDA is usable when it is a finite, non-negative number no larger than
+ * {@link SCOUT_KDA_MAX_PLAUSIBLE}. Everything else — missing, `null`, `NaN`,
+ * negative, a "Perfect KDA" parse accident — becomes `null` = "not stated",
+ * which the scoring treats as exactly neutral.
+ *
+ * `0` SURVIVES ON PURPOSE. It is a value a source really printed (no kills, no
+ * assists) and it has to stay distinguishable from "not stated"; the field doc
+ * on `ManualChampionEntry.kda` spells out why. Dropping the implausible values
+ * here rather than only inside `kdaImpactMultiplier()` matters for a second
+ * reason: a single `999` row would otherwise poison the games-weighted average
+ * in {@link aggregateKda} for every other row of the same champion.
+ */
+function normalizeKda(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null
+  if (value < 0 || value > SCOUT_KDA_MAX_PLAUSIBLE) return null
+  return value
+}
+
+/**
  * Substitute weight, clamped to 0–1 as the contract promises. Anything that is
  * not a finite number falls back to {@link SCOUT_SUBSTITUTE_WEIGHT} instead of
  * silently becoming 0 — a broken option must not delete the bench.
@@ -512,6 +688,126 @@ function dedupeReasons(reasons: readonly ScoutReason[]): ScoutReason[] {
 }
 
 /* ==========================================================================
+ * 3b. Champion stat strength — games / winrate / KDA
+ *
+ * Four pure functions, exported so they can be pinned down directly by tests
+ * instead of only through the score they end up in. All four are total: they
+ * return a finite number for every input, including `null`, `undefined`, `NaN`
+ * and nonsense magnitudes.
+ *
+ * THE ONE RULE THAT MUST NOT BE SOFTENED: a value that was never stated scores
+ * EXACTLY 1.0 (neutral), while a value that was stated as `0` is a real, bad
+ * value and scores below 1.0. `!kda` and `kda ?? 0` both collapse precisely the
+ * two cases that have to stay apart — see the `kda` field doc on
+ * `ManualChampionEntry` in src/scout/types.ts.
+ * ========================================================================== */
+
+/**
+ * Experience factor: saturating, clamped on both sides, exactly 1.0 at
+ * {@link SCOUT_GAMES_IMPACT_NEUTRAL_GAMES}.
+ *
+ * This is the factor that reopens the range above `SCOUT_TARGET_GAMES`, where
+ * `volumeScore` is flat. It is intentionally the *only* one of the three that
+ * is not scaled by sample confidence: it already *is* a statement about the
+ * sample size, so damping it by the sample size would be circular.
+ *
+ * No games (or junk) is not "few games", it is "no evidence" — the base score
+ * already zeroes such a signal, so the factor stays neutral at 1.0.
+ */
+export function gamesImpactMultiplier(games: number): number {
+  if (typeof games !== "number" || !Number.isFinite(games) || games <= 0) return 1
+  const relative = Math.log(1 + games) / Math.log(1 + SCOUT_GAMES_IMPACT_NEUTRAL_GAMES)
+  return clamp(
+    1 + (relative - 1) * SCOUT_GAMES_IMPACT_SLOPE,
+    SCOUT_GAMES_IMPACT_MIN,
+    SCOUT_GAMES_IMPACT_MAX,
+  )
+}
+
+/**
+ * Winrate factor: works only as far as the sample carries it.
+ *
+ * The scaling by `sampleConfidence(games, SCOUT_TARGET_GAMES)` is the whole
+ * point — it reuses the module's existing sample convention rather than
+ * inventing a second one, and it is what keeps "80 % on 5 games" from
+ * outweighing "61 % on 70 games". A missing or unusable winrate returns exactly
+ * 1.0: absence of evidence must not become a penalty.
+ */
+export function winrateImpactMultiplier(
+  winratePercent: WinratePercent | null | undefined,
+  games: number,
+): number {
+  if (winratePercent === null || winratePercent === undefined) return 1
+  if (typeof winratePercent !== "number" || !Number.isFinite(winratePercent)) return 1
+  if (winratePercent < MIN_WINRATE_PERCENT || winratePercent > MAX_WINRATE_PERCENT) return 1
+
+  const confidence = clamp01(sampleConfidence(games, SCOUT_TARGET_GAMES))
+  if (confidence <= 0) return 1
+
+  const delta = clamp(
+    (winratePercent - SCOUT_WINRATE_NEUTRAL_PERCENT) / SCOUT_WINRATE_IMPACT_SPAN_PERCENT,
+    -1,
+    1,
+  )
+  return delta >= 0
+    ? 1 + delta * confidence * (SCOUT_WINRATE_BOOST_CAP - 1)
+    : 1 + delta * confidence * (1 - SCOUT_WINRATE_PENALTY_FLOOR)
+}
+
+/**
+ * KDA factor, scaled by the same sample confidence as the winrate factor.
+ *
+ * `null` / `undefined` / `NaN` / negative / implausibly large all mean "not
+ * stated" and return EXACTLY 1.0. `0` does not: it is a value the source really
+ * printed, and it is scored — as far as the sample carries it. Precisely: a
+ * stated `0` reaches {@link SCOUT_KDA_PENALTY_FLOOR} (0.9) only at FULL sample
+ * confidence, i.e. from SCOUT_TARGET_GAMES upwards; at 10 games it is 0.921, at
+ * 1 game 0.977, and at `games <= 0` it is exactly 1.0 because there is no
+ * sample to believe at all. Same scaling as every other part of this factor —
+ * the floor is where the curve ends, not where it starts.
+ *
+ * That `0` vs. "not stated" distinction is the reason this function tests for
+ * `null`/`undefined` explicitly and never for falsiness.
+ */
+export function kdaImpactMultiplier(kda: number | null | undefined, games: number): number {
+  if (kda === null || kda === undefined) return 1
+  if (typeof kda !== "number" || !Number.isFinite(kda)) return 1
+  if (kda < 0 || kda > SCOUT_KDA_MAX_PLAUSIBLE) return 1
+
+  const confidence = clamp01(sampleConfidence(games, SCOUT_TARGET_GAMES))
+  if (confidence <= 0) return 1
+
+  if (kda >= SCOUT_KDA_NEUTRAL) {
+    const reach = Math.min(1, (kda - SCOUT_KDA_NEUTRAL) / (SCOUT_KDA_STRONG - SCOUT_KDA_NEUTRAL))
+    return 1 + reach * confidence * (SCOUT_KDA_BOOST_CAP - 1)
+  }
+  const reach = Math.min(1, (SCOUT_KDA_NEUTRAL - kda) / (SCOUT_KDA_NEUTRAL - SCOUT_KDA_WEAK))
+  return 1 - reach * confidence * (1 - SCOUT_KDA_PENALTY_FLOOR)
+}
+
+/**
+ * The combined, two-sided bounded factor applied to a signal score.
+ *
+ * Clamping the product a second time is not belt-and-braces: the three single
+ * caps multiply to 1.355, and capping at 1.20 keeps three simultaneous bonuses
+ * from compounding into a practically unbounded push. It does NOT keep the
+ * result out of the `clamp01` ceiling — extreme lines do merge at 1.000, and
+ * {@link SCOUT_STAT_MULTIPLIER_MAX} documents exactly where that starts and why
+ * it is accepted.
+ */
+export function championStatStrengthMultiplier(input: {
+  games: number
+  winrate?: WinratePercent | null
+  kda?: number | null
+}): number {
+  const product =
+    gamesImpactMultiplier(input.games) *
+    winrateImpactMultiplier(input.winrate ?? null, input.games) *
+    kdaImpactMultiplier(input.kda ?? null, input.games)
+  return clamp(product, SCOUT_STAT_MULTIPLIER_MIN, SCOUT_STAT_MULTIPLIER_MAX)
+}
+
+/* ==========================================================================
  * 4. Entry normalisation and grouping
  * ========================================================================== */
 
@@ -533,6 +829,7 @@ function normalizeEntries(entries: readonly ManualChampionEntry[] | undefined): 
       championName: rawName,
       games: normalizeGames(entry.games),
       winratePercent: normalizeWinratePercent(entry.winrate),
+      kda: normalizeKda(entry.kda),
       recency: normalizeRecency(entry.recency),
       role: normalizeRole(entry.role),
       source: normalizeSource(entry.source),
@@ -578,6 +875,43 @@ function aggregateWinratePercent(entries: readonly NormalizedEntry[]): WinratePe
     plainCount += 1
     if (entry.games > 0) {
       weightedSum += entry.winratePercent * entry.games
+      weight += entry.games
+    }
+  }
+
+  if (weight > 0) return weightedSum / weight
+  if (plainCount > 0) return plainSum / plainCount
+  return null
+}
+
+/**
+ * Games-weighted KDA over the rows of one champion — deliberately the same
+ * shape as {@link aggregateWinratePercent}, because it answers the same kind of
+ * question and a second averaging convention in one module would be a trap.
+ *
+ * ROWS WITHOUT A KDA DO NOT CONTRIBUTE AT ALL. They are skipped, not counted as
+ * `0` and not counted as a neutral 2.5 either — both would drag the result
+ * toward a value nobody stated. Concretely: a champion with one imported row
+ * (40 games, KDA 4.2) and one hand-typed row (10 games, no KDA) aggregates to
+ * 4.2, exactly what the one row that *has* a KDA says. Only when NO row states
+ * one does this return `null`, which scores exactly neutral.
+ *
+ * The `plainCount` fallback mirrors the winrate aggregate: rows can legitimately
+ * carry a KDA while carrying 0 games, and a 0-games row must not be punished
+ * twice by silently losing its value here as well.
+ */
+function aggregateKda(entries: readonly NormalizedEntry[]): number | null {
+  let weightedSum = 0
+  let weight = 0
+  let plainSum = 0
+  let plainCount = 0
+
+  for (const entry of entries) {
+    if (entry.kda === null) continue
+    plainSum += entry.kda
+    plainCount += 1
+    if (entry.games > 0) {
+      weightedSum += entry.kda * entry.games
       weight += entry.games
     }
   }
@@ -1017,6 +1351,7 @@ function buildSignalContext(
   const entries = group.entries
   const games = entries.reduce((sum, entry) => sum + entry.games, 0)
   const winratePercent = aggregateWinratePercent(entries)
+  const kda = aggregateKda(entries)
   const recencyWeight = aggregateRecencyWeight(entries)
   const recency = dominantRecency(entries)
   const roles = collectRoles(entries)
@@ -1056,7 +1391,32 @@ function buildSignalContext(
   const roleFit = resolveRoleFit(signalRole, roles, roleContext)
   const roleAdjustment = resolveRoleAdjustment(roleFit, signalRole, roleContext)
 
-  const score = round3(clamp01(baseScore * roleAdjustment.weight))
+  // --- champion stat strength -------------------------------------------
+  // The factor multiplies the BASE score, and the result is clamped BEFORE the
+  // role weight is applied. That order is the guarantee, not a detail:
+  //
+  //   score = clamp01(clamp01(base * statStrength) * roleWeight)
+  //
+  // Both the onrole and the offrole reading of the same entry are then built
+  // from one and the same `statAdjustedBase`, so their quotient is exactly
+  // `roleWeight` — for every input, saturated or not.
+  //
+  // WHY THE OBVIOUS SPELLING IS WRONG: `clamp01(base * roleWeight *
+  // statStrength)` looks equivalent and is not. `statStrength` goes up to 1.2,
+  // so `base * statStrength` can exceed 1; the single outer clamp then trims
+  // the ONROLE side while the offrole side (× 0.4) stays far below the ceiling.
+  // The offrole ratio drifts upward exactly where the stats are strongest —
+  // measured up to 0.477 against a documented 0.4 before this was corrected.
+  // Do not collapse the two clamps back into one.
+  //
+  // An offrole champion with dream games, winrate and KDA therefore still
+  // cannot outrank a comparable onrole signal — and the `maxConfidence: "low"`
+  // cap, which lives outside this calculation entirely, keeps it out of the
+  // `safe`/`target` phases regardless.
+  const statStrength = championStatStrengthMultiplier({ games, winrate: winratePercent, kda })
+
+  const statAdjustedBase = clamp01(baseScore * statStrength)
+  const score = round3(clamp01(statAdjustedBase * roleAdjustment.weight))
 
   // --- weakness classification -----------------------------------------
   const isWeakness =
@@ -1078,6 +1438,62 @@ function buildSignalContext(
         winrate: round3(winratePercent),
       }),
     )
+  }
+
+  // --- stat strength, made visible: AT MOST ONE reason, strict ladder ----
+  //
+  // The weighting above has to be explainable, but it must not turn into a
+  // reason flood — so this is a ladder with an early exit, never two pushes.
+  //
+  // KDA WINS THE TIE on purpose: the game count is already all over the reason
+  // vocabulary — `high_winrate_many_games`, `high_winrate_small_sample`,
+  // `small_sample` and `high_games_low_winrate` each render `{games}` in both
+  // languages — whereas the KDA appears in no other reason text at all. It is
+  // the only genuinely new information the user gets out of this.
+  // (An earlier version of this comment named `played_recently` and `one_trick`
+  // here. Both carry `{games}` as a PARAM but print no number, so they were the
+  // wrong evidence for a claim that happens to be true anyway: the count is
+  // repeated elsewhere, the KDA is not.)
+  //
+  // `SOLID_SAMPLE_GAMES` gates `strong_kda` (no new constant needed — it is the
+  // module's existing answer to "is this sample solid enough to say that out
+  // loud"), and `isWeakness` suppresses `many_games_on_champion` because
+  // `high_games_low_winrate` already opens with "{games} Games, aber nur …" —
+  // a second line about the same game count is exactly the flood to avoid.
+  //
+  // `strong_kda` IS DELIBERATELY **NOT** SUPPRESSED ON A WEAKNESS, and the
+  // asymmetry to the line above is the point, not an oversight. The two cases
+  // differ in what they would repeat:
+  //   - `many_games_on_champion` would restate the very number
+  //     `high_games_low_winrate` just printed. Pure redundancy, and next to a
+  //     weakness it reads like an argument to ban after all.
+  //   - `strong_kda` states something no other line says. "60 games, 40 %
+  //     winrate, KDA 4.5" is not a contradiction, it is a profile: dies rarely,
+  //     still does not win. For a scout that is real information — the champion
+  //     is played safely and passively, so the lane is unlikely to be cracked
+  //     open on its own even though the record is bad.
+  // The UI renders it under "Schwachstellen"/"Weaknesses", where a second,
+  // non-repeating sentence about the same champion is exactly what that section
+  // is for. tests/scoutStatWeighting.test.ts pins this case so the asymmetry
+  // cannot be "cleaned up" silently.
+  //
+  // NOTE ON THE PARAMS: both codes ship the numbers behind the claim, whether
+  // or not the current wording prints them — the engine emits machine-readable
+  // justification, the i18n layer decides what to show. `many_games_on_champion`
+  // renders `{games}`; because the ladder cannot raise it below 44 games (and
+  // `strong_kda` not below SOLID_SAMPLE_GAMES), neither can ever appear at a
+  // count of 1, which is why `COUNT_SENSITIVE_REASONS` in
+  // src/components/scout/scoutUiHelpers.ts deliberately lists neither.
+  if (
+    // Explicit `!== null` rather than a falsy check: a stated `0` is a real
+    // value here, it simply never clears the impact threshold.
+    kda !== null &&
+    games >= SOLID_SAMPLE_GAMES &&
+    kdaImpactMultiplier(kda, games) >= SCOUT_STAT_REASON_MIN_IMPACT
+  ) {
+    reasons.push(reason("strong_kda", { games, kda: round3(kda) }))
+  } else if (!isWeakness && gamesImpactMultiplier(games) >= SCOUT_STAT_REASON_MIN_IMPACT) {
+    reasons.push(reason("many_games_on_champion", { games }))
   }
 
   if (

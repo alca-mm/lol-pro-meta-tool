@@ -624,13 +624,15 @@ export const de = {
     // Tournament Scout — reason codes (ScoutReasonCode)
     scout_reason_high_winrate_many_games: "{winrate}% Winrate auf {games} Games, ein belastbares Sample.",
     scout_reason_high_winrate_small_sample: "{winrate}% Winrate, aber nur {games} Games.",
+    scout_reason_high_winrate_small_sampleOne: "{winrate}% Winrate, aber nur {games} Game.",
     scout_reason_signature_pick: "Signature Pick: großer Anteil der erfassten Games.",
     scout_reason_one_trick: "One-Trick-Niveau auf diesem Champion.",
     scout_reason_high_games_low_winrate: "{games} Games, aber nur {winrate}% Winrate. Eher Schwachstelle als Bedrohung.",
     scout_reason_flex_across_roles: "Flex: wird auf mehreren Rollen gespielt.",
     scout_reason_played_recently: "Im aktuellen Patch gespielt.",
     scout_reason_stale_data: "Nur ältere Daten, also eher eine Tendenz.",
-    scout_reason_small_sample: "Nur {games} Games, kleine Sample Size.",
+    scout_reason_small_sample: "Nur {games} Games, kleines Sample. Zählt deshalb weniger.",
+    scout_reason_small_sampleOne: "Nur {games} Game, kleines Sample. Zählt deshalb weniger.",
     scout_reason_no_data: "Keine Scout-Daten eingetragen.",
     scout_reason_manual_entry_only: "Manuell eingetragen, nichts automatisch abgerufen.",
     scout_reason_hits_multiple_players: "Trifft {count} Spieler im gegnerischen Team.",
@@ -642,6 +644,13 @@ export const de = {
     scout_reason_role_unknown_or_flex: "Rolle unklar oder Flex. Signal: {signalRole}, Lineup: {lineupRole}. Welche Lane ein Ban hier trifft, steht nicht fest.",
     scout_reason_substitute_risk: "Stammt von einem Substitute, der vielleicht gar nicht spielt. Das Signal zählt deshalb nur mit dem Faktor {weight}.",
     scout_reason_player_without_lineup_role: "Spieler steht auf keinem Platz im Lineup. Die Daten sind als {role} erfasst, bestätigt ist die Rolle damit nicht. Ohne Platz gibt es keinen Rollenabgleich.",
+    // Stat-Gewichtung (Games / Winrate / KDA). Bewusst OHNE `...One`-Sibling:
+    // `many_games_on_champion` feuert erst ab 44 Games (abgeleitet aus
+    // SCOUT_STAT_REASON_MIN_IMPACT in src/scout/analysis.ts), ein Singular
+    // wäre also Text, den niemand je sieht. `strong_kda` rendert bewusst keine
+    // Zahl und ist damit gar nicht zahlabhängig.
+    scout_reason_many_games_on_champion: "Viele Spiele auf diesem Champion: {games}.",
+    scout_reason_strong_kda: "Starke KDA auf diesem Champion.",
 
     // Tournament Scout — warning codes (ScoutWarningCode)
     scout_warning_player_without_data: "Für mindestens einen Spieler fehlen Scout-Daten, er bleibt in der Analyse außen vor. Trage seine Champions nach.",
@@ -656,7 +665,9 @@ export const de = {
     scout_warning_player_without_lineup_role: "Spieler mit Scout-Daten ohne Platz im Lineup: {count}. Ihre Signale lassen sich keiner Rolle zuordnen. Setze sie in die Startaufstellung oder auf die Bank.",
     scout_warning_offrole_data_present: "Signale aus einer anderen Rolle als der im Lineup: {count}. Ein Ban darauf trifft eventuell nicht die Lane, die du im Blick hast. Prüfe die Platzzuweisung oder die Rolle der Einträge.",
     scout_warning_substitute_risk_active: "Substitutes werden mitgewertet, betroffen sind {count} Einträge. Wer auf der Bank sitzt, spielt vielleicht nicht. Schalte Substitutes ab, wenn der Banplan nur die Startaufstellung treffen soll.",
+    scout_warning_substitute_risk_activeOne: "Substitutes werden mitgewertet, betroffen ist {count} Eintrag. Wer auf der Bank sitzt, spielt vielleicht nicht. Schalte Substitutes ab, wenn der Banplan nur die Startaufstellung treffen soll.",
     scout_warning_data_loss_on_reparse: "Aus der Eingabe verschwunden: {count} Spieler mit Scout-Daten. Gelöscht wurde nichts. Die Daten liegen im Archiv, wo du sie zurückholen oder endgültig verwerfen kannst.",
+    scout_warning_data_loss_on_reparseOne: "Aus der Eingabe verschwunden: {count} Spieler mit Scout-Daten. Gelöscht wurde nichts. Die Daten liegen im Archiv, wo du sie zurückholen oder endgültig verwerfen kannst.",
 
     // Tournament Scout — team ban plan
     scout_teamPlanTitle: "Team-Banplan",
@@ -779,6 +790,7 @@ export const de = {
     scout_import_applyModeHint: "Ergänzen aktualisiert vorhandene Champion-Zeilen, statt sie zu doppeln. Ersetzen löscht nur die Zeilen dieser Rolle und importiert neu.",
     scout_import_applyButton: "In Scout-Daten übernehmen",
     scout_import_applied: "Übernommen: {count} Champion-Zeilen.",
+    scout_import_appliedOne: "Übernommen: {count} Champion-Zeile.",
     scout_import_applyBlocked: "Noch nicht übernehmbar: Wähle oben die Rolle und mindestens eine Zeile aus.",
     scout_import_unparsedHint: "Diese Zeilen wurden nicht als Stat-Zeile gelesen. Steckt ein Champion darin, trage ihn von Hand nach.",
 
@@ -811,6 +823,7 @@ export const de = {
     scout_import_opggHowTo: "OP.GG: Profil öffnen, Reiter „Champions“, ab „Alle Champions“ markieren und hier einfügen. Der Rest der Seite darf mitkommen.",
     scout_import_opggRawDetected: "OP.GG Roh-Copy der Champions-Seite erkannt",
     scout_import_opggRawChampions: "{count} Champions erkannt.",
+    scout_import_opggRawChampionsOne: "{count} Champion erkannt.",
     scout_import_opggRawRoleNote: "Die OP.GG-Championliste nennt keine Rolle. Alle übernommenen Zeilen bekommen die oben gewählte Rolle.",
 
     // Tournament Scout — Stats-Import: kompakte Übersprungen-Summary
@@ -818,7 +831,9 @@ export const de = {
     scout_import_skippedTitle: "Übersprungen",
     scout_import_skippedAggregate: "Die Summenzeile „Alle Champions“ wurde ignoriert. Sie ist ein Gesamtwert über alle Champions, kein einzelner Champion.",
     scout_import_skippedMatchups: "{count} Matchup-Blöcke ignoriert. Sie gehören zu einem Champion, sind aber keine eigenen Zeilen des Championpools.",
+    scout_import_skippedMatchupsOne: "{count} Matchup-Block ignoriert. Er gehört zu einem Champion, ist aber keine eigene Zeile des Championpools.",
     scout_import_skippedRecommended: "{count} empfohlene Champions ignoriert. Es sind Vorschläge von OP.GG, keine gespielten Statistiken.",
+    scout_import_skippedRecommendedOne: "{count} empfohlener Champion ignoriert. Es ist ein Vorschlag von OP.GG, keine gespielte Statistik.",
     // BEWUSST OHNE {count}: der Zähler dahinter erfasst nur Trennzeichen an einer
     // Blockstart-Position, nicht jede ausgeblendete Zeile. Der Satz nennt deshalb
     // keine Anzahl, statt eine falsche zu behaupten — siehe ScoutStatsImportPanel.

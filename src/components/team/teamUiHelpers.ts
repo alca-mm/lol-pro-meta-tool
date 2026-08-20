@@ -48,6 +48,7 @@
 
 import { RIOT_TRANSPORT_ERROR_CODES } from "../../teams/riotService"
 import type { RiotTransportErrorCode } from "../../teams/riotService"
+import { pluralKey } from "../../i18n/plural"
 import type { TranslationKey } from "../../i18n/types"
 
 /** The `t()` of src/i18n/LanguageContext, narrowed to what this module needs. */
@@ -240,7 +241,7 @@ export interface PluralKeys {
  * stringified exactly as JavaScript would.
  */
 export function pluralMessage(t: TeamTranslate, count: number, keys: PluralKeys): string {
-    return fillPlaceholders(t(count === 1 ? keys.one : keys.many), { count })
+    return fillPlaceholders(t(pluralKey(count, keys)), { count })
 }
 
 /* --------------------------------------------------------------------------

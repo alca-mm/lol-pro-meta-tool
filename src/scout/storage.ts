@@ -457,6 +457,10 @@ function normalizePlayers(raw: unknown): ScoutPlayer[] {
  *                                              winrate)
  *   - winrate not a number / outside 0-100   -> dropped (a clamped 100 % would
  *                                              change the ban priority)
+ *   - kda not a number / negative            -> FIELD OMITTED, ROW KEPT. See
+ *                                              the comment at the read below:
+ *                                              a KDA is extra context, never a
+ *                                              reason to lose the whole row.
  *
  * `games` is floored, because the contract says "non-negative integer" and
  * `12.7` games cannot exist; flooring loses no information a user entered.
@@ -485,6 +489,24 @@ function normalizeManualEntry(raw: unknown): ManualChampionEntry | null {
 
   const id = readNonEmptyString(raw.id)
   if (id !== null) entry.id = id
+
+  // KDA IS EXPLICITLY NOT A FIELD THAT CAN DROP THE ROW. `games` and `winrate`
+  // are mandatory because without them the row makes no claim at all; a KDA is
+  // additional context, so a missing, unreadable, non-finite or negative one
+  // costs the KDA and nothing else. Dropping a champion row over it would be
+  // data loss the user never caused - the opposite of the module rule above.
+  //
+  // OMITTED RATHER THAN WRITTEN AS `null` when unusable, so a row without a KDA
+  // serialises exactly as it did before this field existed and an untouched
+  // state still round-trips to the same JSON. Absent and `null` mean the same
+  // thing downstream ("not stated", scored neutrally); `0` is a real, bad value
+  // and is kept - see ManualChampionEntry.kda in src/scout/types.ts.
+  //
+  // `readFiniteNumber` already rejects NaN, Infinity, booleans and non-numeric
+  // strings, so the only extra rule here is the sign: a negative ratio cannot
+  // exist and would mean the value was misparsed somewhere upstream.
+  const kda = readFiniteNumber(raw.kda)
+  if (kda !== null && kda >= 0) entry.kda = kda
 
   return entry
 }

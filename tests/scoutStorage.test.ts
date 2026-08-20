@@ -1475,3 +1475,232 @@ describe('legacy manual entry provenance "riot"', () => {
     }
   })
 })
+
+/* ==========================================================================
+ * 20. ManualChampionEntry.kda — "a broken KDA costs the KDA, never the row"
+ *
+ * WHY THIS SECTION EXISTS: `normalizeManualEntry()` in src/scout/storage.ts
+ * makes three promises about `kda` in a long comment, and until this section
+ * none of them was pinned by a test — the whole guard could be reduced to
+ * `if (kda !== null)` without turning a single test red.
+ *
+ * THE THREE PROMISES, each asserted below:
+ *   1. AN UNUSABLE KDA NEVER DROPS THE ROW. `games` and `winrate` are the only
+ *      two fields that may remove a champion row; a KDA is extra context, so a
+ *      missing, unreadable, non-finite or negative one costs the KDA alone.
+ *   2. `0` IS A REAL VALUE AND IS KEPT. "no kills, no assists" is something the
+ *      source actually printed and has to stay distinguishable from "not
+ *      stated" — this is exactly where a falsy check (`if (kda)`) would lie.
+ *   3. UNUSABLE MEANS THE KEY IS ABSENT, NOT `null`. A row without a KDA has to
+ *      serialise exactly as it did before the field existed, so an untouched
+ *      state still round-trips to the same JSON and an older bundle reading it
+ *      sees nothing new. The assertions therefore test for the *key* (`in`,
+ *      `Object.hasOwn`, `Object.keys`) and for the absence of `"kda"` in the
+ *      written JSON — `toBeUndefined()` alone would happily accept a stored
+ *      `"kda":null`, which is the very thing promise (3) forbids.
+ *
+ * NOTE ON THE NUMERIC STRING `"3.2"`: it is NOT in the unusable table. `kda` is
+ * read with the same `readFiniteNumber()` as `games` and `winrate`, which
+ * documents and tests the numeric-string path ("reads a numeric string sample
+ * size ('12' -> 12)"). Treating a numeric string as unusable here would assert
+ * the opposite of the shared reader; `"-1"` still drops out, because the sign
+ * rule applies after parsing. Both are spelled out in their own test.
+ * ========================================================================== */
+
+/** The Lee Sin fixture as the stats import writes it: with a stated KDA. */
+const entryLeeSinWithKda: ManualChampionEntry = { ...entryLeeSin, kda: 3.2 }
+
+describe("normalizeScoutState - ManualChampionEntry.kda", () => {
+  /** Normalise raw rows for `playerAgurin` and hand back what survived. */
+  function entriesOf(rawEntries: unknown): ManualChampionEntry[] {
+    const state = normalizeScoutState({
+      schemaVersion: 2,
+      players: [playerAgurin],
+      playerData: { [playerAgurin.id]: { playerId: playerAgurin.id, entries: rawEntries } },
+    })
+    return state.playerData[playerAgurin.id]?.entries ?? []
+  }
+
+  /** The single surviving row for one raw row. */
+  function firstEntry(rawEntry: unknown): ManualChampionEntry {
+    return entriesOf([rawEntry])[0]
+  }
+
+  /**
+   * The same, but through a real JSON blob in storage. A browser holds a
+   * STRING, not an object graph, so this is the only faithful reproduction of
+   * what actually happens to `undefined` and `null` on the way out and back.
+   */
+  function loadedEntry(rawEntry: unknown): ManualChampionEntry {
+    seedJson({
+      schemaVersion: 2,
+      players: [playerAgurin],
+      playerData: { [playerAgurin.id]: { playerId: playerAgurin.id, entries: [rawEntry] } },
+      lineup: emptyLineup(),
+      includeSubstitutes: false,
+      removedPlayers: {},
+    })
+    return loadScoutState().playerData[playerAgurin.id].entries[0]
+  }
+
+  /** Builds a savable state around a list of rows this build can construct. */
+  function stateWithEntries(entries: ManualChampionEntry[]): ScoutState {
+    return {
+      ...EMPTY_STATE,
+      players: [playerAgurin],
+      playerData: { [playerAgurin.id]: { playerId: playerAgurin.id, entries } },
+    }
+  }
+
+  it("keeps a stated KDA through save -> load, to the exact value", () => {
+    saveScoutState(stateWithEntries([entryLeeSinWithKda]))
+
+    const entry = loadScoutState().playerData[playerAgurin.id].entries[0]
+    expect(entry).toEqual(entryLeeSinWithKda)
+    expect(entry.kda).toBe(3.2)
+    // Not just "loads back": it has to be *written* as a number, so an older
+    // bundle sees a plain extra key and a newer one reads the same ratio.
+    expect(store[SCOUT_STORAGE_KEY]).toContain('"kda":3.2')
+  })
+
+  it("keeps a KDA of 0 - a real, bad value, not 'not stated'", () => {
+    const entry = firstEntry({ ...entryLeeSin, kda: 0 })
+
+    expect(entry).toBeDefined()
+    expect(entry.kda).toBe(0)
+    // The key must be PRESENT with the value 0. This is the assertion a falsy
+    // check (`if (kda)`) or a `> 0` bound would fail.
+    expect("kda" in entry).toBe(true)
+    expect(Object.hasOwn(entry, "kda")).toBe(true)
+    expect(Object.keys(entry)).toContain("kda")
+  })
+
+  it("writes a KDA of 0 into storage instead of dropping it", () => {
+    saveScoutState(stateWithEntries([{ ...entryLeeSin, kda: 0 }]))
+
+    expect(store[SCOUT_STORAGE_KEY]).toContain('"kda":0')
+    expect(loadScoutState().playerData[playerAgurin.id].entries[0].kda).toBe(0)
+  })
+
+  it("omits the key for every unusable KDA and keeps the row intact", () => {
+    // Each pair is (label for the failure message, stored kda value).
+    const unusable: readonly (readonly [string, unknown])[] = [
+      ["negative", -1],
+      ["negative fraction", -0.5],
+      ["NaN", Number.NaN],
+      ["Infinity", Number.POSITIVE_INFINITY],
+      ["-Infinity", Number.NEGATIVE_INFINITY],
+      ["null", null],
+      ["undefined", undefined],
+      ["true", true],
+      ["false", false],
+      ["non-numeric string", "excellent"],
+      ["empty string", ""],
+      ["blank string", "   "],
+      ["negative numeric string", "-1"],
+      ["object", { ratio: 3.2 }],
+      ["array", [3.2]],
+    ]
+
+    for (const [label, kda] of unusable) {
+      const entry = firstEntry({ ...entryLeeSin, kda })
+
+      // (1) the row survives, untouched apart from the KDA.
+      expect(entry, label).toBeDefined()
+      expect(entry.championName, label).toBe("LeeSin")
+      expect(entry.games, label).toBe(42)
+      expect(entry.winrate, label).toBe(61.5)
+      expect(entry.note, label).toBe("first pick every time")
+      expect(entry.source, label).toBe("opgg")
+      expect(entry.recency, label).toBe("current")
+      expect(entry.role, label).toBe("jungle")
+
+      // (3) the KEY is gone - not present with the value `null`.
+      expect("kda" in entry, label).toBe(false)
+      expect(Object.hasOwn(entry, "kda"), label).toBe(false)
+      expect(Object.keys(entry), label).not.toContain("kda")
+    }
+  })
+
+  it("omits the key when the stored row never carried one", () => {
+    const entry = firstEntry({ ...entryLeeSin })
+
+    expect(entry.championName).toBe("LeeSin")
+    expect("kda" in entry).toBe(false)
+    expect(Object.keys(entry)).not.toContain("kda")
+  })
+
+  it('never writes "kda":null into storage', () => {
+    saveScoutState(
+      stateWithEntries([
+        { ...entryLeeSin, championName: "NullKda", kda: null },
+        { ...entryLeeSin, championName: "NegKda", kda: -1 },
+        { ...entryLeeSin, championName: "NoKda" },
+      ]),
+    )
+
+    const written = store[SCOUT_STORAGE_KEY]
+    // The strongest form of promise (3): the substring must not occur at all.
+    expect(written).not.toContain('"kda"')
+
+    const entries = loadScoutState().playerData[playerAgurin.id].entries
+    expect(entries.map((entry) => entry.championName)).toEqual(["NullKda", "NegKda", "NoKda"])
+    for (const entry of entries) expect("kda" in entry, entry.championName).toBe(false)
+  })
+
+  it("round-trips a state without any KDA to byte-identical JSON", () => {
+    saveScoutState(stateWithEntries([entryLeeSin]))
+    const first = store[SCOUT_STORAGE_KEY]
+
+    saveScoutState(loadScoutState())
+    const second = store[SCOUT_STORAGE_KEY]
+
+    expect(second).toBe(first)
+    expect(first).not.toContain("kda")
+  })
+
+  it("loses only the broken row's KDA, never the row and never a neighbour's", () => {
+    const entries = entriesOf([
+      { ...entryLeeSin, championName: "Good", kda: 4.1 },
+      { ...entryLeeSin, championName: "Broken", kda: -2 },
+      { ...entryLeeSin, championName: "Zero", kda: 0 },
+      { ...entryLeeSin, championName: "Silent" },
+    ])
+
+    expect(entries.map((entry) => entry.championName)).toEqual([
+      "Good",
+      "Broken",
+      "Zero",
+      "Silent",
+    ])
+    expect(entries[0].kda).toBe(4.1)
+    expect("kda" in entries[1]).toBe(false)
+    expect(entries[2].kda).toBe(0)
+    expect("kda" in entries[3]).toBe(false)
+  })
+
+  it("reads a numeric string KDA, exactly like games and winrate ('3.2' -> 3.2)", () => {
+    // Same `readFiniteNumber()` as the two mandatory fields - see the section
+    // header for why this is deliberately NOT in the unusable table above.
+    const entry = firstEntry({ ...entryLeeSin, kda: "3.2" })
+    expect(entry.kda).toBe(3.2)
+    expect(Object.hasOwn(entry, "kda")).toBe(true)
+
+    // The sign rule still applies after parsing, so a negative string drops.
+    expect("kda" in firstEntry({ ...entryLeeSin, kda: "-1" })).toBe(false)
+  })
+
+  it("survives a real JSON blob: 0 stays 0, null loads as an absent key", () => {
+    expect(loadedEntry({ ...entryLeeSin, kda: 0 }).kda).toBe(0)
+
+    const fromNull = loadedEntry({ ...entryLeeSin, kda: null })
+    expect(fromNull.championName).toBe("LeeSin")
+    expect(fromNull.games).toBe(42)
+    expect(fromNull.winrate).toBe(61.5)
+    expect("kda" in fromNull).toBe(false)
+
+    // `undefined` does not even survive JSON.stringify, so this is what a row
+    // written with an explicit `kda: undefined` really looks like on reload.
+    expect("kda" in loadedEntry({ ...entryLeeSin, kda: undefined })).toBe(false)
+  })
+})

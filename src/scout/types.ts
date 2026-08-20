@@ -314,6 +314,10 @@ export type ScoutManualSource = ScoutSourceKind | "manual" | "other"
  * exists because a human entered it. A row the user cannot fill in should not
  * be created — absence of data is expressed by the *absence* of entries plus a
  * `no_data` reason, never by a fake `0`.
+ *
+ * The single optional field is {@link ManualChampionEntry.kda}: it comes from
+ * the stats import only, and its absence is neutral rather than bad - see the
+ * field itself for why absent and `0` must never be conflated.
  */
 export interface ManualChampionEntry {
   /** Optional stable key for list rendering/editing; not part of identity. */
@@ -324,6 +328,40 @@ export interface ManualChampionEntry {
   games: number
   /** Winrate in **percent (0–100)** — see {@link WinratePercent}. */
   winrate: WinratePercent
+  /**
+   * KDA ratio taken from the import, when the source stated one (e.g. `3.4`).
+   *
+   * OPTIONAL AND BACKWARD COMPATIBLE IN BOTH DIRECTIONS - which is exactly why
+   * {@link SCOUT_SCHEMA_VERSION} stays at 2 and no migration branch was added.
+   * The field is purely additive:
+   *  - an OLDER build reading a state that carries it ignores the unknown key.
+   *    `normalizeManualEntry()` in src/scout/storage.ts builds its result field
+   *    by field and never spreads the input, so championName, games, winrate,
+   *    note, source, recency and role all survive untouched and only the KDA
+   *    itself is gone the next time that build saves. A FIELD LOSS, NEVER A ROW
+   *    LOSS - the same reasoning as the legacy `"riot"` source value above.
+   *  - a NEWER build reading an older state simply finds no `kda` and reads
+   *    that as "not stated".
+   *
+   * ABSENT / `undefined` / `null` ALL MEAN "NOT STATED" AND MUST BE SCORED
+   * NEUTRALLY, NEVER AS A BAD KDA. A missing value is absence of evidence;
+   * turning it into a penalty would invent data, which is honesty rule (A) at
+   * the top of this file. `0` is a different statement entirely: a real, truly
+   * bad value (no kills and no assists) that the source did print, and it has
+   * to stay distinguishable from "not stated". Consumers must therefore test
+   * for `null`/`undefined` explicitly and never for falsiness - `!entry.kda`
+   * collapses precisely the two cases that must not be collapsed.
+   *
+   * WRITTEN BY THE IMPORT ONLY. There is deliberately no editor field for it:
+   * `importRowToManualEntry()` in src/scout/statsImport.ts passes
+   * {@link ScoutImportRow.kda} through when it is a finite number `>= 0` and
+   * omits the key otherwise, and `normalizeManualEntry()` applies the same rule
+   * on load and on save - so a row without a usable KDA serialises exactly as
+   * it did before this field existed. An unusable KDA never drops the row;
+   * only `games` and `winrate` can do that. The value also stays in the
+   * human-readable note (`KDA 3.1`), which is unchanged.
+   */
+  kda?: number | null
   /** Free user note. Not translated, shown verbatim, never parsed. */
   note: string
   /** Which site the number was read off (or "manual" when from memory). */
@@ -662,6 +700,25 @@ export type ScoutReasonCode =
   | "substitute_risk"
   /** the player sits in no lineup slot, so no role comparison is possible */
   | "player_without_lineup_role"
+  /* ---- champion stat strength (games / winrate / KDA weighting) ---------
+   * ADDITIVE ONLY, same rule as every group above. Emitted by
+   * `buildSignalContext()` in src/scout/analysis.ts, which fires AT MOST ONE
+   * of the two per signal (strict ladder: `strong_kda` first, then
+   * `many_games_on_champion`) so the weighting stays visible without turning
+   * the reason list into a flood. */
+  /** a lot of games on this champion — experience, independent of the winrate.
+   *  Renders `{games}`, but it deliberately has NO
+   *  `scout_reason_many_games_on_championOne` sibling and NO entry in
+   *  `COUNT_SENSITIVE_REASONS` (src/components/scout/scoutUiHelpers.ts): the
+   *  reason only fires from 44 games up (the threshold `analysis.ts` derives
+   *  from `SCOUT_STAT_REASON_MIN_IMPACT`), so `{games} === 1` is structurally
+   *  unreachable and a singular string would be copy nobody can ever see.
+   *  tests/scoutPlural.test.ts freezes that decision in
+   *  `UNTOUCHED_COUNT_KEYS`, and its ballast guard fails if a `...One` sibling
+   *  is added anyway. */
+  | "many_games_on_champion"
+  /** above-average KDA on a sample solid enough to carry the claim */
+  | "strong_kda"
 
 /** Parameters substituted into the translated reason text. */
 export type ScoutReasonParams = Readonly<Record<string, string | number>>
@@ -1194,11 +1251,17 @@ export type AnyScoutState = ScoutStateV1 | ScoutStateV2
  * than being silently applied.
  *
  * NO SCHEMA BUMP — {@link SCOUT_SCHEMA_VERSION} STAYS AT 2, AND THAT IS CORRECT
- * There is nothing new to persist:
+ * Nothing here needs a new schema version:
  *  - applying an import produces plain {@link ManualChampionEntry} rows that go
  *    into the existing `ScoutStateV2.playerData`. A saved state after an import
- *    has byte-for-byte the same shape as one the user typed by hand — an older
+ *    has the same shape as one the user typed by hand — an older
  *    build reading it sees rows it already understands.
+ *  - the one field the import has added since, the optional
+ *    {@link ManualChampionEntry.kda}, is additive in both directions: an older
+ *    build ignores the unknown key and loses nothing but the KDA itself, a
+ *    newer build reads an absent key as "not stated". An optional field that
+ *    is default-safe on both sides is exactly the case the compatibility rules
+ *    on {@link ScoutStateV2} allow WITHOUT a new version.
  *  - the import panel's own state (the selected role, the pasted text, the
  *    parsed preview, the chosen source/recency, the apply mode) is transient UI
  *    state and is deliberately NOT persisted: a half-reviewed paste is not a
@@ -1381,10 +1444,14 @@ export type ScoutImportLayoutsAreComplete = Assert<
  * This is a *report*, not a schema: {@link ScoutStatsImportResult.columns} says
  * which columns were found, so the preview can label what it shows and the user
  * can see at a glance that, say, `winrate` was never located. Columns that have
- * no home on {@link ManualChampionEntry} (`kda`, `cs`, `csPerMin`,
+ * no home on {@link ManualChampionEntry} (`cs`, `csPerMin`,
  * `killParticipation`, `damage`, `role`) are still parsed and still shown —
  * they are what makes a misread table obvious to a human reviewer — but they do
  * not invent new persisted fields.
+ *
+ * `kda` USED TO BE IN THAT LIST AND NO LONGER IS: it is carried onto the
+ * optional {@link ManualChampionEntry.kda} so the ban scoring can read it. It
+ * is the only column that gained a home; the rest stay preview-only.
  *
  * `cs` and `csPerMin` are separate members on purpose: sites print either an
  * absolute creep score or a per-minute rate, and treating one as the other
@@ -1732,9 +1799,12 @@ export interface ScoutImportUnparsedLine {
  * `danger` severity and counts into {@link ScoutImportApplyResult.skippedRows}).
  * That is precisely why `ManualChampionEntry` can keep its two plain numbers:
  * a row that cannot supply them never becomes an entry in the first place.
- * The remaining fields (`kda`, `csPerMin`, `killParticipation`, `damage`) have
+ * Of the remaining fields, `csPerMin`, `killParticipation` and `damage` have
  * no home on `ManualChampionEntry` at all — they exist so the reviewer can see
- * that the right table was parsed, and are dropped on apply.
+ * that the right table was parsed, and are dropped on apply. `kda` is the one
+ * exception: it is carried onto the optional {@link ManualChampionEntry.kda}
+ * when it is a finite number `>= 0`, and dropped like the others otherwise. A
+ * dropped `kda` never blocks the apply - only `games` and `winrate` can.
  */
 export interface ScoutImportRow {
   /**
@@ -1815,7 +1885,13 @@ export interface ScoutImportRow {
    * recomputed away.
    */
   winrate: WinratePercent | null
-  /** KDA ratio as printed (e.g. `3.4`), or `null`. Review aid only. */
+  /**
+   * KDA ratio as printed (e.g. `3.4`), or `null` when the paste stated none.
+   *
+   * No longer preview-only: `importRowToManualEntry()` carries a finite value
+   * `>= 0` onto {@link ManualChampionEntry.kda}. `null` stays `null` and is
+   * never turned into a `0`, because `0` is a real (bad) KDA.
+   */
   kda: number | null
   /** Creep score per minute, or `null`. An absolute CS column is not converted. */
   csPerMin: number | null

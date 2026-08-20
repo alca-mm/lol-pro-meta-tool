@@ -34,6 +34,8 @@
  * The plain-text export lives next door in ./scoutExport.ts.
  */
 
+import { pluralKey } from "../../i18n/plural"
+import type { PluralKeys } from "../../i18n/plural"
 import type { TranslationKey } from "../../i18n/types"
 import {
   SCOUT_LINEUP_SLOTS,
@@ -245,14 +247,105 @@ export function localizeScoutParams(
   return out
 }
 
+/* --------------------------------------------------------------------------
+ * Count-sensitive reasons and warnings
+ *
+ * WHY A LOOKUP TABLE HERE, IN A FILE WHOSE FIRST RULE IS "NO LOOKUP TABLE":
+ * `scout_reason_*` and `scout_warning_*` are derived MECHANICALLY from the type
+ * unions (section 1), and that derivation is what turns a missing translation
+ * into a compile error. A plain singular/plural pair would need a second key
+ * the builder can never derive, so the *derived* name has to stay a real key.
+ *
+ * Hence the split:
+ *  - the BASE key keeps its mechanical name and now carries the PLURAL text
+ *    (which is what it already said for every code listed below), so
+ *    `scoutReasonKey()` / `scoutWarningKey()` and their compile-time guarantee
+ *    are untouched, and
+ *  - the singular lives in a sibling key named `<base>One`, which only this
+ *    table knows about.
+ *
+ * A NEW COUNT-DEPENDENT CODE NEEDS BOTH: the base key in de.ts and en.ts worded
+ * as a plural, a `<base>One` key next to it, and a line in the table here.
+ * Forgetting the table line is silent - the plural text simply renders at 1,
+ * which is the defect this section exists to fix. A typo in the `One` key is at
+ * least a compile error, because the field is typed `TranslationKey`.
+ *
+ * `Partial<Record<...>>` on purpose: only codes whose sentence actually
+ * declines belong here. Every other code goes through the very same call
+ * unchanged.
+ * ------------------------------------------------------------------------ */
+
+/** The singular sibling of one mechanically derived key. */
+interface CountSensitiveText {
+  /** Which `params` entry decides the number ("games" for a sample, "count" for a tally). */
+  readonly param: string
+  /** The key to use when that parameter is exactly `1`. */
+  readonly one: TranslationKey
+}
+
+const COUNT_SENSITIVE_REASONS: Partial<Record<ScoutReasonCode, CountSensitiveText>> = {
+  small_sample: { param: "games", one: "scout_reason_small_sampleOne" },
+  high_winrate_small_sample: {
+    param: "games",
+    one: "scout_reason_high_winrate_small_sampleOne",
+  },
+  // `many_games_on_champion` renders `{games}` and still does NOT belong here.
+  // src/scout/analysis.ts only raises it once `gamesImpactMultiplier(games)`
+  // reaches SCOUT_STAT_REASON_MIN_IMPACT (1.03), which that curve first does at
+  // 44 games (at 1 game it sits at 0.907). A count of 1 is therefore not merely
+  // unlikely, it is unreachable, so a `scout_reason_many_games_on_championOne`
+  // would be dead copy in two languages. The German and English texts are worded
+  // as plurals only ("Viele Spiele" / "A lot of games") for the same reason.
+  // `strong_kda` does not belong here either, for a different reason: its
+  // params DO carry `games` and `kda` (the engine ships the numbers behind
+  // every claim), but neither German nor English text prints a placeholder, so
+  // there is no number whose grammar could go wrong. No `One` sibling can be
+  // needed for a sentence that renders no count.
+}
+
+const COUNT_SENSITIVE_WARNINGS: Partial<Record<ScoutWarningCode, CountSensitiveText>> = {
+  substitute_risk_active: { param: "count", one: "scout_warning_substitute_risk_activeOne" },
+  data_loss_on_reparse: { param: "count", one: "scout_warning_data_loss_on_reparseOne" },
+}
+
+/**
+ * The base (plural) key, or its `One` sibling when the deciding parameter is
+ * exactly `1`.
+ *
+ * Strict `=== 1` against a number, mirroring `pluralKey()` in
+ * src/i18n/plural.ts: a missing parameter, a string `"1"`, `0` and everything
+ * else keep the plural text. That is the safe direction, because the engine
+ * ships numbers and a plural where a singular belongs reads clumsy while the
+ * reverse reads broken.
+ */
+function countSensitiveKey(
+  entry: CountSensitiveText | undefined,
+  params: ScoutReasonParams | undefined,
+  base: TranslationKey,
+): TranslationKey {
+  if (entry === undefined) return base
+  const value = params ? params[entry.param] : undefined
+  return value === 1 ? entry.one : base
+}
+
 /** One finished justification sentence. */
 export function translateScoutReason(t: ScoutTranslate, reason: ScoutReason): string {
-  return fillPlaceholders(t(scoutReasonKey(reason.code)), localizeScoutParams(t, reason.params))
+  const key = countSensitiveKey(
+    COUNT_SENSITIVE_REASONS[reason.code],
+    reason.params,
+    scoutReasonKey(reason.code),
+  )
+  return fillPlaceholders(t(key), localizeScoutParams(t, reason.params))
 }
 
 /** One finished warning sentence. Severity only drives styling, never text. */
 export function translateScoutWarning(t: ScoutTranslate, warning: ScoutWarning): string {
-  return fillPlaceholders(t(scoutWarningKey(warning.code)), localizeScoutParams(t, warning.params))
+  const key = countSensitiveKey(
+    COUNT_SENSITIVE_WARNINGS[warning.code],
+    warning.params,
+    scoutWarningKey(warning.code),
+  )
+  return fillPlaceholders(t(key), localizeScoutParams(t, warning.params))
 }
 
 /**
@@ -279,6 +372,63 @@ export function compareChampionNames(a: string, b: string): number {
 /** `scout_count*` and friends: a text whose only placeholder is `{count}`. */
 export function translateCount(t: ScoutTranslate, key: TranslationKey, count: number): string {
   return fillPlaceholders(t(key), { count })
+}
+
+/**
+ * A counted string, picked from a singular/plural key pair and filled in.
+ *
+ * The RULE is shared with the team tab and lives in src/i18n/plural.ts
+ * ({@link pluralKey}): `count === 1` takes `keys.one`, everything else, `0`
+ * included, takes `keys.many`.
+ *
+ * The FILLING stays here on purpose. `fillPlaceholders()` above formats numbers
+ * through `formatScoutNumber()` and tidies the result, which the team tab
+ * deliberately does not do; and importing src/components/team/teamUiHelpers.ts
+ * would pull src/teams/riotService.ts and the Supabase client behind it into
+ * this module's import graph for four lines of string replacement. One rule,
+ * two fillers, no coupling.
+ *
+ * Both keys of a pair carry `{count}`, the singular one included, where the
+ * number can only ever be 1. Baking the "1" into the text would break DE/EN
+ * placeholder parity (tests/i18nScoutCopy.test.ts checks it for every key) and
+ * would hide the number from whoever rewords the string next.
+ */
+export function scoutPluralMessage(t: ScoutTranslate, count: number, keys: PluralKeys): string {
+  return fillPlaceholders(t(pluralKey(count, keys)), { count })
+}
+
+/* --------------------------------------------------------------------------
+ * The counted strings of the stats import.
+ *
+ * Named pairs, exported, so no component ever spells out one half inline and
+ * leaves the other behind - that is exactly how half a pair goes missing. The
+ * `many` side is always the pre-existing base key: the plural text is what
+ * those keys already said, so nothing that renders them changes at counts
+ * other than 1.
+ * ------------------------------------------------------------------------ */
+
+/** "Uebernommen: 1 Champion-Zeile." / "... 3 Champion-Zeilen." after an apply. */
+export const SCOUT_IMPORT_APPLIED_KEYS: PluralKeys = {
+  one: "scout_import_appliedOne",
+  many: "scout_import_applied",
+}
+
+/** "1 Champion erkannt." / "3 Champions erkannt." above the raw OP.GG preview. */
+export const SCOUT_IMPORT_OPGG_CHAMPIONS_KEYS: PluralKeys = {
+  one: "scout_import_opggRawChampionsOne",
+  many: "scout_import_opggRawChampions",
+}
+
+/** "1 Matchup-Block ignoriert." / "3 Matchup-Bloecke ignoriert." in the skip summary. */
+export const SCOUT_IMPORT_SKIPPED_MATCHUPS_KEYS: PluralKeys = {
+  one: "scout_import_skippedMatchupsOne",
+  many: "scout_import_skippedMatchups",
+}
+
+/** "1 empfohlener Champion ignoriert." / "3 empfohlene Champions ..." in the skip summary. */
+export const SCOUT_IMPORT_SKIPPED_RECOMMENDED_KEYS: PluralKeys = {
+  one: "scout_import_skippedRecommendedOne",
+  many: "scout_import_skippedRecommended",
 }
 
 /* ==========================================================================

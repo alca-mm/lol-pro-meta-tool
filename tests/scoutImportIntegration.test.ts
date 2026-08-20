@@ -229,6 +229,7 @@ describe("scout import integration — link, lineup, paste, analyse", () => {
         championName: "Lee Sin",
         games: 31,
         winrate: 64,
+        kda: 3.4,
         note: "KDA 3.4",
         source: "opgg",
         recency: "current",
@@ -238,6 +239,7 @@ describe("scout import integration — link, lineup, paste, analyse", () => {
         championName: "Viego",
         games: 22,
         winrate: 59,
+        kda: 3,
         note: "KDA 3",
         source: "opgg",
         recency: "current",
@@ -247,6 +249,7 @@ describe("scout import integration — link, lineup, paste, analyse", () => {
         championName: "Elise",
         games: 12,
         winrate: 50,
+        kda: 2.4,
         note: "KDA 2.4",
         source: "opgg",
         recency: "current",
@@ -593,6 +596,59 @@ describe("scout import integration — imported entries survive the storage roun
     const reloaded = analyzeScout(round.players, round.playerData, { lineup: round.lineup })
 
     expect(reloaded).toEqual(fresh)
+  })
+
+  /* ----------------------------------------------------------------------
+   * The optional `kda` field — both halves of its contract.
+   *
+   * `ManualChampionEntry.kda` is additive, which is the whole reason
+   * `SCOUT_SCHEMA_VERSION` could stay at 2: a row WITHOUT a usable KDA has to
+   * serialise exactly as it did before the field existed. The whole-entry
+   * `toEqual` above shows the surviving value only in passing and says nothing
+   * about the *shape* of a row that states no KDA — which is where a stray
+   * `kda: null` would hide.
+   * ---------------------------------------------------------------------- */
+
+  /** Persist a jungle player's entries and hand back what storage read again. */
+  function roundTripJungleData(
+    entries: readonly ManualChampionEntry[],
+  ): readonly ManualChampionEntry[] {
+    const state = {
+      ...createEmptyScoutState(),
+      players: parseScoutInput(JUNGLE_LINK).players,
+      playerData: dataOf([JUNGLE_ID, entries]),
+      lineup: starter(createEmptyScoutLineup(), "jungle", JUNGLE_ID),
+    }
+    return normalizeScoutState(JSON.parse(JSON.stringify(state))).playerData[JUNGLE_ID].entries
+  }
+
+  it("carries an imported KDA through normalizeScoutState, value for value", () => {
+    const entries = importInto([], JUNGLE_TABLE, "jungle")
+
+    // Exactly what the paste states — the importer neither rounds nor rescales.
+    expect(entries.map((entry) => entry.kda)).toEqual([3.4, 3, 2.4])
+
+    // Compared as values, not for truthiness: `0` is a real, bad KDA and must
+    // never be conflated with "the source stated none".
+    expect(roundTripJungleData(entries).map((entry) => entry.kda)).toEqual([3.4, 3, 2.4])
+  })
+
+  it("stores a row without a usable KDA without the key — never as null", () => {
+    // `KARMA_SUPPORT_TABLE` has no KDA column, so the row states none.
+    const [karma] = importInto([], KARMA_SUPPORT_TABLE, "support")
+
+    expect(Object.prototype.hasOwnProperty.call(karma, "kda")).toBe(false)
+
+    const [round] = roundTripJungleData([karma])
+
+    // ABSENT, not `null`. `toEqual` alone would accept a key that is present and
+    // `undefined`; this asserts the persisted shape itself, so the row is still
+    // byte-identical to one written before the field existed.
+    expect(Object.prototype.hasOwnProperty.call(round, "kda")).toBe(false)
+    expect(round.kda).toBeUndefined()
+    expect(JSON.stringify(round)).not.toContain("kda")
+    // The rest of the row is untouched by the field's absence.
+    expect(round).toEqual(karma)
   })
 })
 
@@ -980,6 +1036,7 @@ const EXPECTED_MID_ENTRIES: readonly ManualChampionEntry[] = [
     championName: "Ahri",
     games: 72,
     winrate: 50,
+    kda: 2.6,
     note: "W36 · L36 · KDA 2.6",
     source: "opgg",
     recency: "current",
@@ -989,6 +1046,7 @@ const EXPECTED_MID_ENTRIES: readonly ManualChampionEntry[] = [
     championName: "Lux",
     games: 38,
     winrate: 61,
+    kda: 3.1,
     note: "W23 · L15 · KDA 3.1",
     source: "opgg",
     recency: "current",
@@ -998,6 +1056,7 @@ const EXPECTED_MID_ENTRIES: readonly ManualChampionEntry[] = [
     championName: "Milio",
     games: 32,
     winrate: 63,
+    kda: 4.2,
     note: "W20 · L12 · KDA 4.2",
     source: "opgg",
     recency: "current",
@@ -1049,6 +1108,34 @@ const MID_TABLE = paste(
 
 /** The control for the mismatch case: the winrate the win/loss counts imply. */
 const MID_TABLE_40_AT_50 = paste("Champion\tGames\tWin Rate\tKDA", "Ahri\t40\t50%\t2.1")
+
+/* ==========================================================================
+ * STAT_WEIGHTING_ORDER — why this section's champion order reads
+ * Milio, Lux, Ahri and no longer Ahri, Lux, Milio.
+ *
+ * Until 2026-08-20 the ban score knew only games and winrate, and a champion at
+ * a NEUTRAL 50 % winrate could still lead the plan purely by having been played
+ * more often. In this fixture it did, and by a hair: Ahri led the runner-up by
+ * 0.008 — a lead built on nothing but volume. That was the defect the stat
+ * weighting was asked to fix.
+ *
+ * With `championStatStrengthMultiplier()` (games / winrate / KDA) in the chain
+ * the same three rows score:
+ *
+ *   Milio  32 games · 63 % · KDA 4.20  ->  0.859
+ *   Lux    38 games · 61 % · KDA 3.10  ->  0.823
+ *   Ahri   72 games · 50 % · KDA 2.60  ->  0.766
+ *
+ * So the reversal below is the REQUIREMENT, not a broken expectation. Every
+ * flipped line in this section carries a back-reference to this block; the
+ * numbers themselves are pinned in tests/scoutStatWeighting.test.ts and the
+ * statement they encode has its own test at the end of section 11.1.
+ *
+ * What did NOT change, and is asserted unchanged at every one of those spots:
+ * Ahri still carries its 72 games, all three rows are still on-role mid, still
+ * `high` confidence, still `safe`, and the total is still 142 games. Only the
+ * ranking moved.
+ * ========================================================================== */
 
 describe("scout import integration — the OP.GG raw champion-page copy", () => {
   /* Proof of the "not a scraper" rule: `fetch` is watched for this whole
@@ -1120,7 +1207,10 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
       const analysis = analyzeScout(players, dataOf([MID_ID, entries]), { lineup })
 
       const signals = analysis.players[0].signals
-      expect(championsOf(signals)).toEqual(["Ahri", "Lux", "Milio"])
+      // ORDER FLIPPED ON 2026-08-20, deliberately — see STAT_WEIGHTING_ORDER.
+      // Milio 0.859 > Lux 0.823 > Ahri 0.766, i.e. exactly the reverse of the
+      // pure game-count order this list used to have.
+      expect(championsOf(signals)).toEqual(["Milio", "Lux", "Ahri"])
       for (const signal of signals) {
         expect(signal.role).toBe("mid")
         expect(signal.roleFit).toBe("onrole")
@@ -1137,7 +1227,9 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
       expect(analysis.players[0].dataQuality.totalGames).toBe(142)
 
       const bans = analysis.banPlan.prioritizedBans
-      expect(championsOf(bans)).toEqual(["Ahri", "Lux", "Milio"])
+      // Same flip, same reason (STAT_WEIGHTING_ORDER): the ban plan simply
+      // mirrors the signal order — 0.859 / 0.823 / 0.766.
+      expect(championsOf(bans)).toEqual(["Milio", "Lux", "Ahri"])
       for (const candidate of bans) {
         expect(candidate.targetPlayerId).toBe(MID_ID)
         expect(candidate.targetRole).toBe("mid")
@@ -1145,7 +1237,51 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
         expect(candidate.roleFit).toBe("onrole")
         expect(candidate.substituteOnly).toBe(false)
       }
-      expect(championsOf(analysis.banPlan.phases?.safe ?? [])).toEqual(["Ahri", "Lux", "Milio"])
+      // All three are still `safe` — only their order changed
+      // (STAT_WEIGHTING_ORDER): 0.859 / 0.823 / 0.766.
+      expect(championsOf(analysis.banPlan.phases?.safe ?? [])).toEqual(["Milio", "Lux", "Ahri"])
+    })
+
+    it("ranks the smaller, better sample above the big neutral one — the point of the weighting", () => {
+      // The statement behind STAT_WEIGHTING_ORDER, asserted as a statement
+      // instead of only as a side effect of the three ordered lists above. If
+      // the weighting were ever reverted, those lists would fail with a
+      // "wrong order" message that says nothing about WHY the order matters;
+      // this one names the trade-off it encodes.
+      const players = parseScoutInput(MID_LINK).players
+      const lineup = starter(createEmptyScoutLineup(), "mid", MID_ID)
+      const entries = importInto([], OPGG_RAW_COPY, "mid")
+      const bans = analyzeScout(players, dataOf([MID_ID, entries]), { lineup }).banPlan
+        .prioritizedBans
+
+      const volume = candidateFor(bans, "Ahri")
+      const quality = candidateFor(bans, "Milio")
+      const volumeSignal = signalFor(volume?.signals ?? [], "Ahri")
+      const qualitySignal = signalFor(quality?.signals ?? [], "Milio")
+
+      // The premise: Ahri really does have more than twice the games, and its
+      // winrate really is the neutral 50 % that carries no information at all.
+      expect(volumeSignal?.games).toBe(72)
+      expect(qualitySignal?.games).toBe(32)
+      expect(volumeSignal?.games).toBeGreaterThan((qualitySignal?.games ?? 0) * 2)
+      expect(volumeSignal?.winrate).toBe(50)
+      expect(qualitySignal?.winrate).toBeGreaterThan(volumeSignal?.winrate ?? 0)
+      // `ChampionSignal` carries no KDA — it enters the score inside
+      // `analyzeScout` and is not re-exported — so the premise is read off the
+      // entries the import produced, which is where the KDA lives.
+      const kdaOf = (championName: string): number =>
+        entries.find((entry) => entry.championName === championName)?.kda ?? 0
+      expect(kdaOf("Ahri")).toBe(2.6)
+      expect(kdaOf("Milio")).toBe(4.2)
+
+      // The conclusion: the smaller but clearly better sample wins anyway.
+      expect(quality?.priority).toBeGreaterThan(volume?.priority ?? 0)
+      const order = championsOf(bans)
+      expect(order.indexOf("Milio")).toBeLessThan(order.indexOf("Ahri"))
+
+      // And the margin is not a rounding artefact: the old engine's whole lead
+      // was 0.008, so anything at that scale would prove nothing.
+      expect((quality?.priority ?? 0) - (volume?.priority ?? 0)).toBeGreaterThan(0.05)
     })
   })
 
@@ -1201,17 +1337,30 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
     }
 
     it("caps the strongest signal at low confidence and marks it off-role", () => {
-      const strongest = offroleAnalysis().players[0].signals[0]
+      const analysis = offroleAnalysis()
+      const strongest = analysis.players[0].signals[0]
 
-      // 72 games would be `high` on its own — `SIGNAL_CONF_HIGH_GAMES` is 15.
-      expect(strongest.championName).toBe("Ahri")
-      expect(strongest.games).toBe(72)
-      expect(strongest.winrate).toBe(50)
+      // WHICH champion sits first flipped on 2026-08-20 (STAT_WEIGHTING_ORDER):
+      // Milio 0.859 > Lux 0.823 > Ahri 0.766 before the off-role damping, so
+      // `signals[0]` is Milio now, not the 72-game Ahri.
+      // 32 games would still be `high` on their own — `SIGNAL_CONF_HIGH_GAMES`
+      // is 15 — which is what makes the `low` below the cap's doing and not a
+      // thin-sample effect.
+      expect(strongest.championName).toBe("Milio")
+      expect(strongest.games).toBe(32)
+      expect(strongest.winrate).toBe(63)
       expect(strongest.role).toBe("support")
       expect(strongest.lineupRole).toBe("jungle")
       expect(strongest.roleFit).toBe("offrole")
       expect(strongest.confidence).toBe("low")
       expect(codesOf(strongest.reasons)).toContain("offrole_signal")
+
+      // The 72-game Ahri statement is kept explicitly rather than lost with the
+      // ranking: it is capped for exactly the same reason, and 72 games are the
+      // strongest possible argument that the cap is not a sample effect.
+      const ahri = signalFor(analysis.players[0].signals, "Ahri")
+      expect(ahri).toMatchObject({ games: 72, winrate: 50, roleFit: "offrole", confidence: "low" })
+      expect(codesOf(ahri?.reasons ?? [])).toContain("offrole_signal")
     })
 
     it("keeps it out of the safe and the target ban phase, and says so out loud", () => {
@@ -1229,10 +1378,14 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
       // All three rows are off-role, so no recommendation survives at all.
       expect(championsOf(analysis.banPlan.phases?.safe ?? [])).toEqual([])
       expect(championsOf(analysis.banPlan.phases?.target ?? [])).toEqual([])
+      // Order flipped on 2026-08-20 (STAT_WEIGHTING_ORDER): the damping is a
+      // constant factor, so the situational list keeps the on-role ranking
+      // 0.859 / 0.823 / 0.766. The membership — all three, nothing else — is
+      // what this assertion is actually about and it is unchanged.
       expect(championsOf(analysis.banPlan.phases?.situational ?? [])).toEqual([
-        "Ahri",
-        "Lux",
         "Milio",
+        "Lux",
+        "Ahri",
       ])
 
       expect(codesOf(analysis.warnings)).toContain("offrole_data_present")
@@ -1253,11 +1406,17 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
       const analysis = analyzeScout(players, dataOf([MID_ID, entries]), {})
 
       const top = analysis.banPlan.prioritizedBans[0]
-      expect(top.championName).toBe("Ahri")
+      // WHO is on top flipped on 2026-08-20 (STAT_WEIGHTING_ORDER): Milio 0.859
+      // > Lux 0.823 > Ahri 0.766. The contrast this test exists for is
+      // untouched — `safe` instead of `situational`, `high` instead of `low`.
+      expect(top.championName).toBe("Milio")
       expect(top.confidence).toBe("high")
       expect(top.phase).toBe("safe")
       expect(top.roleFit).toBe("unknown")
+      // Ahri is the champion the off-role test above pinned, so keep naming it:
+      // without a lineup even the 72-game row is a safe ban again.
       expect(championsOf(analysis.banPlan.phases?.safe ?? [])).toContain("Ahri")
+      expect(candidateFor(analysis.banPlan.prioritizedBans, "Ahri")?.confidence).toBe("high")
       expect(codesOf(analysis.warnings)).not.toContain("offrole_data_present")
     })
   })
@@ -1358,8 +1517,13 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
       const entries = importInto([], OPGG_RAW_COPY_WITH_NOISE, "mid")
       const analysis = analyzeScout(players, dataOf([MID_ID, entries]), { lineup })
 
-      expect(championsOf(analysis.players[0].signals)).toEqual(["Ahri", "Lux"])
-      expect(championsOf(analysis.banPlan.prioritizedBans)).toEqual(["Ahri", "Lux"])
+      // Order flipped on 2026-08-20 (STAT_WEIGHTING_ORDER). Same cause, one
+      // champion fewer: Lux 38 games at 61 % with KDA 3.10 now outranks the
+      // 72-game Ahri at a neutral 50 % with KDA 2.60. What this test asserts —
+      // that ONLY these two exist — is unchanged, and the two lines below still
+      // pin Ahri's 72 games through `dataQuality`.
+      expect(championsOf(analysis.players[0].signals)).toEqual(["Lux", "Ahri"])
+      expect(championsOf(analysis.banPlan.prioritizedBans)).toEqual(["Lux", "Ahri"])
       for (const skipped of SKIPPED_NAMES) {
         expect(signalFor(analysis.players[0].signals, skipped)).toBeUndefined()
         expect(candidateFor(analysis.banPlan.prioritizedBans, skipped)).toBeUndefined()
@@ -1502,6 +1666,7 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
         championName: "Ahri",
         games: 40,
         winrate: 62,
+        kda: 2.1,
         note: "W20 · L20 · KDA 2.1",
         source: "opgg",
         recency: "current",

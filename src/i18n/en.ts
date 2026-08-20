@@ -625,13 +625,15 @@ export const en: Translations = {
     // Tournament Scout — reason codes (ScoutReasonCode)
     scout_reason_high_winrate_many_games: "{winrate}% winrate over {games} games, a solid sample.",
     scout_reason_high_winrate_small_sample: "{winrate}% winrate, but only {games} games.",
+    scout_reason_high_winrate_small_sampleOne: "{winrate}% winrate, but only {games} game.",
     scout_reason_signature_pick: "Signature pick: a large share of the recorded games.",
     scout_reason_one_trick: "One-trick level on this champion.",
     scout_reason_high_games_low_winrate: "{games} games but only {winrate}% winrate. More of a weak spot than a threat.",
     scout_reason_flex_across_roles: "Flex: played in several roles.",
     scout_reason_played_recently: "Played on the current patch.",
     scout_reason_stale_data: "Only older data, so treat it as a trend.",
-    scout_reason_small_sample: "Only {games} games, small sample size.",
+    scout_reason_small_sample: "Only {games} games, a small sample, so it counts for less.",
+    scout_reason_small_sampleOne: "Only {games} game, a small sample, so it counts for less.",
     scout_reason_no_data: "No scouting data entered.",
     scout_reason_manual_entry_only: "Entered by hand, nothing was fetched automatically.",
     scout_reason_hits_multiple_players: "Denies {count} players on the enemy team.",
@@ -643,6 +645,13 @@ export const en: Translations = {
     scout_reason_role_unknown_or_flex: "Role unclear or flex. Signal: {signalRole}, lineup: {lineupRole}. Which lane a ban hits here is not settled.",
     scout_reason_substitute_risk: "Comes from a substitute who may never play. The signal therefore counts only with a factor of {weight}.",
     scout_reason_player_without_lineup_role: "Player holds no slot in the lineup. The data is recorded as {role}, which does not confirm that role. Without a slot there is no role check.",
+    // Stat weighting (games / winrate / KDA). Deliberately NO `...One` sibling:
+    // `many_games_on_champion` only fires from 44 games up (derived from
+    // SCOUT_STAT_REASON_MIN_IMPACT in src/scout/analysis.ts), so a singular
+    // would be copy nobody can ever see. `strong_kda` renders no number at all
+    // and therefore never counts.
+    scout_reason_many_games_on_champion: "A lot of games on this champion: {games}.",
+    scout_reason_strong_kda: "Strong KDA on this champion.",
 
     // Tournament Scout — warning codes (ScoutWarningCode)
     scout_warning_player_without_data: "At least one player has no scouting data and is left out of the analysis. Add their champions.",
@@ -657,7 +666,9 @@ export const en: Translations = {
     scout_warning_player_without_lineup_role: "Players with scouting data but no slot in the lineup: {count}. Their signals cannot be matched to a role. Put them into the starting five or onto the bench.",
     scout_warning_offrole_data_present: "Signals from a role other than the one in the lineup: {count}. A ban built on them may miss the lane you have in mind. Check the slot assignment or the role on those entries.",
     scout_warning_substitute_risk_active: "Substitutes are being scored, {count} entries are affected. Someone on the bench may not play. Turn substitutes off if the ban plan should only target the starting five.",
+    scout_warning_substitute_risk_activeOne: "Substitutes are being scored, {count} entry is affected. Someone on the bench may not play. Turn substitutes off if the ban plan should only target the starting five.",
     scout_warning_data_loss_on_reparse: "Gone from the input: {count} players with scouting data. Nothing was deleted. The data sits in the archive, where you can restore it or discard it for good.",
+    scout_warning_data_loss_on_reparseOne: "Gone from the input: {count} player with scouting data. Nothing was deleted. The data sits in the archive, where you can restore it or discard it for good.",
 
     // Tournament Scout — team ban plan
     scout_teamPlanTitle: "Team ban plan",
@@ -780,6 +791,7 @@ export const en: Translations = {
     scout_import_applyModeHint: "Append updates existing champion rows instead of duplicating them. Replace deletes only the rows of this role and imports afresh.",
     scout_import_applyButton: "Apply to scouting data",
     scout_import_applied: "{count} champion rows applied.",
+    scout_import_appliedOne: "{count} champion row applied.",
     scout_import_applyBlocked: "Not ready to apply yet: pick the role above and select at least one row.",
     scout_import_unparsedHint: "These lines were not read as a stat row. If a champion is hiding in one, add it by hand.",
 
@@ -812,6 +824,7 @@ export const en: Translations = {
     scout_import_opggHowTo: "OP.GG: open the profile, go to the “Champions” tab, select from “All Champions” downwards and paste it here. The rest of the page may come along.",
     scout_import_opggRawDetected: "OP.GG raw copy of the champions page detected",
     scout_import_opggRawChampions: "{count} champions detected.",
+    scout_import_opggRawChampionsOne: "{count} champion detected.",
     scout_import_opggRawRoleNote: "The OP.GG champion list names no role. Every imported row gets the role you picked above.",
 
     // Tournament Scout — stats import: compact skipped summary
@@ -819,7 +832,9 @@ export const en: Translations = {
     scout_import_skippedTitle: "Skipped",
     scout_import_skippedAggregate: "The summary row “All Champions” was ignored. It is a total across every champion, not a single champion.",
     scout_import_skippedMatchups: "{count} matchup blocks ignored. They belong to a champion but are not rows of the champion pool in their own right.",
+    scout_import_skippedMatchupsOne: "{count} matchup block ignored. It belongs to a champion but is not a row of the champion pool in its own right.",
     scout_import_skippedRecommended: "{count} recommended champions ignored. They are suggestions from OP.GG, not played statistics.",
+    scout_import_skippedRecommendedOne: "{count} recommended champion ignored. It is a suggestion from OP.GG, not a played statistic.",
     // DELIBERATELY WITHOUT {count}: the counter behind it only sees separators at
     // a block-start position, not every hidden line. So the sentence states no
     // number rather than a wrong one — see ScoutStatsImportPanel.

@@ -1534,9 +1534,37 @@ function thinStaleSessionResult(): ScoutAnalysisResult {
   )
 }
 
+/**
+ * A session whose only job is to reach the two stat-weighting reasons.
+ *
+ * NOT optional decoration: `ALL_REASON_CODES` is a total map, so listing
+ * `many_games_on_champion` / `strong_kda` there without a fixture that emits
+ * them turns the coverage test below red — which is precisely the point of that
+ * test. Neither code is reachable from the two sessions above: the fattest
+ * champion there has 30 games (the games reason needs 44) and none of them
+ * carries a KDA at all.
+ *
+ * Both champions sit on ONE player so the ladder stays visible: Ahri has a KDA
+ * strong enough for `strong_kda`, Syndra is one game past the 44-game threshold
+ * with no KDA, so it can only be `many_games_on_champion`.
+ */
+function statWeightedSessionResult(): ScoutAnalysisResult {
+  return analyzeScout(
+    [player("statmid", "mid")],
+    dataOf([
+      "statmid",
+      [
+        entry("Ahri", 60, 52, { role: "mid", recency: "current", kda: 4.5 }),
+        entry("Syndra", 44, 52, { role: "mid", recency: "current" }),
+      ],
+    ]),
+  )
+}
+
 const SCENARIOS: readonly (readonly [string, () => ScoutAnalysisResult])[] = [
   ["messy session", messySessionResult],
   ["thin stale session", thinStaleSessionResult],
+  ["stat weighted session", statWeightedSessionResult],
 ]
 
 function collectAllCodedItems(): CodedItem[] {
@@ -1573,6 +1601,8 @@ const ALL_REASON_CODES: Readonly<Record<ScoutReasonCode, true>> = {
   role_unknown_or_flex: true,
   substitute_risk: true,
   player_without_lineup_role: true,
+  many_games_on_champion: true,
+  strong_kda: true,
 }
 
 const ALL_WARNING_CODES: Readonly<Record<ScoutWarningCode, true>> = {

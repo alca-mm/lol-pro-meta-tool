@@ -89,10 +89,15 @@ import {
     translateScoutImportWarning,
 } from "./scoutImportHelpers"
 import {
+    SCOUT_IMPORT_APPLIED_KEYS,
+    SCOUT_IMPORT_OPGG_CHAMPIONS_KEYS,
+    SCOUT_IMPORT_SKIPPED_MATCHUPS_KEYS,
+    SCOUT_IMPORT_SKIPPED_RECOMMENDED_KEYS,
     SCOUT_RECENCY_VALUES,
     fillPlaceholders,
     scoutBlockedKey,
     scoutConfidenceKey,
+    scoutPluralMessage,
     scoutRecencyKey,
     scoutRoleKey,
     translateCount,
@@ -808,7 +813,7 @@ export function ScoutStatsImportPanel({
                             <h5 className="scout-import-block-title">
                                 {t("scout_import_opggRawDetected")}
                             </h5>
-                            <p>{translateCount(t, "scout_import_opggRawChampions", rows.length)}</p>
+                            <p>{scoutPluralMessage(t, rows.length, SCOUT_IMPORT_OPGG_CHAMPIONS_KEYS)}</p>
                             {/* The OP.GG list names no reliable role per
                                 champion, so the selected role is what every
                                 applied row gets — stated here rather than left
@@ -1037,19 +1042,19 @@ export function ScoutStatsImportPanel({
                             )}
                             {skipSummary.matchupRows > 0 && (
                                 <p className="scout-import-hint">
-                                    {translateCount(
+                                    {scoutPluralMessage(
                                         t,
-                                        "scout_import_skippedMatchups",
                                         skipSummary.matchupRows,
+                                        SCOUT_IMPORT_SKIPPED_MATCHUPS_KEYS,
                                     )}
                                 </p>
                             )}
                             {skipSummary.recommendedChampions > 0 && (
                                 <p className="scout-import-hint">
-                                    {translateCount(
+                                    {scoutPluralMessage(
                                         t,
-                                        "scout_import_skippedRecommended",
                                         skipSummary.recommendedChampions,
+                                        SCOUT_IMPORT_SKIPPED_RECOMMENDED_KEYS,
                                     )}
                                 </p>
                             )}
@@ -1196,9 +1201,11 @@ export function ScoutStatsImportPanel({
                                 className="scout-import-status scout-import-apply-status"
                                 role="status"
                             >
-                                {fillPlaceholders(t("scout_import_applied"), {
-                                    count: applyStatus.count,
-                                })}
+                                {scoutPluralMessage(
+                                    t,
+                                    applyStatus.count,
+                                    SCOUT_IMPORT_APPLIED_KEYS,
+                                )}
                             </p>
                         )}
                     </div>

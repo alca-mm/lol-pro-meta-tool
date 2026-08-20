@@ -234,8 +234,13 @@ const KDA_COMPOSITE = /^[\d.,]+(?:\/[\d.,]+\/[\d.,]+|:[\d.,]+)$/
  *
  * The floor applies to any `D < 1`, so `5/0.5/5` also reads as 10 rather than
  * 20. That is a deliberate simplification of an average-deaths value below one;
- * `kda` is a review aid that is never stored, so the cost is a slightly
- * conservative number in the preview and nothing else.
+ * the cost is a slightly conservative number, never an `Infinity` and never a
+ * `null` where the source did state a value.
+ *
+ * THIS COMMENT USED TO END "a review aid that is never stored". IT IS STORED
+ * NOW: the ban scoring reads the KDA, so `importRowToManualEntry()` carries the
+ * parsed value onto the optional `ManualChampionEntry.kda`. The conservative
+ * number above therefore reaches the stored row as well, not just the preview.
  */
 function parseKdaLiteral(raw: string): number | null {
   const cleaned = raw
@@ -1777,6 +1782,13 @@ function formatMetric(value: number): string {
  * {@link ManualChampionEntry}: `W36 · L36 · KDA 3.1 · CS/min 7.2 · KP 62% ·
  * DMG 21345`.
  *
+ * `KDA` IS THE ONE METRIC IN THAT LIST THAT HAS A HOME NOW
+ * ({@link ManualChampionEntry.kda}). It stays in the note anyway, deliberately:
+ * the note is what a human reads back weeks later, and dropping a value out of
+ * it would silently change every note this importer has ever written. The note
+ * is prose for a person, the field is a number for the scoring - they do not
+ * compete, and this function is unchanged.
+ *
  * `W` / `L` come FIRST because they are the only part of the note that is not
  * decoration: the win/loss split is the evidence behind the stored `games` and
  * `winrate`, and the contract on {@link ScoutImportRow.wins} names this note as
@@ -1817,6 +1829,10 @@ export function buildImportNote(row: ScoutImportRow): string {
  * No `id` is set: React keys are assigned by the UI (`withEntryIds()`), and an
  * id invented here would either collide with existing rows or need a counter
  * that survives across parses.
+ *
+ * `kda` is the ONE extra metric that is carried onto the entry (see the comment
+ * at the assignment); `csPerMin`, `killParticipation` and `damage` still reach
+ * the stored row through the note only.
  */
 export function importRowToManualEntry(
   row: ScoutImportRow,
@@ -1825,7 +1841,7 @@ export function importRowToManualEntry(
   if (!isImportRowApplicable(row)) return null
   if (row.games === null || row.winrate === null) return null
 
-  return {
+  const entry: ManualChampionEntry = {
     championName: row.championName,
     games: Math.floor(row.games),
     winrate: row.winrate,
@@ -1834,6 +1850,23 @@ export function importRowToManualEntry(
     recency: options.recency,
     role: options.role,
   }
+
+  // The only one of the four extra metrics that has a home on the entry. Passed
+  // through UNCHANGED when the paste stated a usable one, and the key is OMITTED
+  // otherwise - never written as `null`, so a row from a source without a KDA
+  // column serialises exactly as it did before this field existed.
+  //
+  // The finiteness and `>= 0` checks mirror `normalizeManualEntry()` in
+  // src/scout/storage.ts one for one: a value that would not survive the next
+  // load must not be written in the first place. `0` passes both - it is a real,
+  // bad KDA and must stay distinguishable from "the source stated none".
+  //
+  // A missing or unusable KDA NEVER makes a row inapplicable; only `games` and
+  // `winrate` can, and they are already checked above. The value also stays in
+  // the note (`buildImportNote`), which is deliberately unchanged.
+  if (row.kda !== null && Number.isFinite(row.kda) && row.kda >= 0) entry.kda = row.kda
+
+  return entry
 }
 
 /**
