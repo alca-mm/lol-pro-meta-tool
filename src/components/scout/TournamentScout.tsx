@@ -503,7 +503,15 @@ export function TournamentScout() {
             <header className="scout-header">
                 <h2>{t("scout_title")}</h2>
                 <p className="scout-intro">{t("scout_intro")}</p>
-                <p className="scout-honesty">{t("scout_dataHonesty")}</p>
+                {/* HOW THIS TAB WORKS — collapsed, not deleted. The honesty core (does not
+                    read the sites itself · builds the links · you enter the values · only
+                    entered data is used · nothing is estimated) stays complete in
+                    `scout_dataHonesty`. Nothing anywhere in this tab may suggest the app
+                    fetches those pages by itself. */}
+                <details className="scout-details scout-honesty-details">
+                    <summary>{t("scout_dataHonestySummary")}</summary>
+                    <p className="scout-honesty">{t("scout_dataHonesty")}</p>
+                </details>
             </header>
 
             <datalist id={CHAMPION_DATALIST_ID}>

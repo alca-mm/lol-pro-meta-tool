@@ -3060,6 +3060,22 @@ body::-webkit-scrollbar {
   margin-bottom: 6px;
 }
 
+/* Collapsed explanation blocks: same look as the skipped-lines details above.
+   Justification, never instruction, so it starts closed and stays quiet. */
+.scout-details > summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.scout-details[open] > summary {
+  margin-bottom: 6px;
+}
+
+.scout-details[open] > * + * {
+  margin-top: 8px;
+}
+
 @media (max-width: 900px) {
   .scout-import-field {
     flex-basis: 100%;

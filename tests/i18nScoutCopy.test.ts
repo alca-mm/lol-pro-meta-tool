@@ -13,6 +13,10 @@
  * object literals and nothing below renders a component.
  */
 
+import { readFileSync, readdirSync } from "node:fs"
+import { sep } from "node:path"
+import { fileURLToPath } from "node:url"
+
 import { describe, expect, it } from "vitest"
 
 import { de } from "../src/i18n/de"
@@ -234,4 +238,328 @@ describe("scout copy avoids runaway sentences", () => {
             }
         })
     }
+})
+
+// ---------------------------------------------------------------------------
+// 6. Value length in Scout copy
+// ---------------------------------------------------------------------------
+
+/**
+ * Section 5 above bounds a single *sentence*. This section bounds a whole
+ * *value*, which is the shape a justification paragraph actually has: three or
+ * four correct short sentences in a row that together explain, at length, why
+ * the tool works the way it works. The Tournament Scout used to open with a
+ * block like that; the tab is meant to read like a tool, not like a README.
+ *
+ * Where the number comes from — measured over all 295 `scout_` keys in both
+ * catalogues, taking max(de, en) per key, at the time this test was written:
+ *
+ *     median 32 · p90 121 · longest non-exempt value 200 · longest value 297
+ *     values over 120 chars: 30 · over 200: 3 · over 220: 3 · over 240: 1
+ *
+ * 220 was chosen off that distribution, not invented:
+ *  - it sits 20 characters above the longest value that is *not* on the
+ *    allowlist (`scout_import_unparsed_page_noise`, 200), so ordinary copy
+ *    edits have room to breathe without a red run,
+ *  - it sits below every allowlisted value (the shortest is 223), so the limit
+ *    genuinely separates "normal UI copy" from "the three strings that are long
+ *    on purpose" instead of drawing a line nothing can cross, and
+ *  - it is roughly seven times the median. A re-added justification block would
+ *    be several hundred characters and could not slip under it.
+ *
+ * What this does NOT do: it says nothing about how many *keys* a screen shows.
+ * Ten 200-character paragraphs stacked in the default view would pass here and
+ * still be clutter. Length is a proxy, and a deliberately blunt one.
+ */
+const MAX_SCOUT_VALUE_LENGTH = 220
+
+/**
+ * Keys allowed past the limit, each with the reason it earns the exemption.
+ * Three entries, and the list is meant to stay about this size — the moment it
+ * grows to cover a normal hint or an intro, the rule has been talked out of
+ * existence rather than changed.
+ *
+ * Two keys that looked like candidates are deliberately NOT here, because the
+ * measurement says they do not need to be: `scout_player_removeConfirm` (138)
+ * and the multi-line format example `scout_inputPlaceholder` (170) both sit
+ * comfortably under the limit. An exemption granted "just in case" is how an
+ * allowlist stops meaning anything.
+ */
+const LONG_BY_DESIGN: ReadonlyArray<readonly [key: string, why: string]> = [
+    [
+        "scout_reparseConfirmBody",
+        // 297/267. A destructive-action confirmation. It has to name what is
+        // rebuilt, what happens to players who dropped out of the input, and
+        // that the data is archived rather than deleted. Shortening it would
+        // mean withholding one of those three facts at the exact moment the
+        // user decides.
+        "data-loss confirmation: must state rebuild, drop-out and archive",
+    ],
+    [
+        "scout_restoreOverwriteConfirm",
+        // 223/195. Same class: restoring replaces existing scouting data in
+        // full, and the sentence has to say so before the click.
+        "data-loss confirmation: restore overwrites existing scouting data",
+    ],
+    [
+        "scout_dataHonesty",
+        // 234/238. The honesty core of the tab (it does not read the sites
+        // itself, it builds the links, you enter the values, only entered data
+        // is scored, nothing is estimated). Five claims, all load-bearing. It
+        // is not clutter because it no longer stands in the default view:
+        // TournamentScout.tsx renders it inside a collapsed details element
+        // behind `scout_dataHonestySummary`, which
+        // tests/scoutUxDeclutter.test.ts asserts.
+        "honesty statement, and it lives inside a collapsed details element",
+    ],
+]
+
+const LONG_BY_DESIGN_KEYS = new Set(LONG_BY_DESIGN.map(([key]) => key))
+
+describe("scout copy avoids long justification blocks", () => {
+    for (const [lang, dict] of LANGS) {
+        it(`${lang}: no scout_ value exceeds ${MAX_SCOUT_VALUE_LENGTH} characters unless it is long by design`, () => {
+            for (const key of scoutKeys(dict)) {
+                if (LONG_BY_DESIGN_KEYS.has(key)) continue
+
+                const value = dict[key]
+                expect(
+                    value.length,
+                    `${lang}.${key} is ${value.length} characters long: "${preview(value)}"\n` +
+                        "Shorten it, move it behind a collapsed details element, or - if it is " +
+                        "genuinely load-bearing at this length - add it to LONG_BY_DESIGN with a reason.",
+                ).toBeLessThanOrEqual(MAX_SCOUT_VALUE_LENGTH)
+            }
+        })
+    }
+
+    /**
+     * Keeps the allowlist from rotting in either direction: a renamed key would
+     * leave a dead entry behind that silently exempts nothing, and a key that
+     * has since been shortened would leave a live entry exempting a value that
+     * no longer needs it — which is how an allowlist quietly turns into a
+     * loophole. Both are one-line fixes in this file.
+     */
+    it("every allowlisted key exists and still needs its exemption", () => {
+        for (const [key, why] of LONG_BY_DESIGN) {
+            expect(DE[key], `LONG_BY_DESIGN lists ${key}, which is not a key in de.ts`).toBeTypeOf(
+                "string",
+            )
+            expect(EN[key], `LONG_BY_DESIGN lists ${key}, which is not a key in en.ts`).toBeTypeOf(
+                "string",
+            )
+
+            const longest = Math.max(DE[key]?.length ?? 0, EN[key]?.length ?? 0)
+            expect(
+                longest,
+                `${key} is down to ${longest} characters (${why}) and no longer needs the ` +
+                    "exemption - drop it from LONG_BY_DESIGN.",
+            ).toBeGreaterThan(MAX_SCOUT_VALUE_LENGTH)
+        }
+    })
+})
+
+// ---------------------------------------------------------------------------
+// 7. Technical vocabulary stays in the collapsed block
+// ---------------------------------------------------------------------------
+
+/**
+ * The other half of "reads like a tool, not like documentation": the default
+ * view must not argue. Words like CORS, anti-bot, endpoint or scraping answer a
+ * question the user did not ask; they belong to the collapsed
+ * "why is there no automatic fetch" block and nowhere else.
+ *
+ * This is a *vocabulary* rule, not a golden text — none of the strings below is
+ * pinned. Rewording the blocked-reason lines freely is fine; moving that kind
+ * of word back out into a hint, an intro or a step title is not.
+ *
+ * Measured before writing: exactly seven `scout_` keys carry any of these terms
+ * today, and all seven sit in the exempt set. CORS, anti-bot, Cloudflare,
+ * scraping, proxy and server currently appear in *no* value at all, in either
+ * language — those entries are pure regression guards for wording that has
+ * already been removed once.
+ *
+ * Deliberately NOT on the list: "header" (the Scout import genuinely talks
+ * about a table header row — six keys, all legitimate) and
+ * "automatic"/"automatisch" (`scout_reason_manual_entry_only` says "nothing was
+ * fetched automatically", which is the honest short answer, not a
+ * justification). Both would have been pure false alarms.
+ */
+const TECHNICAL_VOCABULARY: ReadonlyArray<readonly [label: string, pattern: RegExp]> = [
+    ["CORS", /\bCORS\b/i],
+    ["anti-bot", /anti[\s-]?bot|bot[\s-]?schutz/i],
+    ["endpoint / API / Schnittstelle", /schnittstelle|endpoint|\bAPI\b/i],
+    ["browser", /browser/i],
+    ["Cloudflare", /cloudflare/i],
+    ["scraping", /scrap/i],
+    ["terms of use / Nutzungsbedingungen", /nutzungsbeding|terms of (use|service)|\bToS\b/i],
+    ["undocumented / undokumentiert", /undokument|undocument/i],
+    ["HTML / markup", /\bHTML\b|markup/i],
+    ["proxy / server", /\bproxy\b|\bserver\b/i],
+]
+
+/**
+ * The exempt set, as measured — deliberately tighter than "everything that
+ * looks technical".
+ *
+ *  - `scout_blocked_*` is reached only through `scoutBlockedKey(status.reason)`
+ *    in ScoutStatsImportPanel.tsx, inside the collapsed details element. Naming
+ *    the obstacle is the entire job of those lines.
+ *  - `scout_status_*` is the per-player status line;
+ *    `scout_status_not_supported_in_browser` is the honest one-sentence answer
+ *    for a source that cannot be read, and it is the only member that hits.
+ *  - the two `autoFetch` keys are the summary and the per-source line of that
+ *    same collapsed block.
+ *
+ * Two keys that were proposed for this list are intentionally absent:
+ * `scout_dataHonesty` and `scout_import_honesty` contain none of these terms
+ * today, so exempting them would widen the rule for nothing. They talk about
+ * what the tool does, not about which HTTP mechanism stops it — and that
+ * distinction is exactly what this rule protects.
+ */
+const TECHNICAL_DETAIL_PREFIXES = ["scout_blocked_", "scout_status_"] as const
+const TECHNICAL_DETAIL_KEYS = [
+    "scout_import_autoFetchSummary",
+    "scout_import_autoFetchUnavailable",
+] as const
+
+const isTechnicalDetailKey = (key: string): boolean =>
+    TECHNICAL_DETAIL_PREFIXES.some((prefix) => key.startsWith(prefix)) ||
+    (TECHNICAL_DETAIL_KEYS as readonly string[]).includes(key)
+
+describe("scout copy keeps technical vocabulary out of the default view", () => {
+    for (const [lang, dict] of LANGS) {
+        it(`${lang}: no scout_ value outside the collapsed block explains the mechanism`, () => {
+            for (const key of scoutKeys(dict)) {
+                if (isTechnicalDetailKey(key)) continue
+
+                const value = dict[key]
+                for (const [label, pattern] of TECHNICAL_VOCABULARY) {
+                    expect(
+                        pattern.test(value),
+                        `${lang}.${key} argues with "${label}": "${preview(value)}"\n` +
+                            "That belongs in the collapsed auto-fetch block " +
+                            "(scout_blocked_*, scout_status_*, scout_import_autoFetch*), " +
+                            "not in copy the user sees before asking.",
+                    ).toBe(false)
+                }
+            }
+        })
+    }
+
+    /**
+     * Same anti-rot idea as the length allowlist: an exemption that no longer
+     * exempts anything is an exemption nobody notices growing. Every group
+     * listed above must still hold at least one value that would otherwise trip
+     * the rule.
+     */
+    it("every exempt group still carries technical vocabulary", () => {
+        const carriesVocabulary = (key: string): boolean =>
+            TECHNICAL_VOCABULARY.some(
+                ([, pattern]) => pattern.test(DE[key] ?? "") || pattern.test(EN[key] ?? ""),
+            )
+
+        for (const prefix of TECHNICAL_DETAIL_PREFIXES) {
+            const family = scoutKeys(DE).filter((key) => key.startsWith(prefix))
+            expect(family.length, `${prefix}* is empty - drop the prefix`).toBeGreaterThan(0)
+            expect(
+                family.some(carriesVocabulary),
+                `no ${prefix}* value carries technical vocabulary any more - the prefix ` +
+                    "exemption is dead, drop it from TECHNICAL_DETAIL_PREFIXES.",
+            ).toBe(true)
+        }
+
+        for (const key of TECHNICAL_DETAIL_KEYS) {
+            expect(DE[key], `TECHNICAL_DETAIL_KEYS lists ${key}, which is not a key`).toBeTypeOf(
+                "string",
+            )
+            expect(
+                carriesVocabulary(key),
+                `${key} no longer carries technical vocabulary - drop it from ` +
+                    "TECHNICAL_DETAIL_KEYS.",
+            ).toBe(true)
+        }
+    })
+})
+
+// ---------------------------------------------------------------------------
+// 8. No dead scout_ keys
+// ---------------------------------------------------------------------------
+
+/**
+ * A shortened catalogue is only shortened if the strings that left the UI left
+ * the catalogue too. Otherwise the next reader finds a key that still reads
+ * like a promise the app no longer makes — which is what the removed Riot
+ * auto-import would have left behind, 42 keys per language, if nobody had gone
+ * looking (CLAUDE.md, P4).
+ *
+ * How a key counts as referenced:
+ *  1. its full name appears literally anywhere in src/ outside src/i18n, or
+ *  2. it starts with a template prefix found in src/, i.e. the `scout_reason_`
+ *     of a `scout_reason_${code}` template literal. Eighteen such prefixes
+ *     exist today (scout_blocked_, scout_reason_, scout_import_warning_, ...).
+ *
+ * Where the heuristic is loose, and in which direction: rule 2 accepts a whole
+ * family at once, so a `scout_reason_gone` whose reason code no longer exists
+ * still counts as referenced. That is a *missed* dead key, never a false alarm
+ * — the harmless direction, and the reason this test is worth having at all. A
+ * test of this shape that cried wolf would be worse than no test, so the
+ * heuristic is biased all the way towards silence.
+ *
+ * Result at the time of writing: 295 scout_ keys, 0 unreferenced.
+ *
+ * src/i18n is excluded on purpose: de.ts and en.ts *define* the keys, so
+ * scanning them would make every key look referenced.
+ */
+const SRC_DIR = fileURLToPath(new URL("../src/", import.meta.url))
+
+const srcSources = (): { files: string[]; text: string } => {
+    const entries = readdirSync(SRC_DIR, { recursive: true, encoding: "utf8" })
+    const files = entries
+        .map((entry) => entry.split(sep).join("/"))
+        .filter((entry) => /\.(ts|tsx)$/.test(entry) && !entry.startsWith("i18n/"))
+    return {
+        files,
+        text: files.map((file) => readFileSync(`${SRC_DIR}${file}`, "utf8")).join("\n"),
+    }
+}
+
+/** Finds `scout_reason_` inside a `scout_reason_${code}` template literal. */
+const TEMPLATE_PREFIX_PATTERN = /scout_[a-zA-Z0-9_]*(?=\$\{)/g
+
+describe("scout i18n keys are all referenced", () => {
+    const { files, text } = srcSources()
+    const prefixes = [...new Set(text.match(TEMPLATE_PREFIX_PATTERN) ?? [])]
+
+    it("scanned a plausible source tree", () => {
+        // Without this the section passes vacuously the day the scan silently
+        // reads nothing: an empty `text` makes every key look dead, and a
+        // mis-globbed one makes every key look alive.
+        expect(files.length, "src/ scan found almost no TypeScript files").toBeGreaterThan(50)
+        expect(text, "src/ scan found no scout_title reference at all").toContain("scout_title")
+    })
+
+    it("uses no catch-all template that would make this test vacuous", () => {
+        // A `scout_${x}` template would produce the prefix "scout_" and mark
+        // every key referenced. If that pattern is ever introduced on purpose,
+        // this test has to be reworked rather than deleted.
+        expect(prefixes, "a bare scout_ template prefix defeats this whole check").not.toContain(
+            "scout_",
+        )
+        expect(prefixes.length, "no scout_ template prefix found at all").toBeGreaterThan(0)
+    })
+
+    it("every scout_ key is used somewhere in src/", () => {
+        const unreferenced = scoutKeys(DE).filter(
+            (key) => !text.includes(key) && !prefixes.some((prefix) => key.startsWith(prefix)),
+        )
+
+        expect(
+            unreferenced,
+            "these scout_ keys are in the catalogues but nowhere in src/:\n" +
+                `${unreferenced.join("\n")}\n` +
+                "Delete them from de.ts and en.ts, or - if they are reached through a " +
+                "template this scan does not know - extend TEMPLATE_PREFIX_PATTERN.",
+        ).toEqual([])
+    })
 })

@@ -474,7 +474,6 @@ export function ScoutStatsImportPanel({
                 <h3 className="scout-subheading">{t("scout_import_title")}</h3>
             </div>
             <p className="muted">{t("scout_import_hint")}</p>
-            <p className="scout-honesty">{t("scout_import_honesty")}</p>
 
             {/* ---------------------------------------------------- 1. player */}
             <section className="scout-import-step">
@@ -635,40 +634,6 @@ export function ScoutStatsImportPanel({
                 <p className="scout-import-hint">{t("scout_import_sourceHint")}</p>
 
                 <div className="scout-import-block">
-                    <h5 className="scout-import-block-title">{t("scout_import_autoFetchTitle")}</h5>
-                    {/* Said once rather than four times when it is true of all
-                        four providers — `isAutoFetchUnavailableForAll()` flips
-                        by itself the day one becomes fetchable. */}
-                    {autoFetchBlockedForAll && (
-                        <p className="scout-import-hint">{t("scout_import_autoFetchSummary")}</p>
-                    )}
-                    <ul className="scout-import-list">
-                        {autoFetchStatuses.map((status) => {
-                            const label = getScoutSourceDescriptor(status.kind).label
-                            // `supported` is `SCOUT_DIRECT_FETCH_INFO`'s own answer,
-                            // not a constant repeated here: the day a provider
-                            // becomes fetchable this row stops claiming otherwise
-                            // without anyone editing this file.
-                            return (
-                                <li key={status.kind}>
-                                    {status.supported ? (
-                                        <strong>{label}</strong>
-                                    ) : (
-                                        <>
-                                            {fillPlaceholders(
-                                                t("scout_import_autoFetchUnavailable"),
-                                                { source: label },
-                                            )}{" "}
-                                            {t(scoutBlockedKey(status.reason))}
-                                        </>
-                                    )}
-                                </li>
-                            )
-                        })}
-                    </ul>
-                </div>
-
-                <div className="scout-import-block">
                     <h5 className="scout-import-block-title">{t("scout_import_openSourcesTitle")}</h5>
                     {selectedPlayer === null ? (
                         <p className="scout-nodata">{t("scout_import_playerNone")}</p>
@@ -696,35 +661,74 @@ export function ScoutStatsImportPanel({
                     )}
                 </div>
 
-                <div className="scout-import-chips">
-                    <span className="scout-entry-label">{t("scout_import_modeLabel")}</span>
-                    {importModes.map((mode) => (
-                        <span
-                            key={mode}
-                            className={
-                                mode === "manual_paste"
-                                    ? "scout-chip scout-chip-high"
-                                    : "scout-chip"
-                            }
-                        >
-                            {t(scoutImportModeKey(mode))}
-                        </span>
-                    ))}
-                </div>
+                {/* WHY THERE IS NO BUTTON — collapsed on purpose. This is the
+                    justification for the copy/paste route, not an instruction, so it
+                    must not stand between the user and the paste field. It is NOT dead
+                    code: `autoFetchStatuses`, `autoFetchBlockedForAll` and `importModes`
+                    are the status functions of src/scout/sources.ts rendering
+                    SCOUT_DIRECT_FETCH_INFO. The day a provider becomes fetchable, this
+                    block says so without anyone editing this file. */}
+                <details className="scout-details scout-import-why-details">
+                    <summary>{t("scout_import_autoFetchTitle")}</summary>
+
+                    <p className="scout-honesty">{t("scout_import_honesty")}</p>
+
+                    {/* Said once rather than four times when it is true of all
+                        four providers — `isAutoFetchUnavailableForAll()` flips
+                        by itself the day one becomes fetchable. */}
+                    {autoFetchBlockedForAll && (
+                        <p className="scout-import-hint">{t("scout_import_autoFetchSummary")}</p>
+                    )}
+
+                    <ul className="scout-import-list">
+                        {autoFetchStatuses.map((status) => {
+                            const label = getScoutSourceDescriptor(status.kind).label
+                            // `supported` is `SCOUT_DIRECT_FETCH_INFO`'s own answer,
+                            // not a constant repeated here: the day a provider
+                            // becomes fetchable this row stops claiming otherwise
+                            // without anyone editing this file.
+                            return (
+                                <li key={status.kind}>
+                                    {status.supported ? (
+                                        <strong>{label}</strong>
+                                    ) : (
+                                        <>
+                                            {fillPlaceholders(
+                                                t("scout_import_autoFetchUnavailable"),
+                                                { source: label },
+                                            )}{" "}
+                                            {t(scoutBlockedKey(status.reason))}
+                                        </>
+                                    )}
+                                </li>
+                            )
+                        })}
+                    </ul>
+
+                    <div className="scout-import-chips">
+                        <span className="scout-entry-label">{t("scout_import_modeLabel")}</span>
+                        {importModes.map((mode) => (
+                            <span
+                                key={mode}
+                                className={
+                                    mode === "manual_paste"
+                                        ? "scout-chip scout-chip-high"
+                                        : "scout-chip"
+                                }
+                            >
+                                {t(scoutImportModeKey(mode))}
+                            </span>
+                        ))}
+                    </div>
+                </details>
             </section>
 
             {/* ----------------------------------------------------- 4. paste */}
             <section className="scout-import-step">
                 <h4 className="scout-import-step-title">{t("scout_import_step_paste")}</h4>
 
-                {/* WHERE THE TABLE COMES FROM — above the field, on purpose.
-                    "Woher bekomme ich die Tabelle überhaupt?" is the question a
-                    user has BEFORE pasting, so the answer cannot sit in the
-                    preview: by the time the preview exists the paste already
-                    happened and the instruction is too late to be of any use.
-                    It is unconditional rather than shown only for the OP.GG
-                    source, because a user who has not found the table yet has
-                    no reason to have touched the source dropdown either. */}
+                {/* Answers "where do I get the table?" BEFORE the paste; in the
+                    preview it would arrive too late. */}
                 <p className="muted">{t("scout_import_opggHowTo")}</p>
 
                 <label className="scout-field-label" htmlFor="scout-import-paste">
@@ -1110,7 +1114,7 @@ export function ScoutStatsImportPanel({
                                 is the whole point. Still one click away, so the
                                 counted lines are summarised and never lost. */}
                             {countedSkipLines.length > 0 && (
-                                <details className="scout-import-skipped-details">
+                                <details className="scout-details scout-import-skipped-details">
                                     <summary>{t("scout_import_skippedDetails")}</summary>
                                     <ul className="scout-import-unparsed-list">
                                         {countedSkipLines.map((line, index) => (

@@ -460,8 +460,9 @@ export const en: Translations = {
     tbl_noPatchCompData: "No data for this patch comparison.",
     // Tournament Scout — header
     scout_title: "Tournament Scout",
-    scout_intro: "Paste OP.GG multi-links or individual profile links of your opponents. The tool picks out the players and sorts them by role. Add the scouting data from the linked pages and you get ban recommendations with a reason for each. The more you enter, the more reliable the suggestion.",
-    scout_dataHonesty: "This tab does not read OP.GG, League of Graphs, DeepLoL or DPM for you. A browser app is not allowed to, and those sites do not permit it. The tool recognises the players and builds the matching links. You look up champion, games and winrate there and enter them here. Everything is calculated from what you entered. Nothing is estimated or filled in.",
+    scout_dataHonestySummary: "How this tab works",
+    scout_intro: "Paste your opponents' links, let the tool detect the players, enter the scouting data, get ban recommendations.",
+    scout_dataHonesty: "This tab does not read OP.GG, League of Graphs, DeepLoL or DPM for you. The tool recognises the players and builds the matching links. You enter champion, games and winrate yourself. That is all the scoring uses, and nothing is estimated.",
 
     // Tournament Scout — input
     scout_inputLabel: "Paste links or player lines",
@@ -469,13 +470,13 @@ export const en: Translations = {
     scout_parseButton: "Detect players",
     scout_clearButton: "Clear input",
     scout_exampleButton: "Insert example",
-    scout_exampleHint: "The example only shows what the input can look like. The names and links are made up and contain no real player data.",
+    scout_exampleHint: "The names and links in the example are made up.",
 
     // Tournament Scout — parse result
     scout_parsedPlayers: "Detected players",
     scout_noPlayers: "No players detected yet. Paste links or player lines above and start the detection.",
     scout_unparsedLines: "Unrecognised lines",
-    scout_unparsedHint: "These lines could not be matched to a player. Add the Riot ID in the format Name#TAG or paste a full profile link.",
+    scout_unparsedHint: "Could not be matched to a player. Add the Riot ID as Name#TAG or paste a full profile link.",
     scout_duplicatesMerged: "Players listed more than once were merged into a single entry.",
     scout_countPlayers: "Players detected: {count}",
     scout_countUnparsed: "Lines not recognised: {count}",
@@ -539,11 +540,11 @@ export const en: Translations = {
     scout_blocked_cors_blocked: "The endpoint does not allow requests coming from another website.",
     scout_blocked_anti_bot_protection: "The site is protected against automated access.",
     scout_blocked_html_scraping_only: "The values exist only in the page markup. Reading them out would be brittle and is not covered by the terms of use.",
-    scout_blocked_undocumented_private_api: "The only reachable endpoint is the site's own internal one, which is undocumented and can change at any time with no commitment from its operators. It is deliberately left unused.",
+    scout_blocked_undocumented_private_api: "The only reachable endpoint is the internal, undocumented one of the site. It is deliberately left unused.",
     scout_blocked_unverified: "Not verified. Treated as not fetchable until shown otherwise.",
     // Tournament Scout — manual scouting data
     scout_manualTitle: "Scouting data",
-    scout_manualHint: "Enter what you see on the linked pages. Champion and games are enough for a first suggestion; winrate and recency make it more precise.",
+    scout_manualHint: "Enter what you see on the linked pages. Champion and games are enough for a first suggestion.",
     scout_manual_champion: "Champion",
     scout_manual_championInvalid: "Without a champion name this row is lost the next time the page loads.",
     scout_manual_games: "Games",
@@ -569,11 +570,11 @@ export const en: Translations = {
 
     // Tournament Scout — lineup (starting five + substitutes)
     scout_lineupTitle: "Team lineup",
-    scout_lineupHint: "Give every player their place: five starting slots and up to three substitutes. With a lineup the analysis knows which role belongs to whom. Ban recommendations get a lane (“against mid”), and entries from a different role are marked as such. Without a lineup everything still works, just without the role context.",
+    scout_lineupHint: "Five starting slots and up to three substitutes. With a lineup the ban recommendations get a lane; without one everything still works, just without the role context.",
     scout_startingFive: "Starting five",
     scout_substitutes: "Substitutes",
     scout_unassigned: "Unassigned",
-    scout_unassignedHint: "Detected players who hold no slot. They are kept, along with their scouting data. But without a slot their role cannot be checked.",
+    scout_unassignedHint: "Detected players with no slot. They keep their data, but their role cannot be checked.",
     scout_lineupEmptySlot: "Empty (assign a player)",
     scout_assignTo: "Assign to slot",
     scout_moveToPool: "Take out of the lineup",
@@ -581,10 +582,10 @@ export const en: Translations = {
     scout_lineupComplete: "Starting five complete: all five roles are filled.",
     scout_lineupIncomplete: "Starting five not complete yet. Fill the open roles so the ban plan covers every lane.",
     scout_lineupAutofill: "Fill from detected roles",
-    scout_lineupAutofillHint: "Takes the roles that were read out of your lines and links during detection. That is a guess, not a confirmed lineup. Check every slot before you rely on it.",
+    scout_lineupAutofillHint: "Takes the roles read during detection. That is a guess, so check every slot.",
     scout_lineupClear: "Clear lineup",
     scout_includeSubstitutes: "Score substitutes too",
-    scout_includeSubstitutesHint: "Off: substitutes are shown and stay editable, but they produce no signals and no ban candidates. On: their data counts, but with less weight. A substitute cannot outrank a comparably strong starter.",
+    scout_includeSubstitutesHint: "Off: substitutes stay editable but produce no signals. On: their data counts, with less weight.",
     scout_substituteRisk: "Substitute risk",
     scout_onlyIfPlayerStarts: "Only pays off if this player actually plays.",
 
@@ -683,8 +684,8 @@ export const en: Translations = {
     scout_reparseDiscard: "Discard the data",
     scout_reparseCancel: "Cancel",
     scout_removedPlayersTitle: "Archive of removed players",
-    scout_removedPlayersHint: "Players who dropped out of the input on a detection run. Their scouting data sits here untouched and counts for nothing in the analysis. Restoring brings a player back into the list with their data; discarding deletes it for good.",
-    scout_removedPlayersCapped: "The archive holds {max} players. Each time another one arrives, the oldest entry drops out. So restore whatever you still need.",
+    scout_removedPlayersHint: "Players who dropped out of the input on a detection run. Their data sits here and counts for nothing in the analysis.",
+    scout_removedPlayersCapped: "The archive holds {max} players. Each time another arrives, the oldest drops out.",
     scout_restorePlayer: "Restore",
     scout_restoreOverwriteConfirm: "This player already carries scouting data. Restoring replaces it completely with the archived champions, games, winrates and notes. Whatever is in the list right now will be gone. Restore anyway?",
     scout_discardRemovedPlayer: "Discard for good",
@@ -697,8 +698,8 @@ export const en: Translations = {
 
     // Tournament Scout — stats import: panel frame
     scout_import_title: "Stats import",
-    scout_import_hint: "Bring a player's champion stats over in one go: set the role, open the source, copy the table, paste it here. The tool reads the rows and puts them in front of you for checking before anything is applied.",
-    scout_import_honesty: "Nothing is fetched from OP.GG, League of Graphs, DeepLoL or DPM automatically. A browser app is not allowed to, and those sites do not permit it. Nothing is estimated or extrapolated: if a value is missing from the pasted text, it stays empty. Everything is calculated from what you imported here, and nothing else.",
+    scout_import_hint: "Open the source, copy the champion stats, pick the role, paste and check the preview.",
+    scout_import_honesty: "The tool fetches nothing automatically from OP.GG, League of Graphs, DeepLoL or DPM. If a value is missing from the pasted text, it stays empty. Only what you applied is used in the scoring.",
     scout_import_step_player: "1. Pick the player",
     scout_import_step_role: "2. Set the role",
     scout_import_step_source: "3. Open the source",
@@ -718,29 +719,29 @@ export const en: Translations = {
 
     // Tournament Scout — stats import: role, source, recency
     scout_import_roleLabel: "Role",
-    scout_import_roleHint: "The role is set before the import, not after. Otherwise numbers from another lane land as a threat on this one: Karma out of 40 support games would suddenly be a jungle ban. Every row from this import is recorded under the role you pick here.",
+    scout_import_roleHint: "Every row from this import gets the role you pick here. Otherwise Karma out of 40 support games would count as a jungle ban.",
     scout_import_roleRequired: "No role, no import. First pick the role this player is fielded in.",
     scout_import_sourceLabel: "Source",
-    scout_import_sourceHint: "Record where the numbers came from. It changes nothing in the scoring, but it keeps a record of what you read where.",
+    scout_import_sourceHint: "Record where the numbers came from. It changes nothing in the scoring.",
     scout_import_source_unknown: "Source unknown / not stated",
     scout_import_recencyLabel: "Recency",
 
     // Tournament Scout — stats import: paste field
     scout_import_pasteLabel: "Paste champion stats",
-    scout_import_pasteHint: "Select the champion table on the open page and paste it here. The header row may come along, and surplus lines do no harm. Whatever is not a stat row is listed separately below.",
+    scout_import_pasteHint: "The header row may come along. Whatever is not a stat row is listed under “Skipped” below.",
     scout_import_pastePlaceholder: "Champion\tGames\tWin Rate\tKDA\nLee Sin\t24\t62%\t3.1\nViego\t18\t55%\t2.8",
     scout_import_parseButton: "Detect rows",
     scout_import_clearButton: "Clear input",
     scout_import_exampleButton: "Insert example",
-    scout_import_exampleHint: "The example only shows the structure the tool expects. The champions, games and winrates in it are made up and belong to no real player.",
+    scout_import_exampleHint: "The champions, games and winrates in the example are made up.",
 
     // Tournament Scout — stats import: import routes & automatic fetch
     scout_import_modeLabel: "Import route",
     scout_import_mode_manual_paste: "Copy and paste",
     scout_import_mode_source_links: "Open the sources",
-    scout_import_autoFetchTitle: "Automatic fetch",
-    scout_import_autoFetchUnavailable: "Reading {source} out directly is not reliably possible in the browser.",
-    scout_import_autoFetchSummary: "OP.GG, League of Graphs, DeepLoL and DPM cannot be read reliably from the browser. So the route is: open the page, copy the champion stats, paste them here.",
+    scout_import_autoFetchTitle: "Why is there no automatic fetch?",
+    scout_import_autoFetchUnavailable: "{source} cannot be read reliably in the browser.",
+    scout_import_autoFetchSummary: "None of the four sites can be read reliably from the browser. That is why you copy the champion stats yourself.",
     scout_import_openSourcesTitle: "Open the sources",
 
     // Tournament Scout — stats import: detected layout & columns
@@ -762,7 +763,7 @@ export const en: Translations = {
 
     // Tournament Scout — stats import: preview & apply
     scout_import_previewTitle: "Preview",
-    scout_import_previewHint: "This is how the rows would land on this player. Nothing is saved before you confirm below. Take out whatever does not fit first.",
+    scout_import_previewHint: "Nothing is saved before you confirm below. Take out whatever does not fit first.",
     scout_import_previewEmpty: "Nothing detected yet. Paste the champion stats above and run the detection.",
     scout_import_rowsDetected: "Rows detected: {count}",
     scout_import_selectAll: "Select all",
@@ -776,12 +777,11 @@ export const en: Translations = {
     scout_import_applyModeLabel: "Apply as",
     scout_import_applyMode_append: "Append",
     scout_import_applyMode_replace: "Replace the rows of this role",
-    scout_import_applyModeHint: "Append leaves the existing rows standing. If a row for the same champion in the same role is already there, it is updated with the imported numbers. It is not added a second time, otherwise the champion would count twice and skew the ban priority. Replace throws away every existing row of this player in the selected role and puts the imported ones in their place. Rows in other roles are left untouched either way.",
+    scout_import_applyModeHint: "Append updates existing champion rows instead of duplicating them. Replace deletes only the rows of this role and imports afresh.",
     scout_import_applyButton: "Apply to scouting data",
     scout_import_applied: "{count} champion rows applied.",
     scout_import_applyBlocked: "Not ready to apply yet: pick the role above and select at least one row.",
-    scout_import_unparsedTitle: "Unrecognised lines",
-    scout_import_unparsedHint: "These lines were not read as a stat row and stay out. Usually that is page furniture. If a champion is hiding in one, add it by hand.",
+    scout_import_unparsedHint: "These lines were not read as a stat row. If a champion is hiding in one, add it by hand.",
 
     // Tournament Scout — stats import: why a line was not parsed
     scout_import_unparsed_header: "Header row detected and skipped.",
@@ -809,10 +809,10 @@ export const en: Translations = {
     scout_import_unparsed_matchup_row: "A “vs …” line: a matchup inside one champion, not a row of the champion pool in its own right. Skipped.",
     scout_import_unparsed_recommended_champion: "A champion from the recommendation area at the top of the page. That is a suggestion from OP.GG, not a played statistic. So it is not imported.",
     scout_import_unparsed_aggregate_row: "The summary row “All Champions”: a total across every champion, not a single champion.",
-    scout_import_opggHowTo: "OP.GG: open the profile, switch to the “Champions” tab, select everything from “All Champions” downwards, copy it and paste it here. The rest of the page may come along. Whatever is not a champion row is listed separately below.",
+    scout_import_opggHowTo: "OP.GG: open the profile, go to the “Champions” tab, select from “All Champions” downwards and paste it here. The rest of the page may come along.",
     scout_import_opggRawDetected: "OP.GG raw copy of the champions page detected",
     scout_import_opggRawChampions: "{count} champions detected.",
-    scout_import_opggRawRoleNote: "The OP.GG champion list names no reliable role per champion. So every imported row gets the role you picked above; no role is guessed.",
+    scout_import_opggRawRoleNote: "The OP.GG champion list names no role. Every imported row gets the role you picked above.",
 
     // Tournament Scout — stats import: compact skipped summary
     scout_import_unparsed_page_noise: "Here the page printed nothing but a separator, such as a “-”, a dash or a decorative marker with no data in it. Lines like that are kept out of the preview and only shown here under “Show details”.",
