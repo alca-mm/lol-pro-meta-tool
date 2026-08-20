@@ -6,6 +6,7 @@ import { TeamInvitePanel } from "./TeamInvitePanel"
 import { TeamCreatePanel } from "./TeamCreatePanel"
 import { TeamDangerZone } from "./TeamDangerZone"
 import { RiotAccountSummary } from "./RiotAccountSummary"
+import { pluralMessage, TEAM_MEMBER_COUNT_KEYS, TEAM_NOTE_COUNT_KEYS } from "./teamUiHelpers"
 
 interface Props {
     onGoToPlayerResults?: () => void
@@ -67,9 +68,13 @@ export function TeamDashboard({ onGoToPlayerResults }: Props = {}) {
 
                 {activeTeam && (
                     <p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>
-                        {members.length} {t("team_members")}
+                        {/* Counted strings go through pluralMessage: a bare
+                            number in front of a fixed plural noun rendered
+                            "1 Mitglieder" / "1 Champion-Notizen" for a solo
+                            team. See src/components/team/teamUiHelpers.ts. */}
+                        {pluralMessage(t, members.length, TEAM_MEMBER_COUNT_KEYS)}
                         {notesCount > 0 && (
-                            <> &middot; {notesCount} {t("team_notesSummary")}</>
+                            <> &middot; {pluralMessage(t, notesCount, TEAM_NOTE_COUNT_KEYS)}</>
                         )}
                     </p>
                 )}

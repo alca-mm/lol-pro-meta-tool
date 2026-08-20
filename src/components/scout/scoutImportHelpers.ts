@@ -28,6 +28,9 @@
  *  4. Row selection arithmetic and cell formatting, where a missing value is
  *     rendered as "no value given" and NEVER as `0` — a `0` would be
  *     indistinguishable from a genuine "0 games" and would flow into a score.
+ *     How many rows an APPLY took over is deliberately NOT computed here: that
+ *     is `ScoutImportApplyResult.importedRows`, reported by `applyImportRows()`
+ *     itself (see the note at the end of section 10).
  *
  *  5. The provenance rule (section 7 below): which `ScoutManualSource` the
  *     applied entries are filed under. That is an honesty question rather than
@@ -51,7 +54,6 @@ import type { TranslationKey } from "../../i18n/types"
 import { isImportRowApplicable } from "../../scout/statsImport"
 import { SCOUT_LINEUP_SLOTS } from "../../scout/types"
 import type {
-    ScoutImportApplyResult,
     ScoutImportColumn,
     ScoutImportLayout,
     ScoutImportMode,
@@ -512,6 +514,15 @@ export interface ScoutImportSkipSummary {
  * nobody anything — a raw OP.GG copy floods the block with dozens of `-`,
  * `vs` and "Alle Champions" entries and buries the handful of lines that
  * actually deserve a second look.
+ *
+ * NOT A MIRROR OF THE UNION, SO DO NOT SWAP IT FOR `SCOUT_IMPORT_UNPARSED_REASONS`:
+ * this is a deliberate SUBSET of `ScoutImportUnparsedReason` — the counted
+ * reasons, as opposed to the listed ones (`header`, `no_champion`,
+ * `no_numbers`, `noise`). Replacing it with the runtime tuple would count every
+ * reason and leave `listed` permanently empty, i.e. destroy the very
+ * distinction this constant exists to make. A NEW reason therefore does not
+ * belong here automatically: it is listed unless it is a category the parser
+ * recognised positively.
  */
 const COUNTED_SKIP_REASONS: readonly ScoutImportUnparsedReason[] = [
     "aggregate_row",
@@ -555,39 +566,18 @@ export function summarizeSkippedLines(result: ScoutStatsImportResult): ScoutImpo
     }
 }
 
-/**
- * How many IMPORT ROWS an apply actually took over. Mode-independent.
+/*
+ * NO `appliedRowCount()` HERE ANY MORE — AND DO NOT BRING IT BACK.
  *
- * `selected.length - result.skipped` — and explicitly NOT `added + replaced`,
- * which is what the panel used to print and what somebody will be tempted to
- * "simplify" this back to. The two names mean different things per mode; the
- * contract says so itself (`ScoutImportApplyResult.replaced`,
- * src/scout/types.ts: *"Existing entries removed by this apply (`replace` mode,
- * same role only)"*):
+ * The number of rows an apply took over is `ScoutImportApplyResult.importedRows`
+ * and is computed by `applyImportRows()` itself. A helper that rebuilt it at the
+ * call site as `selected.length - result.skipped` used to live at this spot; it
+ * was only correct while the caller passed the EXACT SAME array it had handed to
+ * `applyImportRows()`, and nothing could enforce that — a filtered, re-sorted or
+ * re-derived selection produced a plausible-looking wrong number. A field on the
+ * result cannot be called with the wrong array.
  *
- *  - `append`: every applied row either overwrote a same-champion entry of the
- *    same role (`replaced`) or became a new one (`added`), so their sum happens
- *    to be right.
- *  - `replace`: `applyImportRows()` drops the whole role FIRST
- *    (`replaced = existing.length - kept.length`), so `replaced` counts the
- *    user's OWN OLD ENTRIES that were thrown away. Summing the two reports a
- *    deletion as an import: 36 stored rows replaced by 36 pasted ones was
- *    announced as "72 rows applied", and 36 stored rows replaced by 10 pasted
- *    ones as "46" — numbers nobody could reconcile with the ticks in the
- *    preview. That is the "Übernommen: 72 Zeilen." from the bug report.
- *
- * WHY THE SUBTRACTION IS EXACT: `applyImportRows()` defines
- * `skipped = rows.length - applicable.length`, and `importRowToManualEntry()`
- * returns `null` for exactly the rows `isImportRowApplicable()` rejects — so
- * every non-skipped row does become an entry, in both modes. `selected` must
- * therefore be the very array handed to `applyImportRows()`; the row COUNT of
- * the preview would be a different, wrong number.
- *
- * The result can never be a games total: both operands are row counts.
+ * Its historic warning ("Übernommen: 72 Zeilen.": `added + replaced` counted a
+ * deletion as an import) is preserved in full on `ScoutImportApplyResult` in
+ * src/scout/types.ts. Read it there before touching the counters.
  */
-export function appliedRowCount(
-    selected: readonly ScoutImportRow[],
-    result: ScoutImportApplyResult,
-): number {
-    return selected.length - result.skipped
-}

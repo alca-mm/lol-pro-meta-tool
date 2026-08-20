@@ -8,6 +8,15 @@
  * resolves to `false` instead of throwing, so the caller can show
  * `scout_export_failed`.
  *
+ * SEPARATOR RULE OF THIS FILE: the export knows exactly two separators and no
+ * dash. `" · "` joins the segments of a line (`Faker (Mid, Starter) ·
+ * Aussagekraft: Hoch`), `", "` joins the items *inside* one parenthesis
+ * (`Ahri (30 Spiele, 68%)`). That is what keeps the two levels apart without a
+ * third glyph. Do not reintroduce a dash separator here: the export is read by
+ * a human who pasted it somewhere, and a text that mixes dashes and middots is
+ * the worst of the three possible states, worse than either glyph used
+ * consistently.
+ *
  * HONESTY RULE OF THIS FILE: the text states only what is in the analysis.
  * Every lineup section is skipped entirely when `analysis.lineup === null` —
  * without a lineup the engine claimed no roles, and printing "gegen Mid" from
@@ -61,7 +70,7 @@ function formatReasons(t: ScoutTranslate, reasons: readonly ScoutReason[]): stri
 }
 
 /**
- * `1. Karma gegen Mid — Gegner#EUW [Hoch] — Begründung…`
+ * `1. Karma gegen Mid · Gegner#EUW · [Hoch]`, die Begründungen darunter.
  *
  * The lane suffix hangs directly off the champion name (the i18n texts are
  * lower-case and unpunctuated for exactly that), the target player follows,
@@ -82,7 +91,7 @@ function formatCandidate(
   if (targetName !== undefined) head.push(targetName)
   head.push(`[${t(scoutConfidenceKey(candidate.confidence))}]`)
 
-  const lines = [head.join(" — ")]
+  const lines = [head.join(" · ")]
 
   const reasons = formatReasons(t, candidate.reasons)
   if (reasons.length > 0) lines.push(`   ${reasons}`)
@@ -187,16 +196,24 @@ export function buildScoutExportText(
   for (const player of analysis.players) {
     lines.push("")
 
+    // `Faker (Mid, Starter) · Aussagekraft: Hoch`.
+    //
+    // Two levels, two separators (see the separator rule at the top): role and
+    // membership are items of one parenthesis and take `", "`, the confidence
+    // is a second segment of the line and takes `" · "`. Joining both with the
+    // middot would flatten the two levels into one list.
+    //
     // With a lineup the declared slot leads; without one the parsed role is all
     // there is — and then it is printed as the guess it is, which is what the
     // honesty rule at the top of this file demands. The membership is only
-    // appended when a lineup exists at all.
+    // appended when a lineup exists at all, so the comma appears only when
+    // there really are two items.
     const role = scoutRoleLabel(t, player.lineup.starterSlot, player.role).text
     const roleParts = [role]
     if (analysis.lineup !== null) roleParts.push(t(scoutMembershipKey(player.lineup.membership)))
 
     lines.push(
-      `${player.displayName} (${roleParts.join(" · ")}) — ${t("scout_confidence")}: ${t(
+      `${player.displayName} (${roleParts.join(", ")}) · ${t("scout_confidence")}: ${t(
         scoutConfidenceKey(player.confidence),
       )}`,
     )
@@ -209,7 +226,7 @@ export function buildScoutExportText(
       for (const signal of picks) {
         const reasons = formatReasons(t, signal.reasons)
         const row = `- ${formatSignal(t, signal)}`
-        lines.push(reasons.length > 0 ? `${row} — ${reasons}` : row)
+        lines.push(reasons.length > 0 ? `${row} · ${reasons}` : row)
       }
     }
 

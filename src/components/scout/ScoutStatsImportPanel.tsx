@@ -72,7 +72,6 @@ import type {
 import {
     SCOUT_IMPORT_ROLE_VALUES,
     SCOUT_IMPORT_SOURCE_VALUES,
-    appliedRowCount,
     applicableRowIds,
     defaultSelectedRowIds,
     formatImportColumns,
@@ -452,11 +451,15 @@ export function ScoutStatsImportPanel({
             mode: applyMode,
         })
         onApply(selectedPlayer.id, applied.entries)
-        // The rows FROM THE PASTE, not `added + replaced`: in `replace` mode
-        // `replaced` counts the user's own old entries that were dropped, so the
-        // sum announced a deletion as an import ("Übernommen: 72 Zeilen." for 36
-        // replaced by 36). See appliedRowCount() for the full argument.
-        setAppliedCount(appliedRowCount(selectedRows, applied))
+        // `importedRows` is, mode-independently, the number of IMPORT ROWS that
+        // became stored entries — the only number this message may show. It is
+        // NOT `addedRows + removedExistingRows`: in `replace` mode
+        // `removedExistingRows` counts the user's own old entries that were
+        // DELETED, so summing them announces a deletion as an import
+        // ("Übernommen: 72 Zeilen." for 36 existing rows replaced by 36 pasted
+        // ones, while 36 were stored). See `ScoutImportApplyResult` in
+        // src/scout/types.ts.
+        setAppliedCount(applied.importedRows)
         // The preview stays: the user can see what was taken over. Only the
         // selection is cleared, so a second click cannot apply the same rows
         // again by accident.
@@ -1095,7 +1098,7 @@ export function ScoutStatsImportPanel({
                                                 <code>{line.raw}</code>
                                                 <span className="muted">
                                                     {" "}
-                                                    — {t(scoutImportUnparsedKey(line.reason))}
+                                                    · {t(scoutImportUnparsedKey(line.reason))}
                                                 </span>
                                             </li>
                                         ))}
@@ -1115,7 +1118,7 @@ export function ScoutStatsImportPanel({
                                                 <code>{line.raw}</code>
                                                 <span className="muted">
                                                     {" "}
-                                                    — {t(scoutImportUnparsedKey(line.reason))}
+                                                    · {t(scoutImportUnparsedKey(line.reason))}
                                                 </span>
                                             </li>
                                         ))}

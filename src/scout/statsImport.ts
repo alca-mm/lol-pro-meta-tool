@@ -1854,6 +1854,52 @@ export function importRowToManualEntry(
  * The result is deterministic and order-stable — surviving entries keep their
  * relative order, new ones are appended in row order — and `existing` is never
  * mutated: the caller may still be rendering it.
+ *
+ * ---------------------------------------------------------------------------
+ * THE COUNTERS: EVERY ONE OF THEM ANSWERS EXACTLY ONE QUESTION.
+ * See {@link ScoutImportApplyResult} in src/scout/types.ts for the full
+ * contract; the short version, because this function is where the numbers are
+ * produced:
+ *
+ *  - `importedRows`        rows from `rows` that became stored entries.
+ *                          Mode-independent, and THE number the UI prints.
+ *  - `addedRows`           imported rows that became NEW entries.
+ *  - `overwrittenRows`     imported rows that replaced an existing entry of the
+ *                          same champion AND role IN PLACE. `append` only —
+ *                          structurally 0 in `replace` mode.
+ *  - `removedExistingRows` the user's OWN pre-existing rows this apply DELETED.
+ *                          `replace` only (rows of the imported role) —
+ *                          structurally 0 in `append` mode. NOT an import.
+ *  - `skippedRows`         offered rows that were not applicable.
+ *
+ * `overwrittenRows` AND `removedExistingRows` MUST NEVER BE MERGED AGAIN. They
+ * both used to be one field called `replaced`, whose meaning silently changed
+ * with the mode — "overwritten in place" in `append`, "deleted" in `replace`.
+ * The success message summed `added + replaced` and so announced
+ * **"Übernommen: 72 Zeilen."** for a player with 36 existing rows replaced by
+ * 36 imported ones, while exactly 36 rows were stored: a deletion was counted
+ * as an import. Whoever folds these two counters back together brings that bug
+ * back with them.
+ *
+ * `importedRows` IS COMPUTED FROM WHAT ACTUALLY HAPPENED (`addedRows +
+ * overwrittenRows`), not from `applicable.length`. It still equals
+ * `rows.length - skippedRows`, because `importRowToManualEntry()` returns
+ * `null` for exactly the rows `isImportRowApplicable()` has already filtered
+ * out — the defensive `null` branch below is unreachable today. Counting the
+ * outcome rather than the intent means the number stays honest even on the day
+ * that stops being true: a row that quietly failed to become an entry would
+ * then be missing from `importedRows` instead of being reported as stored.
+ *
+ * THE DUPLICATE-CHAMPION ASYMMETRY IS EXISTING BEHAVIOUR AND IS UNCHANGED HERE.
+ * The same champion twice in one paste (the row carries `duplicate_champion`)
+ * ends differently per mode:
+ *  - `append`  the second row overwrites the first → `overwrittenRows` rises,
+ *              ONE entry exists afterwards.
+ *  - `replace` both rows land in the freshly cleared role → `addedRows` rises
+ *              twice, TWO entries exist afterwards.
+ * In both cases `importedRows === addedRows + overwrittenRows` still holds, so
+ * the printed number stays truthful either way.
+ * ---------------------------------------------------------------------------
  */
 export function applyImportRows(
   existing: readonly ManualChampionEntry[],
@@ -1861,22 +1907,34 @@ export function applyImportRows(
   options: ScoutImportApplyOptions,
 ): ScoutImportApplyResult {
   const applicable = rows.filter((row) => isImportRowApplicable(row))
-  const skipped = rows.length - applicable.length
+  const skippedRows = rows.length - applicable.length
 
   if (options.mode === "replace") {
     const kept = existing.filter((entry) => entry.role !== options.role)
-    const replaced = existing.length - kept.length
-    const added: ManualChampionEntry[] = []
+    // The user's OWN old rows of this role, thrown away before the import —
+    // a deletion, never an import. It stays out of `importedRows`.
+    const removedExistingRows = existing.length - kept.length
+    const addedEntries: ManualChampionEntry[] = []
     for (const row of applicable) {
       const entry = importRowToManualEntry(row, options)
-      if (entry !== null) added.push(entry)
+      if (entry !== null) addedEntries.push(entry)
     }
-    return { entries: kept.concat(added), added: added.length, replaced, skipped }
+    const addedRows = addedEntries.length
+    // The role was cleared first, so nothing is left to overwrite in place.
+    const overwrittenRows = 0
+    return {
+      entries: kept.concat(addedEntries),
+      importedRows: addedRows + overwrittenRows,
+      addedRows,
+      overwrittenRows,
+      removedExistingRows,
+      skippedRows,
+    }
   }
 
   const entries = existing.slice()
-  let added = 0
-  let replaced = 0
+  let addedRows = 0
+  let overwrittenRows = 0
 
   for (const row of applicable) {
     const entry = importRowToManualEntry(row, options)
@@ -1888,12 +1946,20 @@ export function applyImportRows(
     )
     if (index >= 0) {
       entries[index] = entry
-      replaced += 1
+      overwrittenRows += 1
     } else {
       entries.push(entry)
-      added += 1
+      addedRows += 1
     }
   }
 
-  return { entries, added, replaced, skipped }
+  return {
+    entries,
+    importedRows: addedRows + overwrittenRows,
+    addedRows,
+    overwrittenRows,
+    // `append` deletes nothing; entries of other roles are untouched.
+    removedExistingRows: 0,
+    skippedRows,
+  }
 }

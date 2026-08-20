@@ -125,7 +125,7 @@ export function ScoutInputPanel({
                         {unparsedLines.map((line, index) => (
                             <li key={`${line.reason}-${index}`}>
                                 <code>{line.raw}</code>
-                                <span className="muted"> — {t(scoutUnparsedKey(line.reason))}</span>
+                                <span className="muted"> · {t(scoutUnparsedKey(line.reason))}</span>
                             </li>
                         ))}
                     </ul>

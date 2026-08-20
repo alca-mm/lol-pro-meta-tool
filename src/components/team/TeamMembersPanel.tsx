@@ -80,7 +80,9 @@ export function TeamMembersPanel() {
                                         {member.username}
                                         {member.user_id === user.id && (
                                             <span className="muted" style={{ marginLeft: "0.35rem", fontSize: "0.75rem" }}>
-                                                (you)
+                                                {/* Was the hardcoded English "(you)" in an app
+                                                    that ships DE and EN. */}
+                                                {t("team_youMarker")}
                                             </span>
                                         )}
                                     </td>

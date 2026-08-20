@@ -1217,6 +1217,17 @@ export type AnyScoutState = ScoutStateV1 | ScoutStateV2
  * src/i18n/de.ts + en.ts). Never remove or rename a member — the key lookup is
  * typed, so a rename becomes a compile error in the i18n layer instead of a
  * silent hole in the UI. New members go at the end.
+ *
+ * AND A NEW MEMBER BELONGS IN ITS RUNTIME TUPLE TOO. Each of these unions has a
+ * `SCOUT_IMPORT_*` tuple declared directly beneath it
+ * ({@link SCOUT_IMPORT_LAYOUTS}, {@link SCOUT_IMPORT_WARNING_CODES},
+ * {@link SCOUT_IMPORT_UNPARSED_REASONS}, {@link SCOUT_IMPORT_COLUMNS},
+ * {@link SCOUT_IMPORT_APPLY_MODES}) — the union's runtime projection, and the
+ * list the tests iterate to prove that every member really has its i18n key.
+ * Extending the union alone does not compile: the paired `…AreComplete`
+ * {@link Assert} stays red until the tuple lists the new member as well. That
+ * red is the point — it is what stops a member from shipping with an unchecked
+ * translation key.
  * ========================================================================== */
 
 /**
@@ -1332,6 +1343,36 @@ export type ScoutImportLayout =
   | "loose_lines"
   | "unrecognized"
   | "opgg_raw_champion_page"
+
+/**
+ * The runtime projection of {@link ScoutImportLayout}, in declaration order.
+ *
+ * WHY THE TUPLE EXISTS: the tests used to mirror this union by hand
+ * (`ALL_LAYOUTS` in tests/scoutImportHelpers.test.ts) in order to check that
+ * every layout has its `scout_import_layout_*` key. A hand-written copy is a
+ * second truth, and a second truth goes stale without a sound — the union gains
+ * a member, the copy does not, and the new member's translation ships
+ * unverified. That is not hypothetical: it is how the since-removed
+ * `"riot_api"` member got as far as it did. Iterating this tuple makes the
+ * tests walk the union itself instead of a copy of it.
+ *
+ * NOT A SECOND LIST: `satisfies` rejects anything that is not a union member,
+ * and {@link ScoutImportLayoutsAreComplete} rejects a union member that is
+ * missing here. Together they bind tuple and union in both directions — the
+ * same pattern as {@link SCOUT_IMPORT_COLUMNS} and {@link SCOUT_LINEUP_SLOTS}.
+ */
+export const SCOUT_IMPORT_LAYOUTS = [
+  "tabular_with_header",
+  "tabular_no_header",
+  "loose_lines",
+  "unrecognized",
+  "opgg_raw_champion_page",
+] as const satisfies readonly ScoutImportLayout[]
+
+/** Compile-time guard: the tuple above lists *every* {@link ScoutImportLayout}. */
+export type ScoutImportLayoutsAreComplete = Assert<
+  [ScoutImportLayout] extends [(typeof SCOUT_IMPORT_LAYOUTS)[number]] ? true : false
+>
 
 /**
  * A column the importer claims to have identified, in the canonical order of
@@ -1468,6 +1509,40 @@ export type ScoutImportWarningCode =
   | "winrate_mismatch"
 
 /**
+ * The runtime projection of {@link ScoutImportWarningCode}, in declaration
+ * order.
+ *
+ * Same job as {@link SCOUT_IMPORT_LAYOUTS}: tests/scoutImportHelpers.test.ts
+ * mirrored this union by hand (`ALL_WARNING_CODES`) to assert that every code
+ * resolves to a `scout_import_warning_*` key. Such a copy can go stale in
+ * silence while the new code's translation stays unchecked — iterating the
+ * tuple makes the assertion walk the union itself.
+ *
+ * `satisfies` blocks a value that is not a member; the guard below blocks a
+ * member that is not in the tuple.
+ */
+export const SCOUT_IMPORT_WARNING_CODES = [
+  "empty_input",
+  "no_rows_detected",
+  "header_not_recognized",
+  "columns_guessed",
+  "unknown_champion",
+  "missing_games",
+  "missing_winrate",
+  "value_out_of_range",
+  "duplicate_champion",
+  "role_mismatch",
+  "row_not_parsed",
+  "source_mismatch",
+  "winrate_mismatch",
+] as const satisfies readonly ScoutImportWarningCode[]
+
+/** Compile-time guard: the tuple above lists *every* {@link ScoutImportWarningCode}. */
+export type ScoutImportWarningCodesAreComplete = Assert<
+  [ScoutImportWarningCode] extends [(typeof SCOUT_IMPORT_WARNING_CODES)[number]] ? true : false
+>
+
+/**
  * One import caveat. Shaped exactly like {@link ScoutWarning} (same `severity`
  * ladder, same `params` type) so the UI can render both with one component; it
  * anchors to a row rather than to a player, because at parse time no player id
@@ -1599,6 +1674,38 @@ export type ScoutImportUnparsedReason =
   | "aggregate_row"
   | "page_noise"
 
+/**
+ * The runtime projection of {@link ScoutImportUnparsedReason}, in declaration
+ * order.
+ *
+ * Same job as {@link SCOUT_IMPORT_LAYOUTS}, and here the duplication had
+ * already multiplied: tests/scoutImportHelpers.test.ts kept TWO hand-written
+ * mirrors of this union (`ALL_UNPARSED_REASONS` and `EVERY_UNPARSED_REASON`) —
+ * two copies of one truth, each able to go stale in silence while a new
+ * reason's `scout_import_unparsed_*` key stays unverified. One tuple, iterated,
+ * replaces both.
+ *
+ * `satisfies` blocks a value that is not a member; the guard below blocks a
+ * member that is not in the tuple.
+ */
+export const SCOUT_IMPORT_UNPARSED_REASONS = [
+  "header",
+  "no_champion",
+  "no_numbers",
+  "noise",
+  "matchup_row",
+  "recommended_champion",
+  "aggregate_row",
+  "page_noise",
+] as const satisfies readonly ScoutImportUnparsedReason[]
+
+/** Compile-time guard: the tuple above lists *every* {@link ScoutImportUnparsedReason}. */
+export type ScoutImportUnparsedReasonsAreComplete = Assert<
+  [ScoutImportUnparsedReason] extends [(typeof SCOUT_IMPORT_UNPARSED_REASONS)[number]]
+    ? true
+    : false
+>
+
 /** A pasted line that produced no row, kept verbatim for user review. */
 export interface ScoutImportUnparsedLine {
   /** The original line, trimmed. Never normalised beyond trimming. */
@@ -1622,7 +1729,7 @@ export interface ScoutImportUnparsedLine {
  * The bridge between the two is {@link ScoutImportApplyOptions}: a row whose
  * `games` or `winrate` is `null` is NOT APPLICABLE and must be filtered out
  * before an entry is built (it carries `missing_games` / `missing_winrate` at
- * `danger` severity and counts into {@link ScoutImportApplyResult.skipped}).
+ * `danger` severity and counts into {@link ScoutImportApplyResult.skippedRows}).
  * That is precisely why `ManualChampionEntry` can keep its two plain numbers:
  * a row that cannot supply them never becomes an entry in the first place.
  * The remaining fields (`kda`, `csPerMin`, `killParticipation`, `damage`) have
@@ -1821,6 +1928,29 @@ export interface ScoutStatsImportOptions {
 export type ScoutImportApplyMode = "append" | "replace"
 
 /**
+ * The runtime projection of {@link ScoutImportApplyMode}, in the order the
+ * import panel offers them — `append` first, because it is the mode that cannot
+ * lose anything the user typed.
+ *
+ * Same job as {@link SCOUT_IMPORT_LAYOUTS}. The tests spelled this union out
+ * inline as `["append", "replace"] as const`, which is a copy like any other: a
+ * third mode would leave that literal — and every per-mode case it verifies —
+ * quietly behind.
+ *
+ * `satisfies` blocks a value that is not a member; the guard below blocks a
+ * member that is not in the tuple.
+ */
+export const SCOUT_IMPORT_APPLY_MODES = [
+  "append",
+  "replace",
+] as const satisfies readonly ScoutImportApplyMode[]
+
+/** Compile-time guard: the tuple above lists *every* {@link ScoutImportApplyMode}. */
+export type ScoutImportApplyModesAreComplete = Assert<
+  [ScoutImportApplyMode] extends [(typeof SCOUT_IMPORT_APPLY_MODES)[number]] ? true : false
+>
+
+/**
  * The user's decisions at the moment they press "apply". Everything here is
  * required — applying is the step where guessing is least acceptable.
  */
@@ -1853,21 +1983,128 @@ export interface ScoutImportApplyOptions {
  * {@link ScoutImportApplyMode}), so the caller assigns it to
  * `ScoutPlayerData.entries` without re-implementing the merge.
  *
- * The three counters exist so the UI can say what actually happened instead of
- * "import successful": `added + replaced + skipped` accounts for every row that
- * was offered. `skipped` is the honest half — it counts rows that could not
+ * The counters exist so the UI can say what actually happened instead of
+ * "import successful": `importedRows + skippedRows` accounts for every row that
+ * was offered. `skippedRows` is the honest half — it counts rows that could not
  * become entries (missing `games` / `winrate`, see {@link ScoutImportRow}) or
  * that the user deselected.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY `added` / `replaced` / `skipped` ARE GONE — THE "72 ROWS" BUG.
+ * `replaced` meant TWO DIFFERENT THINGS depending on the
+ * {@link ScoutImportApplyMode}: in `append` mode "an existing entry was
+ * overwritten in place", in `replace` mode "an existing entry was DELETED". The
+ * success message summed the two import-ish counters (`added + replaced`) and
+ * so announced **"72 rows applied"** for a player with 36 existing rows and 36
+ * selected ones — while exactly 36 rows were stored. That was not a rounding
+ * slip: it counted a deletion as an import, because the field's meaning
+ * silently changed with the mode.
+ *
+ * The fix is naming, not arithmetic. Every counter below answers exactly one
+ * question, and the single number the UI prints
+ * ({@link ScoutImportApplyResult.importedRows}) is mode-independent by
+ * construction, so no caller can ever reassemble the old sum.
+ *
+ * THE OLD NAMES ARE REMOVED OUTRIGHT — no alias, no deprecated property, no
+ * back-compatibility shim. A hard cut is correct *here specifically* because
+ * this structure is purely internal: `applyImportRows()` in
+ * src/scout/statsImport.ts is its only producer and the import panel in
+ * src/components/scout/ its only consumer. It is NOT persisted state (nothing
+ * of it reaches `ScoutStateV2.playerData`; only the `entries` array does, and
+ * that shape is unchanged) and it is NOT an API response, so there is no stored
+ * data and no third-party client that could still carry the old shape.
+ * {@link SCOUT_SCHEMA_VERSION} therefore STAYS AT 2 — a bump without a matching
+ * `ScoutStateV*` and migration branch is what makes users lose scout data. A
+ * soft alias would preserve nothing but the ambiguity that caused the bug.
+ * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * INVARIANTS — they hold in BOTH modes, and the tests pin them:
+ *
+ *     importedRows === rows.length - skippedRows
+ *     importedRows === addedRows + overwrittenRows
+ *
+ * The first says every offered row is accounted for exactly once; the second
+ * says an imported row either created an entry or replaced one in place —
+ * there is no third outcome.
+ *
+ * `removedExistingRows` stands OUTSIDE both equations on purpose: it counts the
+ * user's own pre-existing rows that this apply deleted, which is not an import
+ * at all. Folding it into a "rows applied" figure is precisely the mistake
+ * described above, and giving it its own name is what makes that mistake hard
+ * to repeat.
+ *
+ * Per mode, one counter each is structurally zero:
+ *  - `append`  → `removedExistingRows` is always 0; nothing is deleted.
+ *  - `replace` → `overwrittenRows` is always 0; the role is cleared *first*, so
+ *                nothing is left to overwrite in place and every imported row
+ *                counts as added.
+ * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * THE DUPLICATE-CHAMPION ASYMMETRY IS EXISTING BEHAVIOUR AND IS NOT CHANGED
+ * HERE. When one paste contains the same champion twice — the row already
+ * carries a `duplicate_champion` warning — the modes end differently:
+ *  - `append`  the second row overwrites the first → `overwrittenRows` rises,
+ *              ONE entry exists afterwards.
+ *  - `replace` both rows are appended to the freshly cleared role →
+ *              `addedRows` rises twice, TWO entries exist afterwards.
+ * This rename neither introduced that asymmetry nor removes it. In both cases
+ * `importedRows === addedRows + overwrittenRows` still holds, so the number the
+ * UI prints stays truthful either way — which is the point of counting
+ * outcomes rather than counting merge steps.
+ * ---------------------------------------------------------------------------
+ *
+ * `importedRows` REPLACES THE HELPER `appliedRowCount()` (formerly in
+ * src/components/scout/scoutImportHelpers.ts), which computed
+ * `selected.length - result.skipped` at the call site and is deleted with this
+ * change. The number belongs on the result itself: the helper was only correct
+ * if the caller passed the *exact same array* it had handed to
+ * `applyImportRows()`. Nothing in the type system enforced that, so a caller
+ * that filtered, re-sorted or re-derived its selection in between got a
+ * plausible-looking wrong number back — the same class of trap as the one
+ * above. A field on the result cannot be called with the wrong array.
  */
 export interface ScoutImportApplyResult {
   /** The player's full entry list after the merge, ready to store. */
   entries: ManualChampionEntry[]
-  /** Rows that became new entries. */
-  added: number
-  /** Existing entries removed by this apply (`replace` mode, same role only). */
-  replaced: number
-  /** Rows deliberately not applied. Never reported as zero just because it looks nicer. */
-  skipped: number
+  /**
+   * How many of the passed-in `rows` were APPLIED — mode-independent, and THE
+   * number the success message shows.
+   * Invariants: `rows.length - skippedRows` and `addedRows + overwrittenRows`.
+   *
+   * "Applied", not "resulting entries": the two differ in exactly one case, the
+   * duplicate champion documented on {@link applyImportRows}. Two `append` rows
+   * for one champion are both applied (`importedRows` 2, as `addedRows` 1 +
+   * `overwrittenRows` 1) while ONE entry exists afterwards, because the second
+   * row overwrote the first. That is the honest reading — the user ticked two
+   * rows and both were taken over — and it is what the removed
+   * `appliedRowCount()` reported too, so the printed number is unchanged.
+   * `entries.length` is the count of resulting entries and is a different
+   * question.
+   */
+  importedRows: number
+  /** Imported rows that became NEW entries. */
+  addedRows: number
+  /**
+   * Imported rows that overwrote an existing entry of the same champion AND the
+   * same role IN PLACE. Only reachable in `append` mode; in `replace` mode it is
+   * 0 by construction, because that mode clears the role beforehand.
+   */
+  overwrittenRows: number
+  /**
+   * The user's pre-existing rows that this apply DELETED — in `replace` mode
+   * the rows of the imported role, in `append` mode always 0. NOT an import: it
+   * carries its own name precisely so it can never be summed into a "rows
+   * applied" figure again.
+   */
+  removedExistingRows: number
+  /**
+   * Offered rows that were not applied — either not applicable (missing
+   * `games` / `winrate`, see {@link ScoutImportRow}) or deselected by the user.
+   * Never reported as zero just because it looks nicer.
+   */
+  skippedRows: number
 }
 
 /**

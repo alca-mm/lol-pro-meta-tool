@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../../auth/AuthContext"
 import { useTeam } from "../../teams/TeamContext"
+import { useTranslation } from "../../i18n/LanguageContext"
+import { riotErrorMessage, riotSyncSuccessMessage } from "./teamUiHelpers"
 import {
     syncRiotMatches,
     getMyPlayerAccount,
@@ -15,6 +17,7 @@ interface Props {
 export function RiotAccountSummary({ onGoToPlayerResults }: Props) {
     const { user, session } = useAuth()
     const { activeTeam } = useTeam()
+    const { t } = useTranslation()
 
     const [account, setAccount] = useState<PlayerAccount | null>(null)
     const [busy, setBusy] = useState(false)
@@ -39,29 +42,34 @@ export function RiotAccountSummary({ onGoToPlayerResults }: Props) {
 
     async function handleSync() {
         setBusy(true)
-        const result = await syncRiotMatches(session!.access_token, activeTeam!.id)
-        setBusy(false)
-        if (typeof result === "string") {
-            const msg =
-                result === "riot_account_not_linked"
-                    ? "Bitte zuerst Riot-Account verknüpfen."
-                    : result === "riot_rate_limited"
-                    ? "Rate Limit erreicht. Bitte kurz warten."
-                    : result
-            showFeedback(msg, false)
-        } else {
-            showFeedback(buildSyncMessage(result), true)
+        // No catch on purpose: riotService never throws any more, it reports failures as an
+        // error string. Swallowing a truly unexpected exception here would turn it into a
+        // silent "nothing happened"; without a catch it stays visible in the console while
+        // the finally still guarantees the button leaves its loading state.
+        try {
+            const result = await syncRiotMatches(session!.access_token, activeTeam!.id)
+            if (typeof result === "string") {
+                showFeedback(riotErrorMessage(t, result), false)
+            } else {
+                showFeedback(buildSyncMessage(result), true)
+            }
+        } finally {
+            // setBusy(false) now runs AFTER showFeedback(...) instead of before it. That
+            // reordering is not observable: React 18 batches all state updates made in the
+            // same task, including the ones after an await, so busy=false and the feedback
+            // land in one single re-render with the same final state as before. Please do
+            // not "fix" this back to a setBusy(false) placed before the branches.
+            setBusy(false)
         }
     }
 
     function buildSyncMessage(r: SyncResult): string {
-        const base = `${r.imported} neue Match${r.imported === 1 ? "" : "es"} gespeichert.`
-        return r.moreMayBeAvailable ? base + " Weitere verfügbar." : base
+        return riotSyncSuccessMessage(t, r, "summary")
     }
 
     return (
         <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
-            <span className="panel-title">Riot-Account</span>
+            <span className="panel-title">{t("team_riot_title")}</span>
 
             {account ? (
                 <div className="button-row" style={{ fontSize: "0.85rem" }}>
@@ -75,7 +83,7 @@ export function RiotAccountSummary({ onGoToPlayerResults }: Props) {
                         disabled={busy}
                         onClick={() => void handleSync()}
                     >
-                        {busy ? "Lädt…" : "Syncen"}
+                        {busy ? t("team_riot_loading") : t("team_riot_syncShort")}
                     </button>
                     {onGoToPlayerResults && (
                         <button
@@ -84,13 +92,13 @@ export function RiotAccountSummary({ onGoToPlayerResults }: Props) {
                             style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem" }}
                             onClick={onGoToPlayerResults}
                         >
-                            Player Results →
+                            {t("team_riot_playerResults")} →
                         </button>
                     )}
                 </div>
             ) : (
                 <p className="muted" style={{ marginTop: "0.4rem", fontSize: "0.8rem" }}>
-                    Kein Riot-Account verknüpft.{" "}
+                    {t("team_riot_notLinked")}{" "}
                     {onGoToPlayerResults && (
                         <button
                             type="button"
@@ -98,7 +106,7 @@ export function RiotAccountSummary({ onGoToPlayerResults }: Props) {
                             style={{ fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
                             onClick={onGoToPlayerResults}
                         >
-                            Verknüpfen →
+                            {t("team_riot_link")} →
                         </button>
                     )}
                 </p>

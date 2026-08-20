@@ -151,7 +151,7 @@ describe("roleMismatchHint", () => {
     const hint = roleMismatchHint(t, "mid", "jungle")
 
     expect(hint).toBe(
-      "Auf Mid gespielt, aufgestellt aber als Jungle — ein Ban trifft die geplante Lane möglicherweise nicht.",
+      "Auf Mid gespielt, aufgestellt aber als Jungle. Ein Ban trifft die geplante Lane möglicherweise nicht.",
     )
     expect(hint).not.toContain("{")
   })
@@ -176,7 +176,7 @@ describe("roleMismatchHint", () => {
     const hint = roleMismatchHint(tEn, "mid", "jungle")
 
     expect(hint).toBe(
-      "Played in Mid but fielded as Jungle — a ban may not hit the lane you are planning for.",
+      "Played in Mid but fielded as Jungle. A ban may not hit the lane you are planning for.",
     )
   })
 

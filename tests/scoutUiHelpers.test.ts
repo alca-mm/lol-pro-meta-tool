@@ -204,7 +204,7 @@ describe("fillPlaceholders", () => {
   it("leaves a fully substituted text untouched", () => {
     const template = de.scout_reason_high_winrate_many_games
     expect(fillPlaceholders(template, { winrate: 71, games: 42 })).toBe(
-      "71% Winrate auf 42 Games — belastbares Sample.",
+      "71% Winrate auf 42 Games, ein belastbares Sample.",
     )
   })
 
@@ -274,7 +274,7 @@ describe("translateScoutReason / translateScoutWarning / translateCount", () => 
       code: "high_winrate_many_games",
       params: { winrate: 71, games: 42 },
     })
-    expect(text).toBe("71% Winrate auf 42 Games — belastbares Sample.")
+    expect(text).toBe("71% Winrate auf 42 Games, ein belastbares Sample.")
   })
 
   it("renders a role-bound reason with a translated role", () => {
@@ -519,6 +519,38 @@ describe("buildScoutExportText", () => {
     const text = buildScoutExportText(t, analyzeScout(players, playerData))
     expect(text).toContain(de.scout_noAnalysis)
     expect(text).toContain(de.scout_warning_player_without_data)
+  })
+
+  /**
+   * The export is text the user copies out and reads, so it follows the same
+   * copy rule as the UI: no dash asides. Its separators live in
+   * src/components/scout/scoutExport.ts, NOT in the i18n catalogues, so
+   * tests/i18nScoutCopy.test.ts cannot see them -- and that blind spot is
+   * exactly how the export ended up mixing " \u2014 " with " \u00b7 " for a
+   * while. This asserts the finished text, which covers both the separators
+   * written here and every i18n fragment that flows into it.
+   */
+  it("writes no em dash or en dash into the finished export", () => {
+    const players = [player("euw:mid#euw", "Mid", "mid"), player("euw:bot#euw", "Bot", "bot")]
+    const playerData: Record<ScoutPlayerId, ScoutPlayerData> = {
+      "euw:mid#euw": {
+        playerId: "euw:mid#euw",
+        entries: [
+          entry({ championName: "Ahri", games: 30, winrate: 68 }),
+          entry({ championName: "Yone", games: 12, winrate: 40 }),
+        ],
+      },
+      "euw:bot#euw": {
+        playerId: "euw:bot#euw",
+        entries: [entry({ championName: "Kaisa", games: 22, winrate: 64 })],
+      },
+    }
+    const text = buildScoutExportText(t, analyzeScout(players, playerData))
+
+    // Non-empty first: an export that silently became "" would pass any
+    // "contains no dash" check without proving anything.
+    expect(text.length).toBeGreaterThan(0)
+    expect(text).not.toMatch(/[\u2014\u2013]/)
   })
 })
 

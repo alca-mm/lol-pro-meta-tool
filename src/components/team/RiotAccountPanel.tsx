@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useAuth } from "../../auth/AuthContext"
 import { useTeam } from "../../teams/TeamContext"
+import { useTranslation } from "../../i18n/LanguageContext"
+import { riotErrorMessage, riotSyncSuccessMessage } from "./teamUiHelpers"
 import {
     parseRiotId,
     linkRiotAccount,
@@ -16,6 +18,7 @@ const COOLDOWN_SECS = 30
 export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } = {}) {
     const { user, session } = useAuth()
     const { activeTeam } = useTeam()
+    const { t } = useTranslation()
 
     const [account, setAccount] = useState<PlayerAccount | null>(null)
     const [riotIdInput, setRiotIdInput] = useState("")
@@ -61,54 +64,71 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
     async function handleLink() {
         const parsed = parseRiotId(riotIdInput)
         if (!parsed) {
-            showFeedback("Format: SpielerName#TAG (z.B. mmmmicrocontroler#EUW)", false)
+            showFeedback(t("team_riot_formatHint"), false)
             return
         }
         setBusy(true)
-        const err = await linkRiotAccount(
-            session!.access_token,
-            activeTeam!.id,
-            parsed.gameName,
-            parsed.tagLine,
-        )
-        setBusy(false)
-        if (err) {
-            const msg =
-                err === "riot_account_not_found"
-                    ? "Riot-Account nicht gefunden. Prüfe Schreibweise und Tag."
-                    : err
-            showFeedback(msg, false)
-        } else {
-            setRiotIdInput("")
-            showFeedback("Riot-Account verknüpft!", true)
-            void loadAccount()
+        // No catch on purpose: riotService never throws any more, it reports failures as an
+        // error string. Swallowing a truly unexpected exception here would turn it into a
+        // silent "nothing happened"; without a catch it stays visible in the console while
+        // the finally still guarantees the button leaves its loading state.
+        try {
+            const err = await linkRiotAccount(
+                session!.access_token,
+                activeTeam!.id,
+                parsed.gameName,
+                parsed.tagLine,
+            )
+            if (err) {
+                showFeedback(riotErrorMessage(t, err), false)
+            } else {
+                setRiotIdInput("")
+                showFeedback(t("team_riot_linkSuccess"), true)
+                void loadAccount()
+            }
+        } finally {
+            // setBusy(false) now runs AFTER showFeedback(...) instead of before it. That
+            // reordering is not observable: React 18 batches all state updates made in the
+            // same task, including the ones after an await, so busy=false and the feedback
+            // land in one single re-render with the same final state as before. Please do
+            // not "fix" this back to a setBusy(false) placed before the branches.
+            setBusy(false)
         }
     }
 
     async function handleSync(mode: SyncMode = "quick") {
         setBusy(true)
-        const result = await syncRiotMatches(session!.access_token, activeTeam!.id, mode)
-        setBusy(false)
-        startCooldown()
-        if (typeof result === "string") {
-            const msg =
-                result === "riot_account_not_linked"
-                    ? "Bitte zuerst Riot-Account verknüpfen."
-                    : result === "riot_rate_limited"
-                    ? "Rate Limit erreicht. Bitte kurz warten und erneut synchronisieren."
-                    : result
-            showFeedback(msg, false)
-        } else {
-            showFeedback(buildSyncMessage(result), true)
-            onAfterSync?.()
+        // No catch here either - see handleLink() above for the reasoning.
+        try {
+            const result = await syncRiotMatches(session!.access_token, activeTeam!.id, mode)
+            // startCooldown() deliberately stays INSIDE the try, after the request and before
+            // the success/error branch: the rate-limit cooldown must keep applying to failed
+            // syncs too. Do not move it into one of the branches, and do not move it into the
+            // finally either - there it would additionally run for an exception, which is not
+            // what happens today.
+            startCooldown()
+            if (typeof result === "string") {
+                showFeedback(riotErrorMessage(t, result), false)
+            } else {
+                showFeedback(buildSyncMessage(result), true)
+                onAfterSync?.()
+            }
+        } finally {
+            // Same reordering as in handleLink(): setBusy(false) now runs after
+            // startCooldown()/showFeedback(...) instead of before them. Not observable -
+            // React 18 batches these updates into one re-render, so
+            // disabled={busy || cooldownSecs > 0} never sees an intermediate state.
+            setBusy(false)
         }
     }
 
     function buildSyncMessage(r: SyncResult): string {
-        const base = `Sync abgeschlossen. ${r.imported} neue Match${r.imported === 1 ? "" : "es"} gespeichert.`
-        return r.moreMayBeAvailable
-            ? base + " Es könnten weitere Matches verfügbar sein. Synchronisiere erneut."
-            : base
+        return riotSyncSuccessMessage(t, r, "panel")
+    }
+
+    /** Pure substitution of the one `{secs}` placeholder the cooldown labels carry. */
+    function withSecs(template: string): string {
+        return template.split("{secs}").join(String(cooldownSecs))
     }
 
     function handleEditAccount() {
@@ -118,7 +138,7 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
 
     return (
         <div className="recommendation-section" style={{ padding: "0.75rem 1rem" }}>
-            <span className="panel-title">Riot-Account</span>
+            <span className="panel-title">{t("team_riot_title")}</span>
 
             {account ? (
                 <div className="button-row" style={{ fontSize: "0.85rem" }}>
@@ -132,7 +152,11 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
                         disabled={busy || cooldownSecs > 0}
                         onClick={() => void handleSync("quick")}
                     >
-                        {busy ? "Lädt…" : cooldownSecs > 0 ? `Sync (${cooldownSecs}s)` : "Matches syncen"}
+                        {busy
+                            ? t("team_riot_loading")
+                            : cooldownSecs > 0
+                            ? withSecs(t("team_riot_syncCooldown"))
+                            : t("team_riot_sync")}
                     </button>
                     <button
                         type="button"
@@ -141,7 +165,9 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
                         disabled={busy || cooldownSecs > 0}
                         onClick={() => void handleSync("deep")}
                     >
-                        {cooldownSecs > 0 ? `Mehr laden (${cooldownSecs}s)` : "Mehr laden"}
+                        {cooldownSecs > 0
+                            ? withSecs(t("team_riot_loadMoreCooldown"))
+                            : t("team_riot_loadMore")}
                     </button>
                     <button
                         type="button"
@@ -150,7 +176,7 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
                         disabled={busy}
                         onClick={handleEditAccount}
                     >
-                        Ändern
+                        {t("team_riot_change")}
                     </button>
                 </div>
             ) : (
@@ -159,7 +185,7 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
                         type="text"
                         value={riotIdInput}
                         onChange={(e) => setRiotIdInput(e.target.value)}
-                        placeholder="SpielerName#EUW"
+                        placeholder={t("team_riot_inputPlaceholder")}
                         disabled={busy}
                         style={{ maxWidth: "14rem", fontSize: "0.85rem" }}
                         onKeyDown={(e) => {
@@ -172,7 +198,7 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
                         disabled={busy || !riotIdInput.trim()}
                         onClick={() => void handleLink()}
                     >
-                        Verknüpfen
+                        {t("team_riot_link")}
                     </button>
                 </div>
             )}
@@ -185,7 +211,7 @@ export function RiotAccountPanel({ onAfterSync }: { onAfterSync?: () => void } =
 
             {account && !busy && cooldownSecs === 0 && (
                 <p className="muted" style={{ marginTop: "0.4rem", fontSize: "0.8rem" }}>
-                    Quick: letzte 10 Matches/Queue · Mehr laden: letzte 30/Queue
+                    {t("team_riot_modeHint")}
                 </p>
             )}
         </div>

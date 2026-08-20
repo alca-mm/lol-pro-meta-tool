@@ -11,9 +11,12 @@ import {
   parseScoutStats,
   resolveChampionName,
 } from "../src/scout/statsImport"
+import { SCOUT_IMPORT_APPLY_MODES } from "../src/scout/types"
 import type {
   ManualChampionEntry,
+  ScoutImportApplyMode,
   ScoutImportApplyOptions,
+  ScoutImportApplyResult,
   ScoutImportRow,
   ScoutStatsImportOptions,
 } from "../src/scout/types"
@@ -886,6 +889,27 @@ describe("parseScoutStats — duplicates and provenance", () => {
  * ========================================================================== */
 
 describe("applyImportRows", () => {
+  /* ------------------------------------------------------------------------
+   * On the five counters, and why every test below states more than one:
+   *
+   * `overwrittenRows` and `removedExistingRows` are the two halves of the old,
+   * ambiguous `replaced` field — "an entry was overwritten in place" (append)
+   * versus "an existing entry was DELETED" (replace). Each is structurally 0 in
+   * the other mode, so a test that asserts only the non-zero one would still
+   * pass if the two were swapped. Every test therefore pins the mode's zero
+   * counter as well, which makes the asymmetry visible instead of merely
+   * documented. See the JSDoc of `ScoutImportApplyResult` in src/scout/types.ts.
+   * ---------------------------------------------------------------------- */
+
+  /** The five counters as one object, so a test can state the whole outcome. */
+  const counters = (result: ScoutImportApplyResult) => ({
+    importedRows: result.importedRows,
+    addedRows: result.addedRows,
+    overwrittenRows: result.overwrittenRows,
+    removedExistingRows: result.removedExistingRows,
+    skippedRows: result.skippedRows,
+  })
+
   it("appends a champion the player does not have yet", () => {
     const existing = [makeEntry({ championName: "Lee Sin", role: "jungle" })]
     const result = applyImportRows(existing, [makeRow({ championName: "Viego", games: 18 })], {
@@ -893,9 +917,12 @@ describe("applyImportRows", () => {
       mode: "append",
     })
 
-    expect(result.added).toBe(1)
-    expect(result.replaced).toBe(0)
-    expect(result.skipped).toBe(0)
+    expect(result.importedRows).toBe(1)
+    expect(result.addedRows).toBe(1)
+    expect(result.overwrittenRows).toBe(0)
+    // `append` never deletes: structurally 0 in this mode.
+    expect(result.removedExistingRows).toBe(0)
+    expect(result.skippedRows).toBe(0)
     expect(result.entries.map((entry) => entry.championName)).toEqual(["Lee Sin", "Viego"])
     expect(result.entries[1].role).toBe("jungle")
     expect(result.entries[1].source).toBe("opgg")
@@ -913,8 +940,11 @@ describe("applyImportRows", () => {
       { ...APPLY_JUNGLE, mode: "append" },
     )
 
-    expect(result.added).toBe(0)
-    expect(result.replaced).toBe(1)
+    expect(result.importedRows).toBe(1)
+    expect(result.addedRows).toBe(0)
+    // append → an in-place overwrite, NOT a deletion.
+    expect(result.overwrittenRows).toBe(1)
+    expect(result.removedExistingRows).toBe(0)
     expect(result.entries).toHaveLength(2)
     expect(result.entries[0].championName).toBe("Lee Sin")
     expect(result.entries[0].games).toBe(24)
@@ -930,7 +960,9 @@ describe("applyImportRows", () => {
       mode: "append",
     })
 
-    expect(result.replaced).toBe(1)
+    expect(result.importedRows).toBe(1)
+    expect(result.overwrittenRows).toBe(1)
+    expect(result.removedExistingRows).toBe(0)
     expect(result.entries).toHaveLength(1)
     expect(result.entries[0].games).toBe(30)
   })
@@ -942,8 +974,12 @@ describe("applyImportRows", () => {
       mode: "append",
     })
 
-    expect(result.added).toBe(1)
-    expect(result.replaced).toBe(0)
+    expect(result.importedRows).toBe(1)
+    expect(result.addedRows).toBe(1)
+    // The role differs, so there was nothing to overwrite — and append deletes
+    // nothing either.
+    expect(result.overwrittenRows).toBe(0)
+    expect(result.removedExistingRows).toBe(0)
     expect(result.entries).toHaveLength(2)
     expect(result.entries[0].role).toBe("support")
     expect(result.entries[0].games).toBe(40)
@@ -963,9 +999,14 @@ describe("applyImportRows", () => {
       mode: "replace",
     })
 
-    expect(result.replaced).toBe(2)
-    expect(result.added).toBe(1)
-    expect(result.skipped).toBe(0)
+    // replace → the two jungle rows are DELETED, which is not an import: they
+    // stay out of `importedRows` (the "72 rows" bug in miniature).
+    expect(result.removedExistingRows).toBe(2)
+    expect(result.importedRows).toBe(1)
+    expect(result.addedRows).toBe(1)
+    // The role was cleared first, so nothing was left to overwrite in place.
+    expect(result.overwrittenRows).toBe(0)
+    expect(result.skippedRows).toBe(0)
     expect(result.entries.map((entry) => entry.championName)).toEqual(["Ahri", "Karma", "Elise"])
   })
 
@@ -981,8 +1022,11 @@ describe("applyImportRows", () => {
       { ...APPLY_JUNGLE, mode: "append" },
     )
 
-    expect(result.skipped).toBe(2)
-    expect(result.added).toBe(1)
+    expect(result.skippedRows).toBe(2)
+    expect(result.importedRows).toBe(1)
+    expect(result.addedRows).toBe(1)
+    expect(result.overwrittenRows).toBe(0)
+    expect(result.removedExistingRows).toBe(0)
     expect(result.entries.map((entry) => entry.championName)).toEqual(["Lee Sin", "Nidalee"])
   })
 
@@ -1013,6 +1057,181 @@ describe("applyImportRows", () => {
     })
 
     expect(result.entries[0].games).toBe(11)
+  })
+
+  /* ========================================================================
+   * 17b. The counters themselves — one full tuple per scenario.
+   * ====================================================================== */
+
+  describe("counter semantics", () => {
+    it("reports a single new append as exactly one added import", () => {
+      const result = applyImportRows(
+        [],
+        [makeRow({ championName: "Elise", games: 11, winrate: 48 })],
+        { ...APPLY_JUNGLE, mode: "append" },
+      )
+
+      expect(counters(result)).toEqual({
+        importedRows: 1,
+        addedRows: 1,
+        overwrittenRows: 0,
+        removedExistingRows: 0,
+        skippedRows: 0,
+      })
+      expect(result.entries).toHaveLength(1)
+    })
+
+    it("reports an append onto an existing champion+role as an overwrite, not an add", () => {
+      const existing = [makeEntry({ championName: "Elise", role: "jungle", games: 4, winrate: 25 })]
+      const result = applyImportRows(
+        existing,
+        [makeRow({ championName: "Elise", games: 11, winrate: 48 })],
+        { ...APPLY_JUNGLE, mode: "append" },
+      )
+
+      expect(counters(result)).toEqual({
+        importedRows: 1,
+        addedRows: 0,
+        overwrittenRows: 1,
+        // The old row was overwritten, never deleted — `append` cannot delete.
+        removedExistingRows: 0,
+        skippedRows: 0,
+      })
+      expect(result.entries).toHaveLength(1)
+      expect(result.entries[0].games).toBe(11)
+    })
+
+    it("counts deleted existing rows apart from the imported ones in replace mode", () => {
+      // Five existing rows against two imported ones — deliberately DIFFERENT
+      // numbers, so a swap of `removedExistingRows` and `importedRows` cannot
+      // slip through unnoticed. Summing them would announce "7 rows applied"
+      // for the 2 rows that were actually stored.
+      const existing = [
+        makeEntry({ championName: "Lee Sin", role: "jungle" }),
+        makeEntry({ championName: "Viego", role: "jungle" }),
+        makeEntry({ championName: "Elise", role: "jungle" }),
+        makeEntry({ championName: "Nidalee", role: "jungle" }),
+        makeEntry({ championName: "Kha'Zix", role: "jungle" }),
+      ]
+      const rows = [
+        makeRow({ championName: "Graves", games: 12, winrate: 58 }),
+        makeRow({ championName: "Maokai", games: 9, winrate: 44 }),
+      ]
+      const result = applyImportRows(existing, rows, { ...APPLY_JUNGLE, mode: "replace" })
+
+      expect(counters(result)).toEqual({
+        importedRows: 2,
+        addedRows: 2,
+        overwrittenRows: 0,
+        removedExistingRows: 5,
+        skippedRows: 0,
+      })
+      expect(result.entries.map((entry) => entry.championName)).toEqual(["Graves", "Maokai"])
+    })
+
+    it("lowers importedRows by exactly the number of unapplicable rows, in both modes", () => {
+      const rows = [
+        makeRow({ championName: "Viego", games: null }),
+        makeRow({ championName: "Elise", winrate: null }),
+        makeRow({ championName: "Nidalee", games: 7, winrate: 57 }),
+      ]
+
+      for (const mode of SCOUT_IMPORT_APPLY_MODES) {
+        const result = applyImportRows([], rows, { ...APPLY_JUNGLE, mode })
+
+        expect(result.skippedRows, mode).toBe(2)
+        expect(result.importedRows, mode).toBe(rows.length - result.skippedRows)
+        expect(result.importedRows, mode).toBe(1)
+        expect(
+          result.entries.map((entry) => entry.championName),
+          mode,
+        ).toEqual(["Nidalee"])
+      }
+    })
+
+    it("merges a champion listed twice in one paste into a single entry in append mode", () => {
+      // EXISTING BEHAVIOUR, deliberately NOT changed by the counter rename: the
+      // second row finds the entry the first one just created and overwrites it,
+      // so TWO imported rows leave ONE entry behind.
+      const result = applyImportRows(
+        [],
+        [
+          makeRow({ championName: "Viego", games: 18, winrate: 52 }),
+          makeRow({ championName: "Viego", games: 25, winrate: 61 }),
+        ],
+        { ...APPLY_JUNGLE, mode: "append" },
+      )
+
+      expect(counters(result)).toEqual({
+        importedRows: 2,
+        addedRows: 1,
+        overwrittenRows: 1,
+        removedExistingRows: 0,
+        skippedRows: 0,
+      })
+      expect(result.entries).toHaveLength(1)
+      expect(result.entries[0].games).toBe(25)
+      expect(result.entries[0].winrate).toBe(61)
+    })
+
+    it("keeps a champion listed twice in one paste as two entries in replace mode", () => {
+      // The mirror image of the test above, and the documented asymmetry: the
+      // role is cleared FIRST, so nothing is left to overwrite and both rows are
+      // appended. Also existing behaviour that this cleanup does not touch — if
+      // it ever changes, that is a product decision, not a rename.
+      const result = applyImportRows(
+        [],
+        [
+          makeRow({ championName: "Viego", games: 18, winrate: 52 }),
+          makeRow({ championName: "Viego", games: 25, winrate: 61 }),
+        ],
+        { ...APPLY_JUNGLE, mode: "replace" },
+      )
+
+      expect(counters(result)).toEqual({
+        importedRows: 2,
+        addedRows: 2,
+        overwrittenRows: 0,
+        removedExistingRows: 0,
+        skippedRows: 0,
+      })
+      expect(result.entries).toHaveLength(2)
+      expect(result.entries.map((entry) => entry.games)).toEqual([18, 25])
+    })
+
+    it("keeps both counter invariants in every apply mode", () => {
+      // Iterates the runtime projection of the union, not a hand-written list:
+      // a third mode would be covered here the day it is added.
+      const existing = [
+        makeEntry({ championName: "Lee Sin", role: "jungle", games: 5 }),
+        makeEntry({ championName: "Ahri", role: "mid" }),
+      ]
+      const rows = [
+        makeRow({ championName: "Lee Sin", games: 24, winrate: 62 }), // already stored, jungle
+        makeRow({ championName: "Elise", games: 11, winrate: 48 }), // new
+        makeRow({ championName: "Nidalee", games: null }), // not applicable
+      ]
+
+      const byMode = new Map<ScoutImportApplyMode, ScoutImportApplyResult>()
+      for (const mode of SCOUT_IMPORT_APPLY_MODES) {
+        const result = applyImportRows(existing, rows, { ...APPLY_JUNGLE, mode })
+        byMode.set(mode, result)
+
+        expect(result.importedRows, mode).toBe(result.addedRows + result.overwrittenRows)
+        expect(result.importedRows, mode).toBe(rows.length - result.skippedRows)
+        // `removedExistingRows` stands outside both equations on purpose.
+        expect(result.skippedRows, mode).toBe(1)
+      }
+
+      // Guards against a vacuous loop, and against a scenario that would
+      // exercise neither mode-specific counter.
+      expect(byMode.size).toBe(SCOUT_IMPORT_APPLY_MODES.length)
+      expect(byMode.size).toBeGreaterThanOrEqual(2)
+      expect(byMode.get("append")?.overwrittenRows).toBe(1)
+      expect(byMode.get("append")?.removedExistingRows).toBe(0)
+      expect(byMode.get("replace")?.removedExistingRows).toBe(1)
+      expect(byMode.get("replace")?.overwrittenRows).toBe(0)
+    })
   })
 })
 

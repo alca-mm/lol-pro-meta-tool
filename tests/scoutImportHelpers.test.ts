@@ -13,7 +13,6 @@ import { describe, expect, it } from "vitest"
 import {
   SCOUT_IMPORT_ROLE_VALUES,
   SCOUT_IMPORT_SOURCE_VALUES,
-  appliedRowCount,
   applicableRowIds,
   countUnparsedByReason,
   defaultSelectedRowIds,
@@ -40,8 +39,12 @@ import type { TranslationKey } from "../src/i18n/types"
 import { createEmptyScoutLineup } from "../src/scout/storage"
 import { applyImportRows, parseScoutStats } from "../src/scout/statsImport"
 import {
+  SCOUT_IMPORT_APPLY_MODES,
   SCOUT_IMPORT_COLUMNS,
+  SCOUT_IMPORT_LAYOUTS,
   SCOUT_IMPORT_MODES,
+  SCOUT_IMPORT_UNPARSED_REASONS,
+  SCOUT_IMPORT_WARNING_CODES,
   SCOUT_LINEUP_SLOTS,
 } from "../src/scout/types"
 import type {
@@ -49,11 +52,9 @@ import type {
   ScoutImportApplyMode,
   ScoutImportApplyResult,
   ScoutImportColumn,
-  ScoutImportLayout,
   ScoutImportRow,
   ScoutImportUnparsedLine,
   ScoutImportUnparsedReason,
-  ScoutImportWarningCode,
   ScoutLineup,
   ScoutPlayer,
   ScoutRole,
@@ -62,98 +63,38 @@ import type {
 
 const t = (key: TranslationKey): string => de[key]
 
-/** Every member of the union, spelled out so a new code fails this file. */
-const ALL_WARNING_CODES: readonly ScoutImportWarningCode[] = [
-  "empty_input",
-  "no_rows_detected",
-  "header_not_recognized",
-  "columns_guessed",
-  "unknown_champion",
-  "missing_games",
-  "missing_winrate",
-  "value_out_of_range",
-  "duplicate_champion",
-  "role_mismatch",
-  "row_not_parsed",
-  "source_mismatch",
-  // Arrived with the raw OP.GG champions-page copy: the page prints wins and
-  // losses next to a winrate, so the two can disagree — and the parser reports
-  // that rather than recomputing it away.
-  "winrate_mismatch",
-]
-
-/**
- * Every `ScoutImportUnparsedReason`, hand-written for the same reason as
- * ALL_LAYOUTS below: src/scout/types.ts exports no runtime tuple for this union
- * (only `SCOUT_IMPORT_COLUMNS` and `SCOUT_IMPORT_MODES` have one, and those two
- * are imported instead of retyped). It has to be pulled along by hand whenever
- * the union grows — the length assertion in "covers the complete unions" is the
- * tripwire, and EVERY_UNPARSED_REASON further down turns a forgotten member
- * into a compile error instead of a silently unchecked i18n key.
+/* --------------------------------------------------------------------------
+ * NO HAND-WRITTEN UNION MIRRORS IN THIS FILE — AND DO NOT BRING THEM BACK.
  *
- * The last four arrived with the raw OP.GG champions-page copy: they are the
- * categories that page contributes and that must never become rows.
- * `page_noise` is the youngest — the structural "-" / dash / marker lines that
- * a raw copy produces by the dozen and that the skip summary counts instead of
- * listing, which is why its i18n key has to be covered here like every other.
- */
-const ALL_UNPARSED_REASONS: readonly ScoutImportUnparsedReason[] = [
-  "header",
-  "no_champion",
-  "no_numbers",
-  "noise",
-  "matchup_row",
-  "recommended_champion",
-  "aggregate_row",
-  "page_noise",
-]
-
-/**
- * The same union again — but as a `Record` keyed ON it, so TypeScript itself
- * demands completeness: a new member that nobody adds here is a compile error
- * in this file, which is a stronger guarantee than any length assertion can
- * give (a list can be short and still typecheck).
+ * Four copies of import unions used to live right here: `ALL_WARNING_CODES`
+ * (13 strings), `ALL_UNPARSED_REASONS` (8) with its `EVERY_UNPARSED_REASON`
+ * record, `ALL_LAYOUTS` (5), and the inline `["append", "replace"] as const` of
+ * the apply tests. Each was a second truth
+ * that could go stale without a sound — and one of them did exactly that: the
+ * (since removed) `"riot_api"` member shipped while its
+ * `scout_import_layout_riot_api` key stayed unchecked in de AND en, because a
+ * list that is missing a member still typechecks and the suite still passes.
  *
- * Derived from the union, never from a literal list of strings: the test below
- * walks `Object.keys()` of this record, so the set it checks cannot drift away
- * from `ScoutImportUnparsedReason` without the compiler saying so first.
- */
-const EVERY_UNPARSED_REASON: Readonly<Record<ScoutImportUnparsedReason, true>> = {
-  header: true,
-  no_champion: true,
-  no_numbers: true,
-  noise: true,
-  matchup_row: true,
-  recommended_champion: true,
-  aggregate_row: true,
-  page_noise: true,
-}
-
-const UNPARSED_REASONS_FROM_UNION = Object.keys(
-  EVERY_UNPARSED_REASON,
-) as ScoutImportUnparsedReason[]
-
-/**
- * Every `ScoutImportLayout`, hand-written because src/scout/types.ts exports no
- * `SCOUT_IMPORT_LAYOUTS` tuple to derive it from (unlike `SCOUT_IMPORT_COLUMNS`
- * / `SCOUT_IMPORT_MODES`, which are derived above and below).
+ * Everything below now iterates the runtime tuples that sit NEXT TO the unions
+ * themselves in src/scout/types.ts — `SCOUT_IMPORT_WARNING_CODES`,
+ * `SCOUT_IMPORT_UNPARSED_REASONS`, `SCOUT_IMPORT_LAYOUTS`,
+ * `SCOUT_IMPORT_APPLY_MODES`, plus the older `SCOUT_IMPORT_COLUMNS` /
+ * `SCOUT_IMPORT_MODES`. The tests walk the truth, not a copy of it.
  *
- * MUST BE KEPT IN STEP WITH THE UNION IN BOTH DIRECTIONS: a new member missing
- * from this list would still typecheck and the suite would still pass, while
- * its `scout_import_layout_<member>` key went unchecked in de *and* en — which
- * is exactly what happened when the (since removed) `"riot_api"` was added. The
- * length assertion in "covers the complete unions" is the tripwire; keep the
- * two in sync.
- */
-const ALL_LAYOUTS: readonly ScoutImportLayout[] = [
-  "tabular_with_header",
-  "tabular_no_header",
-  "loose_lines",
-  "unrecognized",
-  // The raw browser copy of the OP.GG champions page — the one layout that is
-  // not made of columns; its values arrive one per line.
-  "opgg_raw_champion_page",
-]
+ * WHY DROPPING `EVERY_UNPARSED_REASON` IS NOT A WEAKER GUARANTEE — READ THIS
+ * BEFORE RE-ADDING IT "FOR SAFETY". That record
+ * (`Readonly<Record<ScoutImportUnparsedReason, true>>`) existed for one good
+ * reason: a record keyed ON the union makes the COMPILER demand completeness,
+ * which no length assertion can (a short list typechecks fine). That guarantee
+ * did not disappear — it moved to the source and got stronger there. Every
+ * tuple in src/scout/types.ts is declared `as const satisfies readonly T[]` and
+ * paired with an `Assert<…AreComplete>` guard: `satisfies` rejects a value that
+ * is not a union member, the guard rejects a union member that is missing from
+ * the tuple. Same both-way binding as the record, but it now fails in the very
+ * file where the union is edited, instead of in a test file someone might not
+ * run. A record here would restore nothing but the duplication it was invented
+ * to catch.
+ * -------------------------------------------------------------------------- */
 
 function makeRow(overrides: Partial<ScoutImportRow> & { id: string }): ScoutImportRow {
   return {
@@ -204,10 +145,10 @@ function lineupWith(slot: "top" | "jungle" | "mid" | "bot" | "support", playerId
 describe("scout import i18n key builders", () => {
   it("resolves every union value to an existing key in both languages", () => {
     const keys: TranslationKey[] = [
-      ...ALL_WARNING_CODES.map(scoutImportWarningKey),
-      ...ALL_UNPARSED_REASONS.map(scoutImportUnparsedKey),
+      ...SCOUT_IMPORT_WARNING_CODES.map(scoutImportWarningKey),
+      ...SCOUT_IMPORT_UNPARSED_REASONS.map(scoutImportUnparsedKey),
       ...SCOUT_IMPORT_COLUMNS.map(scoutImportColumnKey),
-      ...ALL_LAYOUTS.map(scoutImportLayoutKey),
+      ...SCOUT_IMPORT_LAYOUTS.map(scoutImportLayoutKey),
       ...SCOUT_IMPORT_MODES.map(scoutImportModeKey),
       ...SCOUT_IMPORT_SOURCE_VALUES.map(scoutImportSourceKey),
     ]
@@ -221,31 +162,52 @@ describe("scout import i18n key builders", () => {
   })
 
   it("covers the complete unions, not a hand-picked subset", () => {
-    // 13 since `winrate_mismatch` joined with the raw OP.GG copy.
-    expect(ALL_WARNING_CODES).toHaveLength(13)
-    // 7 since `matchup_row`, `recommended_champion` and `aggregate_row` joined
-    // with the raw OP.GG copy; 8 since `page_noise` joined with the compact
-    // skip summary. Bumping this number without adding the member to
-    // ALL_UNPARSED_REASONS *and* EVERY_UNPARSED_REASON is what the assertion is
-    // here to prevent.
-    expect(ALL_UNPARSED_REASONS).toHaveLength(8)
+    // WHAT THIS TEST DOES AND DOES NOT PROVE. Since the tuples come from
+    // src/scout/types.ts, the union is walked here, not a copy of it — so every
+    // member reaching this loop gets its key checked in de AND en. What the
+    // lengths below add is a TRIPWIRE, not a completeness proof: completeness is
+    // enforced at the source by the `Assert<…AreComplete>` guards. A member
+    // added to union and tuple lands here automatically and simply fails the
+    // count, which forces whoever added it to look at this file — that is all a
+    // number can honestly do.
+    for (const [label, keys] of [
+      // 13 since `winrate_mismatch` joined with the raw OP.GG copy.
+      ["warning", SCOUT_IMPORT_WARNING_CODES.map(scoutImportWarningKey)],
+      // 7 since `matchup_row`, `recommended_champion` and `aggregate_row`
+      // joined with the raw OP.GG copy; 8 since `page_noise` joined with the
+      // compact skip summary.
+      ["unparsed", SCOUT_IMPORT_UNPARSED_REASONS.map(scoutImportUnparsedKey)],
+      ["column", SCOUT_IMPORT_COLUMNS.map(scoutImportColumnKey)],
+      // Was 4 after the Riot auto-import — and with it `"riot_api"` — was
+      // removed; 5 since `opgg_raw_champion_page`.
+      ["layout", SCOUT_IMPORT_LAYOUTS.map(scoutImportLayoutKey)],
+      // `manual_paste` and `source_links`; `riot_api` went with the auto-import.
+      ["mode", SCOUT_IMPORT_MODES.map(scoutImportModeKey)],
+    ] as const) {
+      for (const key of keys) {
+        expect(typeof de[key], `de/${label}/${key}`).toBe("string")
+        expect(de[key].length, `de/${label}/${key}`).toBeGreaterThan(0)
+        expect(typeof en[key], `en/${label}/${key}`).toBe("string")
+        expect(en[key].length, `en/${label}/${key}`).toBeGreaterThan(0)
+      }
+    }
+
+    expect(SCOUT_IMPORT_WARNING_CODES).toHaveLength(13)
+    expect(SCOUT_IMPORT_UNPARSED_REASONS).toHaveLength(8)
     expect(SCOUT_IMPORT_COLUMNS).toHaveLength(9)
-    // Was 4 after the Riot auto-import — and with it `"riot_api"` — was
-    // removed; 5 since `opgg_raw_champion_page`. See ALL_LAYOUTS.
-    expect(ALL_LAYOUTS).toHaveLength(5)
-    // `manual_paste` and `source_links`; `riot_api` went with the auto-import.
+    expect(SCOUT_IMPORT_LAYOUTS).toHaveLength(5)
     expect(SCOUT_IMPORT_MODES).toHaveLength(2)
   })
 
   it("has a key in de and en for EVERY unparsed reason of the union", () => {
-    // Derived from `ScoutImportUnparsedReason` itself (see
-    // EVERY_UNPARSED_REASON) rather than from a literal list, so the three
-    // reasons the raw OP.GG copy added — and any future one — are covered
-    // whether or not somebody remembers to extend ALL_UNPARSED_REASONS.
-    expect(UNPARSED_REASONS_FROM_UNION).toHaveLength(8)
-    expect([...UNPARSED_REASONS_FROM_UNION].sort()).toEqual([...ALL_UNPARSED_REASONS].sort())
+    // Walks `SCOUT_IMPORT_UNPARSED_REASONS`, the runtime projection declared
+    // next to `ScoutImportUnparsedReason` itself, so the three reasons the raw
+    // OP.GG copy added — and any future one — are covered without anybody
+    // remembering to extend a list in this file. On top of the key EXISTING,
+    // this one pins its SHAPE: `scout_import_unparsed_<reason>`.
+    expect(SCOUT_IMPORT_UNPARSED_REASONS).toHaveLength(8)
 
-    for (const reason of UNPARSED_REASONS_FROM_UNION) {
+    for (const reason of SCOUT_IMPORT_UNPARSED_REASONS) {
       const key = scoutImportUnparsedKey(reason)
       expect(key).toBe(`scout_import_unparsed_${reason}`)
       expect(typeof de[key], key).toBe("string")
@@ -261,7 +223,7 @@ describe("scout import i18n key builders", () => {
     // total. Each says WHAT was skipped instead of a flat "noise".
     for (const reason of ["matchup_row", "recommended_champion", "aggregate_row"] as const) {
       const key = scoutImportUnparsedKey(reason)
-      expect(UNPARSED_REASONS_FROM_UNION).toContain(reason)
+      expect(SCOUT_IMPORT_UNPARSED_REASONS).toContain(reason)
       expect(de[key].length, key).toBeGreaterThan(0)
       expect(en[key].length, key).toBeGreaterThan(0)
     }
@@ -283,6 +245,132 @@ describe("scout import i18n key builders", () => {
     expect(scoutImportSourceKey("leagueofgraphs")).toBe("scout_source_leagueofgraphs")
     expect(scoutImportSourceKey("deeplol")).toBe("scout_source_deeplol")
     expect(scoutImportSourceKey("dpm")).toBe("scout_source_dpm")
+  })
+})
+
+/* ==========================================================================
+ * 1b. The runtime tuples the tests above iterate
+ *
+ * These tuples ARE the list this file used to keep by hand. What a runtime test
+ * can add to them is deliberately limited, and stated per test:
+ *
+ *  - COMPLETENESS is NOT proven here. `[Union] extends [(typeof TUPLE)[number]]`
+ *    in src/scout/types.ts proves it, at compile time, in the file where the
+ *    union is edited. A length assertion cannot: it only fails after somebody
+ *    has already changed the count.
+ *  - DUPLICATE FREEDOM is proven here, and only here — `satisfies readonly T[]`
+ *    happily accepts `["append", "append"]`, which would make every loop below
+ *    run twice and quietly double any count derived from one.
+ *  - i18n COVERAGE is proven here, and only here — a type says nothing about
+ *    whether de.ts and en.ts carry the key the member's label is built from.
+ *    That is the exact hole the (since removed) `"riot_api"` layout fell into.
+ * ========================================================================== */
+
+describe("the runtime tuples behind the import unions", () => {
+  /** Every member appears exactly once — see the note above on `satisfies`. */
+  function expectNoDuplicates(values: readonly string[], label: string): void {
+    expect(new Set(values).size, `${label}: ${values.join(", ")}`).toBe(values.length)
+  }
+
+  it("SCOUT_IMPORT_LAYOUTS: 5 distinct layouts, each with a label in de and en", () => {
+    expect(SCOUT_IMPORT_LAYOUTS).toHaveLength(5)
+    expectNoDuplicates(SCOUT_IMPORT_LAYOUTS, "layouts")
+
+    for (const layout of SCOUT_IMPORT_LAYOUTS) {
+      const key = scoutImportLayoutKey(layout)
+      expect(key).toBe(`scout_import_layout_${layout}`)
+      expect(typeof de[key], `de/${key}`).toBe("string")
+      expect(de[key].length, `de/${key}`).toBeGreaterThan(0)
+      expect(typeof en[key], `en/${key}`).toBe("string")
+      expect(en[key].length, `en/${key}`).toBeGreaterThan(0)
+    }
+
+    // The members the rest of this file names explicitly really are in there —
+    // a tuple of five unrelated strings would satisfy the count alone.
+    expect(SCOUT_IMPORT_LAYOUTS).toContain("opgg_raw_champion_page")
+    expect(SCOUT_IMPORT_LAYOUTS).toContain("unrecognized")
+    // And the auto-import layout stayed gone.
+    expect(SCOUT_IMPORT_LAYOUTS).not.toContain("riot_api")
+  })
+
+  it("SCOUT_IMPORT_UNPARSED_REASONS: 8 distinct reasons, each with a label in de and en", () => {
+    expect(SCOUT_IMPORT_UNPARSED_REASONS).toHaveLength(8)
+    expectNoDuplicates(SCOUT_IMPORT_UNPARSED_REASONS, "unparsed reasons")
+
+    for (const reason of SCOUT_IMPORT_UNPARSED_REASONS) {
+      const key = scoutImportUnparsedKey(reason)
+      expect(key).toBe(`scout_import_unparsed_${reason}`)
+      expect(typeof de[key], `de/${key}`).toBe("string")
+      expect(de[key].length, `de/${key}`).toBeGreaterThan(0)
+      expect(typeof en[key], `en/${key}`).toBe("string")
+      expect(en[key].length, `en/${key}`).toBeGreaterThan(0)
+    }
+
+    // The four reasons `summarizeSkippedLines()` counts instead of listing, and
+    // the four it lists verbatim — all eight, from the one list.
+    for (const counted of ["aggregate_row", "matchup_row", "recommended_champion", "page_noise"]) {
+      expect(SCOUT_IMPORT_UNPARSED_REASONS, counted).toContain(counted)
+    }
+    for (const listed of ["header", "no_champion", "no_numbers", "noise"]) {
+      expect(SCOUT_IMPORT_UNPARSED_REASONS, listed).toContain(listed)
+    }
+  })
+
+  it("SCOUT_IMPORT_WARNING_CODES: 13 distinct codes, each with a sentence in de and en", () => {
+    expect(SCOUT_IMPORT_WARNING_CODES).toHaveLength(13)
+    expectNoDuplicates(SCOUT_IMPORT_WARNING_CODES, "warning codes")
+
+    for (const code of SCOUT_IMPORT_WARNING_CODES) {
+      const key = scoutImportWarningKey(code)
+      expect(key).toBe(`scout_import_warning_${code}`)
+      expect(typeof de[key], `de/${key}`).toBe("string")
+      expect(de[key].length, `de/${key}`).toBeGreaterThan(0)
+      expect(typeof en[key], `en/${key}`).toBe("string")
+      expect(en[key].length, `en/${key}`).toBeGreaterThan(0)
+    }
+
+    expect(SCOUT_IMPORT_WARNING_CODES).toContain("winrate_mismatch")
+    expect(SCOUT_IMPORT_WARNING_CODES).toContain("role_mismatch")
+  })
+
+  it("SCOUT_IMPORT_APPLY_MODES is exactly append and replace, without duplicates", () => {
+    expect(SCOUT_IMPORT_APPLY_MODES).toEqual(["append", "replace"])
+    expectNoDuplicates(SCOUT_IMPORT_APPLY_MODES, "apply modes")
+    // Two modes, so every per-mode loop in this file really covers both — and a
+    // third mode would have to be given a case rather than slipping through.
+    expect(SCOUT_IMPORT_APPLY_MODES).toHaveLength(2)
+  })
+
+  it("keeps a stable, append-only order — the panel and the docs read it positionally", () => {
+    // Order is not decoration: the panel offers the apply modes in tuple order
+    // (`append` first, the mode that cannot lose a row the user typed) and the
+    // preview prints its columns in tuple order. For the other tuples the order
+    // is documentation order, and new members are APPENDED, never inserted —
+    // which is what the anchors pin. Deliberately not a full literal
+    // restatement of all 13 warning codes: that would re-create the very mirror
+    // this file just removed. First and newest member is enough to catch a
+    // reshuffle.
+    expect(SCOUT_IMPORT_APPLY_MODES).toEqual(["append", "replace"])
+    expect(SCOUT_IMPORT_MODES).toEqual(["manual_paste", "source_links"])
+
+    expect(SCOUT_IMPORT_COLUMNS[0]).toBe("champion")
+    expect(SCOUT_IMPORT_COLUMNS[SCOUT_IMPORT_COLUMNS.length - 1]).toBe("role")
+
+    expect(SCOUT_IMPORT_LAYOUTS[0]).toBe("tabular_with_header")
+    // The raw OP.GG champions-page copy is the youngest layout; it sits last.
+    expect(SCOUT_IMPORT_LAYOUTS[SCOUT_IMPORT_LAYOUTS.length - 1]).toBe("opgg_raw_champion_page")
+
+    expect(SCOUT_IMPORT_UNPARSED_REASONS[0]).toBe("header")
+    // `page_noise` arrived with the compact skip summary; it sits last.
+    expect(SCOUT_IMPORT_UNPARSED_REASONS[SCOUT_IMPORT_UNPARSED_REASONS.length - 1]).toBe(
+      "page_noise",
+    )
+
+    expect(SCOUT_IMPORT_WARNING_CODES[0]).toBe("empty_input")
+    // `winrate_mismatch` arrived with the raw OP.GG copy; it sits last.
+    expect(SCOUT_IMPORT_WARNING_CODES[SCOUT_IMPORT_WARNING_CODES.length - 1]).toBe(
+      "winrate_mismatch",
+    )
   })
 })
 
@@ -359,7 +447,7 @@ describe("translateScoutImportWarning", () => {
   })
 
   it("renders a warning without params without leaving a placeholder", () => {
-    for (const code of ALL_WARNING_CODES) {
+    for (const code of SCOUT_IMPORT_WARNING_CODES) {
       const text = translateScoutImportWarning(t, { code, severity: "info" })
       expect(text.length, code).toBeGreaterThan(0)
       expect(text, code).not.toMatch(/\{[a-zA-Z]+\}/)
@@ -625,7 +713,7 @@ describe("manualSourceForImport", () => {
     // nobody stated. Walked over the FULL product of the signature — every
     // layout against every selectable source — so no layout can quietly bring
     // it back.
-    for (const layout of ALL_LAYOUTS) {
+    for (const layout of SCOUT_IMPORT_LAYOUTS) {
       for (const source of SCOUT_IMPORT_SOURCE_VALUES) {
         expect(manualSourceForImport(layout, source), `${layout}/${source}`).not.toBe("riot")
       }
@@ -635,7 +723,7 @@ describe("manualSourceForImport", () => {
   it("answers the same for every layout — the dropdown is the only statement", () => {
     // No pasted layout knows better than the user where the text came from, so
     // none of them may override the dropdown behind their back.
-    for (const layout of ALL_LAYOUTS) {
+    for (const layout of SCOUT_IMPORT_LAYOUTS) {
       expect(manualSourceForImport(layout, "opgg"), layout).toBe("opgg")
       expect(manualSourceForImport(layout, "unknown"), layout).toBe("other")
     }
@@ -689,7 +777,7 @@ describe("countUnparsedByReason", () => {
   })
 
   it("returns 0 for an empty list", () => {
-    for (const reason of UNPARSED_REASONS_FROM_UNION) {
+    for (const reason of SCOUT_IMPORT_UNPARSED_REASONS) {
       expect(countUnparsedByReason([], reason), reason).toBe(0)
     }
   })
@@ -697,7 +785,7 @@ describe("countUnparsedByReason", () => {
   it("accounts for every line when summed over the whole union", () => {
     // The counters may summarise the skipped lines, but they must never lose
     // one: the per-reason counts add up to the full list.
-    const total = UNPARSED_REASONS_FROM_UNION.reduce(
+    const total = SCOUT_IMPORT_UNPARSED_REASONS.reduce(
       (sum, reason) => sum + countUnparsedByReason(lines, reason),
       0,
     )
@@ -719,11 +807,13 @@ describe("isOpggRawResult", () => {
   it("is false for every other layout", () => {
     // Walked over the full union minus the one true member, so a renamed or
     // added layout cannot quietly start claiming the OP.GG block.
-    for (const layout of ALL_LAYOUTS) {
+    for (const layout of SCOUT_IMPORT_LAYOUTS) {
       if (layout === "opgg_raw_champion_page") continue
       expect(isOpggRawResult(makeResult({ layout })), layout).toBe(false)
     }
-    expect(ALL_LAYOUTS.filter((layout) => layout !== "opgg_raw_champion_page")).toHaveLength(4)
+    expect(
+      SCOUT_IMPORT_LAYOUTS.filter((layout) => layout !== "opgg_raw_champion_page"),
+    ).toHaveLength(4)
   })
 
   it("looks at the layout only — not at the source the user picked", () => {
@@ -844,6 +934,21 @@ describe("resolveApplyStatus", () => {
  * The success message says "n champion rows applied", so `n` has to be the
  * rows from the PASTE — not a games total, not the preview's row count, and
  * not the number of entries the merge touched.
+ *
+ * That number is `ScoutImportApplyResult.importedRows`, computed by
+ * `applyImportRows()` itself. It replaced the helper `appliedRowCount(selected,
+ * result)`, which rebuilt it at the call site as `selected.length -
+ * result.skipped` and was therefore only correct while the caller passed the
+ * EXACT SAME array it had handed to `applyImportRows()` — nothing enforced
+ * that. The counters were renamed with it, because the old `replaced` MEANT
+ * SOMETHING DIFFERENT PER MODE and that is what produced the "72":
+ *
+ *   append   `replaced` → `overwrittenRows`     (an entry was replaced IN PLACE)
+ *   replace  `replaced` → `removedExistingRows` (a stored entry was DELETED)
+ *   both     `added` → `addedRows`, `skipped` → `skippedRows`
+ *
+ * Which is why every test below has to check the field its OWN mode can
+ * produce, and assert the other one is structurally zero.
  * ========================================================================== */
 
 function importEntry(championName: string, games: number): ManualChampionEntry {
@@ -871,7 +976,7 @@ function applyRows(
   })
 }
 
-describe("appliedRowCount", () => {
+describe("ScoutImportApplyResult.importedRows", () => {
   /** `n` rows the catalog resolves, ready to be ticked. */
   function parsedRows(count: number): ScoutImportRow[] {
     const names = [
@@ -908,40 +1013,52 @@ describe("appliedRowCount", () => {
     expect(ticked).toHaveLength(3)
 
     const result = applyRows([], ticked, "append")
-    expect(appliedRowCount(ticked, result)).toBe(3)
-    expect(appliedRowCount(ticked, result)).not.toBe(parsed.length)
+    expect(result.importedRows).toBe(3)
+    expect(result.importedRows).not.toBe(parsed.length)
+    // `append` deletes nothing, so the deletion counter is structurally 0 and
+    // there is no second number anybody could add on top.
+    expect(result.removedExistingRows).toBe(0)
   })
 
   it("counts three overwrites of existing entries as 3, not 6", () => {
     // `append` where all three ticked rows overwrite a stored entry of the same
-    // champion and role: `added` 0, `replaced` 3 — three rows from the paste.
+    // champion and role: `addedRows` 0, `overwrittenRows` 3 — and still exactly
+    // the three rows that came out of the paste.
     const parsed = parsedRows(10)
     const ticked = selectedImportRows(parsed, new Set(["r0", "r1", "r2"]))
     const existing = ticked.map((row) => importEntry(row.championName, 5))
 
     const result = applyRows(existing, ticked, "append")
-    expect(result.added).toBe(0)
-    expect(result.replaced).toBe(3)
-    expect(appliedRowCount(ticked, result)).toBe(3)
+    expect(result.addedRows).toBe(0)
+    expect(result.overwrittenRows).toBe(3)
+    expect(result.importedRows).toBe(3)
+    // Nothing was deleted — an overwrite in place is not a deletion.
+    expect(result.removedExistingRows).toBe(0)
   })
 
   it("REGRESSION: replace, 36 stored / 36 selected → 36, not 72", () => {
-    // THE 72 FROM THE BUG REPORT. In `replace` mode applyImportRows() drops the
-    // whole role first and reports the count of the DELETED entries as
-    // `replaced` (see the contract on ScoutImportApplyResult). `added +
-    // replaced` therefore announced a deletion as an import.
+    // THE 72 FROM THE BUG REPORT, kept as a tripwire. In `replace` mode
+    // applyImportRows() drops the whole role first, so the 36 deleted entries
+    // land in `removedExistingRows` — under the old contract they shared the
+    // name `replaced` with an in-place overwrite, and the panel summed
+    // `added + replaced`. That announced 36 deletions as 36 imports: 72 rows
+    // "applied" while 36 were stored. 72 is the historic WRONG value; it is
+    // asserted here so the sum is recognisable if it ever comes back.
     const ticked = parsedRows(36)
     const existing = Array.from({ length: 36 }, (_unused, index) =>
       importEntry(`Stored${index}`, 5),
     )
 
     const result = applyRows(existing, ticked, "replace")
-    expect(result.added).toBe(36)
-    expect(result.replaced).toBe(36)
-    // What the panel used to print:
-    expect(result.added + result.replaced).toBe(72)
+    expect(result.addedRows).toBe(36)
+    expect(result.removedExistingRows).toBe(36)
+    // `replace` clears the role first, so nothing is left to overwrite in
+    // place: this counter is structurally 0 in this mode.
+    expect(result.overwrittenRows).toBe(0)
+    // What the panel used to print — the historic error value:
+    expect(result.addedRows + result.removedExistingRows).toBe(72)
     // What it prints now — and what actually got stored:
-    expect(appliedRowCount(ticked, result)).toBe(36)
+    expect(result.importedRows).toBe(36)
     expect(result.entries).toHaveLength(36)
   })
 
@@ -952,65 +1069,99 @@ describe("appliedRowCount", () => {
     )
 
     const result = applyRows(existing, ticked, "replace")
-    expect(result.added + result.replaced).toBe(46)
-    expect(appliedRowCount(ticked, result)).toBe(10)
+    // The second historic wrong value: 10 imported + 36 deleted.
+    expect(result.addedRows + result.removedExistingRows).toBe(46)
+    expect(result.overwrittenRows).toBe(0)
+    expect(result.importedRows).toBe(10)
     expect(result.entries).toHaveLength(10)
   })
 
   it("never lets a GAMES figure through — one row with 50 games counts as 1", () => {
     // The user's first suspicion was that the number was a games total. It
-    // structurally cannot be: both operands are row counts.
+    // structurally cannot be: `importedRows` counts outcomes per row.
     const ticked = [makeRow({ id: "a", championName: "Ahri", games: 50, winrate: 50 })]
-    for (const mode of ["append", "replace"] as const) {
+    for (const mode of SCOUT_IMPORT_APPLY_MODES) {
       const result = applyRows([], ticked, mode)
-      expect(appliedRowCount(ticked, result), mode).toBe(1)
-      expect(appliedRowCount(ticked, result), mode).not.toBe(50)
+      expect(result.importedRows, mode).toBe(1)
+      expect(result.importedRows, mode).not.toBe(50)
+      // Per mode, exactly one counter is structurally zero.
+      if (mode === "append") {
+        expect(result.removedExistingRows, mode).toBe(0)
+      } else {
+        expect(result.overwrittenRows, mode).toBe(0)
+      }
     }
   })
 
   it("does not count rows that could never become entries", () => {
-    // A row without games and without winrate is reported as `skipped` and must
-    // not be announced as applied.
+    // A row without games and without winrate is reported as `skippedRows` and
+    // must not be announced as applied.
     const ticked = [
       makeRow({ id: "a", championName: "Ahri", games: 72, winrate: 50 }),
       makeRow({ id: "b", championName: "Lux", games: null, winrate: null }),
       makeRow({ id: "c", championName: "Milio", games: 32, winrate: 63 }),
     ]
-    for (const mode of ["append", "replace"] as const) {
+    for (const mode of SCOUT_IMPORT_APPLY_MODES) {
       const result = applyRows([], ticked, mode)
-      expect(result.skipped, mode).toBe(1)
-      expect(appliedRowCount(ticked, result), mode).toBe(2)
+      expect(result.skippedRows, mode).toBe(1)
+      expect(result.importedRows, mode).toBe(2)
+      // The documented invariant, in both modes: every offered row is
+      // accounted for exactly once.
+      expect(result.importedRows + result.skippedRows, mode).toBe(ticked.length)
+      if (mode === "append") {
+        expect(result.removedExistingRows, mode).toBe(0)
+      } else {
+        expect(result.overwrittenRows, mode).toBe(0)
+      }
     }
   })
 
   it("reports 0 when nothing was applicable — never a comforting number", () => {
     const ticked = [makeRow({ id: "a", championName: "Ahri", games: null, winrate: null })]
-    for (const mode of ["append", "replace"] as const) {
+    for (const mode of SCOUT_IMPORT_APPLY_MODES) {
       const result = applyRows([], ticked, mode)
-      expect(appliedRowCount(ticked, result), mode).toBe(0)
+      expect(result.importedRows, mode).toBe(0)
+      expect(result.skippedRows, mode).toBe(1)
     }
   })
 
   it("reports 0 for an empty selection", () => {
     const result = applyRows([importEntry("Ahri", 10)], [], "append")
-    expect(appliedRowCount([], result)).toBe(0)
+    expect(result.importedRows).toBe(0)
+    expect(result.skippedRows).toBe(0)
+    // `append` with nothing selected leaves the stored entry exactly where it
+    // was — no deletion to miscount.
+    expect(result.removedExistingRows).toBe(0)
+    expect(result.entries).toHaveLength(1)
   })
 
   it("equals the number of entries the apply actually produced, in both modes", () => {
-    // The invariant behind the formula: every non-skipped row becomes an entry,
+    // The invariant behind the number: every non-skipped row becomes an entry,
     // because importRowToManualEntry() returns null for exactly the rows
     // isImportRowApplicable() rejects. Asserted against the stored result rather
     // than restated, so a change in that relationship fails here.
     const ticked = parsedRows(5)
 
     const appended = applyRows([], ticked, "append")
-    expect(appliedRowCount(ticked, appended)).toBe(appended.entries.length)
+    expect(appended.importedRows).toBe(appended.entries.length)
+    expect(appended.removedExistingRows).toBe(0)
+    // The second documented invariant: an imported row either created an entry
+    // or replaced one in place — there is no third outcome.
+    expect(appended.addedRows + appended.overwrittenRows).toBe(appended.importedRows)
 
     const existing = Array.from({ length: 12 }, (_unused, index) =>
       importEntry(`Stored${index}`, 5),
     )
     const replacedResult = applyRows(existing, ticked, "replace")
-    expect(appliedRowCount(ticked, replacedResult)).toBe(replacedResult.entries.length)
+    // In `replace` the 12 stored rows are DELETED, so `entries` holds only the
+    // imported ones — and `removedExistingRows` carries the deletion, well
+    // clear of the number the message prints.
+    expect(replacedResult.importedRows).toBe(replacedResult.entries.length)
+    expect(replacedResult.removedExistingRows).toBe(12)
+    expect(replacedResult.overwrittenRows).toBe(0)
+    expect(replacedResult.addedRows + replacedResult.overwrittenRows).toBe(
+      replacedResult.importedRows,
+    )
   })
 })
 
@@ -1103,7 +1254,7 @@ describe("summarizeSkippedLines", () => {
     // The four counted reasons only ever arise where they make sense, so an
     // ordinary tabular paste simply reports zeroes and an unchanged list. No
     // per-layout branching, and no second definition of "skipped".
-    for (const layout of ALL_LAYOUTS) {
+    for (const layout of SCOUT_IMPORT_LAYOUTS) {
       const summary = summarizeSkippedLines(makeResult({ layout, unparsedLines: mixed }))
       expect(summary.pageNoise, layout).toBe(3)
       expect(summary.listed, layout).toHaveLength(4)

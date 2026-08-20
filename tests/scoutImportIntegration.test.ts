@@ -10,7 +10,6 @@ import {
   normalizeScoutState,
 } from "../src/scout/storage"
 import {
-  appliedRowCount,
   defaultSelectedRowIds,
   resolveApplyStatus,
   selectedImportRows,
@@ -222,9 +221,9 @@ describe("scout import integration — link, lineup, paste, analyse", () => {
 
     const applied = applyImportRows([], parsed.rows, applyOptions("jungle"))
 
-    expect(applied.added).toBe(3)
-    expect(applied.replaced).toBe(0)
-    expect(applied.skipped).toBe(0)
+    expect(applied.addedRows).toBe(3)
+    expect(applied.overwrittenRows).toBe(0)
+    expect(applied.skippedRows).toBe(0)
     expect(applied.entries).toEqual([
       {
         championName: "Lee Sin",
@@ -463,8 +462,8 @@ describe("scout import integration — the user's role beats the pasted one", ()
     const parsed = parseScoutStats(ROLE_COLUMN_TABLE, { role: "jungle" })
     const applied = applyImportRows([], parsed.rows, applyOptions("jungle"))
 
-    expect(applied.added).toBe(1)
-    expect(applied.skipped).toBe(0)
+    expect(applied.addedRows).toBe(1)
+    expect(applied.skippedRows).toBe(0)
     expect(applied.entries[0]).toMatchObject({
       championName: "Karma",
       games: 22,
@@ -627,9 +626,9 @@ describe("scout import integration — incomplete rows are skipped, never faked"
     const parsed = parseScoutStats(PARTIAL_TABLE, { role: "jungle" })
     const applied = applyImportRows([], parsed.rows, applyOptions("jungle"))
 
-    expect(applied.added).toBe(1)
-    expect(applied.replaced).toBe(0)
-    expect(applied.skipped).toBe(2)
+    expect(applied.addedRows).toBe(1)
+    expect(applied.overwrittenRows).toBe(0)
+    expect(applied.skippedRows).toBe(2)
     expect(championsOf(applied.entries)).toEqual(["Lee Sin"])
     // No `games: 0` was invented for the rows that had no games column.
     expect(applied.entries.every((entry) => entry.games > 0)).toBe(true)
@@ -791,9 +790,9 @@ describe("scout import integration — append and replace through to the analysi
     const parsedSecond = parseScoutStats(secondPaste, { role: "jungle" })
     const applied = applyImportRows(afterFirst, parsedSecond.rows, applyOptions("jungle"))
 
-    expect(applied.added).toBe(0)
-    expect(applied.replaced).toBe(1)
-    expect(applied.skipped).toBe(0)
+    expect(applied.addedRows).toBe(0)
+    expect(applied.overwrittenRows).toBe(1)
+    expect(applied.skippedRows).toBe(0)
     expect(applied.entries).toHaveLength(1)
 
     const analysis = analyzeScout(players, dataOf([JUNGLE_ID, applied.entries]), { lineup })
@@ -821,9 +820,9 @@ describe("scout import integration — append and replace through to the analysi
     })
     const applied = applyImportRows(withSupport, parsed.rows, applyOptions("jungle", "replace"))
 
-    expect(applied.replaced).toBe(1)
-    expect(applied.added).toBe(1)
-    expect(applied.skipped).toBe(0)
+    expect(applied.removedExistingRows).toBe(1)
+    expect(applied.addedRows).toBe(1)
+    expect(applied.skippedRows).toBe(0)
     expect(applied.entries.map((entry) => [entry.championName, entry.role])).toEqual([
       ["Karma", "support"],
       ["Elise", "jungle"],
@@ -1108,9 +1107,9 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
       const parsed = parseScoutStats(OPGG_RAW_COPY, { role: "mid" })
       const applied = applyImportRows([], parsed.rows, applyOptions("mid"))
 
-      expect(applied.added).toBe(3)
-      expect(applied.replaced).toBe(0)
-      expect(applied.skipped).toBe(0)
+      expect(applied.addedRows).toBe(3)
+      expect(applied.overwrittenRows).toBe(0)
+      expect(applied.skippedRows).toBe(0)
       expect(applied.entries).toEqual(EXPECTED_MID_ENTRIES)
     })
 
@@ -1441,9 +1440,9 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
       // Ahri is in both pastes at the same role, so it is updated in place.
       // Appending it a second time would make every consumer that sums `games`
       // — the ban priority above all — count that champion twice.
-      expect(applied.replaced).toBe(1)
-      expect(applied.added).toBe(2)
-      expect(applied.skipped).toBe(0)
+      expect(applied.overwrittenRows).toBe(1)
+      expect(applied.addedRows).toBe(2)
+      expect(applied.skippedRows).toBe(0)
       expect(championsOf(applied.entries)).toEqual(["Ahri", "Orianna", "Lux", "Milio"])
 
       // The overlapping champion carries the raw copy's numbers — not the sum,
@@ -1568,17 +1567,43 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
  *
  *     "Übernommen: 72 Zeilen."
  *
- * while 36 rows had been stored. It printed `added + replaced`, and in
- * `replace` mode `applyImportRows()` defines
- * `replaced = existing.length - kept.length` — the count of the user's OWN OLD
- * ENTRIES that were THROWN AWAY, not the count of rows that came in. 36 stored
- * rows replaced by 36 pasted ones therefore summed to exactly the 72 of the
- * report, and no amount of staring at the preview could reconcile it.
+ * while 36 rows had been stored. It printed the sum of the two counters that
+ * were then called `added` and `replaced` — and `replaced` MEANT TWO DIFFERENT
+ * THINGS depending on the apply mode: in `append` "an existing entry was
+ * overwritten in place", in `replace` "an existing entry was DELETED"
+ * (`replaced = existing.length - kept.length`, the user's OWN OLD ENTRIES
+ * thrown away, not rows that came in). 36 stored rows replaced by 36 pasted
+ * ones therefore summed to exactly the 72 of the report, and no amount of
+ * staring at the preview could reconcile it.
  *
- * `appliedRowCount(selected, result)` — `selected.length - result.skipped` —
- * replaced that sum, and tests/scoutImportHelpers.test.ts pins the helper down
- * on its own arguments. What a unit test structurally cannot show is the thing
- * the user complained about: that the SENTENCE and the STORED DATA agree.
+ * THAT AMBIGUITY IS GONE — that is what this cleanup was for.
+ * {@link ScoutImportApplyResult} now answers exactly one question per counter
+ * (its JSDoc in src/scout/types.ts is the contract):
+ *
+ *   importedRows         rows that actually became entries. Mode-independent,
+ *                        and THE number the success message prints.
+ *   addedRows            imported rows that became NEW entries.
+ *   overwrittenRows      imported rows that overwrote a same-champion,
+ *                        same-role entry IN PLACE. `append` only — 0 in
+ *                        `replace` by construction.
+ *   removedExistingRows  the user's OWN stored rows that this apply DELETED.
+ *                        `replace` only — 0 in `append` by construction.
+ *   skippedRows          offered rows that were not applied.
+ *
+ * `importedRows` also REPLACES the helper `appliedRowCount(selected, result)`
+ * (`selected.length - result.skipped`, deleted from
+ * src/components/scout/scoutImportHelpers.ts): the number belongs on the result
+ * itself, not on two arguments a call site has to pair up correctly.
+ *
+ * SO WHY DOES THIS SECTION STILL FORM THE OLD SUM? Because a rename only fixes
+ * the bug for as long as nobody adds the two numbers up again. The tests below
+ * deliberately compute `addedRows + removedExistingRows`, pin it to the
+ * historical 72 (and 46, and 39), and assert that it is NEITHER the reported
+ * number NOR the stored row count. It is a tripwire, not a formula — and with
+ * the new name the mistake is legible in the source: `removedExistingRows` says
+ * "deletions" out loud, and deletions are never something to report as a
+ * success. A unit test structurally cannot show what the user complained about:
+ * that the SENTENCE and the STORED DATA agree.
  *
  * So every test below asserts an IDENTITY, never just a number: the reported
  * count against the rows that really came out of the apply, counted from
@@ -1587,7 +1612,7 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
  *
  * Fixtures go through the real chain
  *   parseScoutStats → defaultSelectedRowIds/selectedImportRows
- *                   → applyImportRows → appliedRowCount
+ *                   → applyImportRows → result.importedRows
  * and never through a hand-written `ScoutImportRow`: a literal could not have
  * produced this bug and therefore cannot prove it gone.
  *
@@ -1616,7 +1641,8 @@ function championTable(
  * 36 champions — the size of the pool behind the bug report.
  *
  * The number is not decoration: 36 stored rows replaced by 36 pasted ones is
- * the constellation whose `added + replaced` is exactly the 72 the user read on
+ * the constellation whose historical `added + replaced` — today
+ * `addedRows + removedExistingRows` — is exactly the 72 the user read on
  * screen. A shorter list would still catch the defect, but it would no longer
  * reproduce the reported number, and the next reader could not match this test
  * to the report.
@@ -1687,7 +1713,7 @@ const SUPPORT_TABLE_3 = championTable(["Thresh", "Leona", "Rakan"], (index) => 2
 /**
  * Four rows, one of which storage would refuse: `Zed` states a winrate and no
  * games at all. `isImportRowApplicable()` rejects it, `applyImportRows()` counts
- * it as `skipped`, and the reported number must not include it.
+ * it in `skippedRows`, and the reported number must not include it.
  */
 const TABLE_WITH_ONE_UNAPPLICABLE = paste(
   "Champion\tGames\tWin Rate",
@@ -1817,22 +1843,33 @@ describe("scout import integration — the reported count is the stored count", 
       expect(selected).toHaveLength(36)
 
       const result = applyImportRows(stored, selected, applyOptions("mid", "replace"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       // THE IDENTITY. Left: what the user is told. Right: what is in the data.
       expect(reported).toBe(36)
       expect(result.entries).toHaveLength(reported)
       expect(entriesOfRole(result.entries, "mid")).toHaveLength(36)
-      expect(result.skipped).toBe(0)
+      expect(result.skippedRows).toBe(0)
 
-      // THE OLD FORMULA, kept here on purpose: `added + replaced` is 36 + 36,
-      // and 72 is verbatim the "Übernommen: 72 Zeilen." of the bug report —
-      // twice what was stored. `replaced` counts DELETIONS in this mode.
-      expect(result.added).toBe(36)
-      expect(result.replaced).toBe(36)
-      expect(result.added + result.replaced).toBe(72)
-      expect(result.added + result.replaced).not.toBe(reported)
-      expect(result.added + result.replaced).not.toBe(result.entries.length)
+      // `replace` clears the role first, so nothing is left to overwrite in
+      // place. Asserting this mode's structurally-zero counter is what makes
+      // the two fields below unambiguous.
+      expect(result.overwrittenRows).toBe(0)
+
+      // THE HISTORICAL FAILURE, FROZEN ON PURPOSE. The panel used to print
+      // `added + replaced`, which in this mode is `addedRows +
+      // removedExistingRows` — 36 imported rows plus 36 DELETED stored ones —
+      // and 72 is verbatim the "Übernommen: 72 Zeilen." of the bug report, twice
+      // what was actually stored. THE SUM OF THESE TWO FIELDS MUST NEVER BE A
+      // SUCCESS MESSAGE: `removedExistingRows` counts the user's own stored rows
+      // that this apply THREW AWAY, and unlike the old `replaced` the name says
+      // so right at the call site. The lines below are a tripwire, not a
+      // formula — they exist so nobody re-derives 72 and calls it progress.
+      expect(result.addedRows).toBe(36)
+      expect(result.removedExistingRows).toBe(36)
+      expect(result.addedRows + result.removedExistingRows).toBe(72)
+      expect(result.addedRows + result.removedExistingRows).not.toBe(reported)
+      expect(result.addedRows + result.removedExistingRows).not.toBe(result.entries.length)
 
       // The sentence the panel actually renders carries the corrected number.
       expect(resolveApplyStatus({ canApply: false, appliedCount: reported })).toEqual({
@@ -1875,15 +1912,18 @@ describe("scout import integration — the reported count is the stored count", 
       expect(selected).toHaveLength(10)
 
       const result = applyImportRows(stored, selected, applyOptions("mid", "replace"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       expect(reported).toBe(10)
       expect(result.entries).toHaveLength(10)
       expect(entriesOfRole(result.entries, "mid")).toHaveLength(10)
-      // 10 + 36 = 46 — a number that is neither the paste, nor the pool, nor
-      // anything the user could point at in the preview.
-      expect(result.added + result.replaced).toBe(46)
-      expect(result.added + result.replaced).not.toBe(reported)
+      expect(result.overwrittenRows).toBe(0)
+      // The 72-case at a different size: 10 imported + 36 DELETED = 46 — a
+      // number that is neither the paste, nor the pool, nor anything the user
+      // could point at in the preview. Frozen for the same reason as the 72:
+      // the sum of an import counter and a deletion counter is never a result.
+      expect(result.addedRows + result.removedExistingRows).toBe(46)
+      expect(result.addedRows + result.removedExistingRows).not.toBe(reported)
       expect(championsOf(result.entries)).toEqual([...THIRTY_SIX_CHAMPIONS.slice(0, 10)])
     })
   })
@@ -1896,14 +1936,19 @@ describe("scout import integration — the reported count is the stored count", 
     it("matches the old formula on a fresh append into an empty pool", () => {
       const { selected } = parseAndPreselect(FRESH_36_TABLE, "mid")
       const result = applyImportRows([], selected, applyOptions("mid", "append"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       expect(reported).toBe(36)
       expect(result.entries).toHaveLength(reported)
-      expect(result.added).toBe(36)
-      expect(result.replaced).toBe(0)
-      // Here the sum was always correct, and the new helper agrees with it.
-      expect(result.added + result.replaced).toBe(reported)
+      expect(result.addedRows).toBe(36)
+      expect(result.overwrittenRows).toBe(0)
+      // `append` deletes nothing, so this mode's structurally-zero counter is
+      // the half of the old `replaced` that never applied here — asserted, not
+      // assumed, because conflating the two halves is what produced the 72.
+      expect(result.removedExistingRows).toBe(0)
+      // Here the sum was always correct, and it is now a stated invariant:
+      // `importedRows === addedRows + overwrittenRows`, in both modes.
+      expect(result.addedRows + result.overwrittenRows).toBe(reported)
     })
 
     it("matches it when every selected row overwrites a same-champion, same-role entry", () => {
@@ -1912,13 +1957,16 @@ describe("scout import integration — the reported count is the stored count", 
 
       const { selected } = parseAndPreselect(FRESH_36_TABLE, "mid")
       const result = applyImportRows(stored, selected, applyOptions("mid", "append"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       // `append` never duplicates a champion in the same role, so all 36 rows
       // land on top of the stored ones: nothing is added, the pool stays 36.
-      expect(result.added).toBe(0)
-      expect(result.replaced).toBe(36)
-      expect(result.added + result.replaced).toBe(reported)
+      // They were OVERWRITTEN IN PLACE, not deleted — exactly the distinction
+      // the single old `replaced` could not express.
+      expect(result.addedRows).toBe(0)
+      expect(result.overwrittenRows).toBe(36)
+      expect(result.removedExistingRows).toBe(0)
+      expect(result.addedRows + result.overwrittenRows).toBe(reported)
       expect(reported).toBe(36)
       expect(result.entries).toHaveLength(reported)
       expect(championsOf(result.entries)).toEqual([...THIRTY_SIX_CHAMPIONS])
@@ -1930,12 +1978,13 @@ describe("scout import integration — the reported count is the stored count", 
       const stored = importInto([], STORED_36_TABLE, "mid")
       const { selected } = parseAndPreselect(FRESH_10_TABLE, "mid")
       const result = applyImportRows(stored, selected, applyOptions("mid", "append"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       expect(reported).toBe(10)
-      expect(result.added).toBe(0)
-      expect(result.replaced).toBe(10)
-      expect(result.added + result.replaced).toBe(reported)
+      expect(result.addedRows).toBe(0)
+      expect(result.overwrittenRows).toBe(10)
+      expect(result.removedExistingRows).toBe(0)
+      expect(result.addedRows + result.overwrittenRows).toBe(reported)
       // The pool did not grow — 10 of its 36 rows were refreshed.
       expect(result.entries).toHaveLength(36)
       expect(result.entries[0]).toMatchObject({ championName: "Aatrox", games: 40, winrate: 60 })
@@ -1961,9 +2010,9 @@ describe("scout import integration — the reported count is the stored count", 
       expect(codesOf(zed.warnings)).toContain("missing_games")
 
       const result = applyImportRows([], selected, applyOptions("mid", "append"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
-      expect(result.skipped).toBe(1)
+      expect(result.skippedRows).toBe(1)
       expect(reported).toBe(3)
       expect(result.entries).toHaveLength(reported)
       expect(championsOf(result.entries)).toEqual(["Ahri", "Lux", "Milio"])
@@ -1977,18 +2026,20 @@ describe("scout import integration — the reported count is the stored count", 
       const { selected } = parseAndSelectAll(TABLE_WITH_ONE_UNAPPLICABLE, "mid")
 
       const result = applyImportRows(stored, selected, applyOptions("mid", "replace"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
-      expect(result.skipped).toBe(1)
+      expect(result.skippedRows).toBe(1)
       expect(reported).toBe(3)
       expect(result.entries).toHaveLength(reported)
       expect(entriesOfRole(result.entries, "mid")).toHaveLength(3)
       expect(championsOf(result.entries)).toEqual(["Ahri", "Lux", "Milio"])
-      // The old formula: 3 added + 36 deleted = 39.
-      expect(result.added).toBe(3)
-      expect(result.replaced).toBe(36)
-      expect(result.added + result.replaced).toBe(39)
-      expect(result.added + result.replaced).not.toBe(reported)
+      expect(result.overwrittenRows).toBe(0)
+      // The 72-case once more, now with a skip in it: the historical formula
+      // was 3 imported + 36 DELETED = 39. Frozen, and never reportable.
+      expect(result.addedRows).toBe(3)
+      expect(result.removedExistingRows).toBe(36)
+      expect(result.addedRows + result.removedExistingRows).toBe(39)
+      expect(result.addedRows + result.removedExistingRows).not.toBe(reported)
     })
   })
 
@@ -2015,7 +2066,7 @@ describe("scout import integration — the reported count is the stored count", 
       })
 
       const result = applyImportRows([], selected, applyOptions("mid", "append"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       expect(reported).toBe(1)
       expect(reported).not.toBe(72)
@@ -2028,7 +2079,7 @@ describe("scout import integration — the reported count is the stored count", 
     it("reports 3 for the whole raw copy, whose champions total 142 games", () => {
       const { parsed, selected } = parseAndPreselect(OPGG_RAW_COPY, "mid")
       const result = applyImportRows([], selected, applyOptions("mid", "append"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       // Three rows carrying 72, 38 and 32 games — none of those numbers, and
       // not their sum, may reach the count.
@@ -2036,8 +2087,8 @@ describe("scout import integration — the reported count is the stored count", 
       expect(reported).toBe(3)
       expect(result.entries).toHaveLength(reported)
       expect(result.entries).toEqual(EXPECTED_MID_ENTRIES)
-      // Both operands of `appliedRowCount` are row counts, so no sum of games
-      // can reach it — stated as an assertion rather than as a promise.
+      // `importedRows` counts ROWS and nothing else, so no sum of games can
+      // reach it — stated as an assertion rather than as a promise.
       expect(result.entries.reduce((total, entry) => total + entry.games, 0)).toBe(142)
       expect(reported).not.toBe(142)
     })
@@ -2058,7 +2109,7 @@ describe("scout import integration — the reported count is the stored count", 
 
       const { selected } = parseAndPreselect(FRESH_10_TABLE, "mid")
       const result = applyImportRows(stored, selected, applyOptions("mid", "replace"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       // The reported number is about the mid import and nothing else.
       expect(reported).toBe(10)
@@ -2066,11 +2117,14 @@ describe("scout import integration — the reported count is the stored count", 
       // The support rows survive untouched, byte for byte and in order.
       expect(entriesOfRole(result.entries, "support")).toEqual(storedSupport)
       expect(result.entries).toHaveLength(13)
-      // `replaced` counted the six deleted MID rows — never the support ones.
-      expect(result.replaced).toBe(6)
-      expect(result.added).toBe(10)
-      expect(result.added + result.replaced).toBe(16)
-      expect(result.added + result.replaced).not.toBe(reported)
+      expect(result.overwrittenRows).toBe(0)
+      // `removedExistingRows` counted the six deleted MID rows — never the
+      // support ones. Same tripwire as the 72, at a smaller size: 10 + 6 = 16
+      // is a number the user must never be shown.
+      expect(result.removedExistingRows).toBe(6)
+      expect(result.addedRows).toBe(10)
+      expect(result.addedRows + result.removedExistingRows).toBe(16)
+      expect(result.addedRows + result.removedExistingRows).not.toBe(reported)
     })
   })
 
@@ -2091,7 +2145,7 @@ describe("scout import integration — the reported count is the stored count", 
 
       const { selected } = parseAndPreselect(FRESH_36_TABLE, "mid")
       const result = applyImportRows(stored, selected, applyOptions("mid", "replace"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       const state = {
         ...createEmptyScoutState(),
@@ -2115,7 +2169,7 @@ describe("scout import integration — the reported count is the stored count", 
       const lineup = starter(createEmptyScoutLineup(), "mid", MID_ID)
       const { selected } = parseAndSelectAll(TABLE_WITH_ONE_UNAPPLICABLE, "mid")
       const result = applyImportRows([], selected, applyOptions("mid", "append"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       const state = {
         ...createEmptyScoutState(),
@@ -2181,7 +2235,7 @@ describe("scout import integration — the reported count is the stored count", 
       expect(selected).toHaveLength(3)
 
       const result = applyImportRows([], selected, applyOptions("mid", "append"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       expect(reported).toBe(3)
       expect(result.entries).toHaveLength(reported)
@@ -2203,14 +2257,16 @@ describe("scout import integration — the reported count is the stored count", 
       const { selected } = parseAndPreselect(OPGG_RAW_COPY_WITH_DASHES, "mid")
 
       const result = applyImportRows(stored, selected, applyOptions("mid", "replace"))
-      const reported = appliedRowCount(selected, result)
+      const reported = result.importedRows
 
       expect(reported).toBe(3)
       expect(result.entries).toHaveLength(reported)
       expect(result.entries).toEqual(EXPECTED_MID_ENTRIES)
-      // 3 + 36 = 39 — the shape of the original bug, on a three-row paste.
-      expect(result.added + result.replaced).toBe(39)
-      expect(result.added + result.replaced).not.toBe(reported)
+      expect(result.overwrittenRows).toBe(0)
+      // 3 imported + 36 DELETED = 39 — the shape of the original bug, on a
+      // three-row paste. Frozen, and never reportable.
+      expect(result.addedRows + result.removedExistingRows).toBe(39)
+      expect(result.addedRows + result.removedExistingRows).not.toBe(reported)
     })
   })
 
@@ -2223,7 +2279,7 @@ describe("scout import integration — the reported count is the stored count", 
     const { selected } = parseAndPreselect(FRESH_36_TABLE, "mid")
     const result = applyImportRows(stored, selected, applyOptions("mid", "replace"))
 
-    expect(appliedRowCount(selected, result)).toBe(36)
+    expect(result.importedRows).toBe(36)
     expect(summarizeSkippedLines(parseScoutStats(OPGG_RAW_COPY_WITH_DASHES, { role: "mid" }))
       .pageNoise).toBe(3)
     expect(fetchSpy.mock.calls).toEqual([])

@@ -223,7 +223,7 @@ function ScoutLineupSlotRow({
             <select
                 id={selectId}
                 value={occupantId ?? ""}
-                aria-label={`${label} — ${t("scout_assignTo")}`}
+                aria-label={`${label}: ${t("scout_assignTo")}`}
                 title={t("scout_assignTo")}
                 onChange={(event) =>
                     onAssign(target, event.target.value === "" ? null : event.target.value)
