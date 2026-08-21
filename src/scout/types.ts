@@ -315,9 +315,9 @@ export type ScoutManualSource = ScoutSourceKind | "manual" | "other"
  * be created — absence of data is expressed by the *absence* of entries plus a
  * `no_data` reason, never by a fake `0`.
  *
- * The single optional field is {@link ManualChampionEntry.kda}: it comes from
- * the stats import only, and its absence is neutral rather than bad - see the
- * field itself for why absent and `0` must never be conflated.
+ * The single optional field is {@link ManualChampionEntry.kda}: it may be
+ * absent, and its absence is neutral rather than bad - see the field itself for
+ * why absent and `0` must never be conflated.
  */
 export interface ManualChampionEntry {
   /** Optional stable key for list rendering/editing; not part of identity. */
@@ -352,14 +352,28 @@ export interface ManualChampionEntry {
    * for `null`/`undefined` explicitly and never for falsiness - `!entry.kda`
    * collapses precisely the two cases that must not be collapsed.
    *
-   * WRITTEN BY THE IMPORT ONLY. There is deliberately no editor field for it:
-   * `importRowToManualEntry()` in src/scout/statsImport.ts passes
-   * {@link ScoutImportRow.kda} through when it is a finite number `>= 0` and
-   * omits the key otherwise, and `normalizeManualEntry()` applies the same rule
-   * on load and on save - so a row without a usable KDA serialises exactly as
-   * it did before this field existed. An unusable KDA never drops the row;
-   * only `games` and `winrate` can do that. The value also stays in the
-   * human-readable note (`KDA 3.1`), which is unchanged.
+   * TWO WRITERS, ONE RULE. Until 0.5.1 the stats import was the only writer and
+   * this paragraph said so; since 0.5.1 the manual editor writes it too, so a
+   * `kda` in the state is no longer proof that the row came from an import.
+   *  - `importRowToManualEntry()` in src/scout/statsImport.ts passes
+   *    {@link ScoutImportRow.kda} through when it is a finite number `>= 0` and
+   *    omits the key otherwise.
+   *  - `withKdaValue()` in src/components/scout/ScoutDataEditor.tsx does the
+   *    same for a typed-in value, and DELETES the key for an empty field rather
+   *    than writing `null`. Its gate `parseKdaInput()` is the stricter of the
+   *    two: it also refuses anything above the plausibility bound the scoring
+   *    uses (`SCOUT_KDA_MAX_PLAUSIBLE` in src/scout/analysis.ts), because a
+   *    value the scoring reads as "not stated" should not sit in a row looking
+   *    like data. The import keeps no such bound, so an implausible imported
+   *    KDA is stored and then shown flagged in the editor. That asymmetry is
+   *    deliberate: it is visible, it costs nothing, and it never drops a row.
+   *
+   * `normalizeManualEntry()` applies the finite/`>= 0` rule again on load and on
+   * save, whoever wrote the value - so a row without a usable KDA serialises
+   * exactly as it did before this field existed. An unusable KDA never drops the
+   * row; only `games` and `winrate` can do that. For an imported row the value
+   * also stays in the human-readable note (`KDA 3.1`), which is unchanged; a
+   * typed-in KDA does not touch the note, because the note belongs to the user.
    */
   kda?: number | null
   /** Free user note. Not translated, shown verbatim, never parsed. */
@@ -838,6 +852,24 @@ export interface ChampionSignal {
   games: number
   /** Percent 0–100, or `null` when the entry carried no usable winrate. */
   winrate: WinratePercent | null
+  /**
+   * Games-weighted KDA across the entries behind this signal, or `null` when
+   * not one of them stated a usable value.
+   *
+   * THIS IS THE VALUE THE SCORE USED, not a second reading of the same rows.
+   * It is the output of the very `aggregateKda()` call that feeds
+   * `championStatStrengthMultiplier()`, so a KDA on screen and a KDA in the
+   * ban order can never disagree. Implausible values were already dropped by
+   * `normalizeKda()` one layer below, which is why an unusable number reaches
+   * this field as `null` rather than as a figure that visibly counts for
+   * nothing.
+   *
+   * `0` IS A REAL VALUE and stays apart from `null`, exactly as on
+   * {@link ManualChampionEntry.kda}: no kills and no assists is a statement,
+   * "not stated" is the absence of one. Read it with an explicit `=== null`
+   * check. `!kda` and `kda ?? 0` collapse the two cases that must stay apart.
+   */
+  kda: number | null
   recency: ScoutRecency
   /** Normalised threat score, 0–1, higher = more dangerous. */
   score: number

@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest"
 
 import { de } from "../src/i18n/de"
 import { en } from "../src/i18n/en"
-import { analyzeScout, createEmptyScoutAnalysis } from "../src/scout/analysis"
+import {
+  SCOUT_KDA_MAX_PLAUSIBLE,
+  analyzeScout,
+  championStatStrengthMultiplier,
+  createEmptyScoutAnalysis,
+} from "../src/scout/analysis"
 import type { ScoutAnalysisOptions } from "../src/scout/analysis"
 import type { ChampionStats } from "../src/domain/types"
 import {
@@ -1930,5 +1935,161 @@ describe("analyzeScout — the ban target follows the data, not just the score",
 
     expect(sylas?.targetPlayerId).toBe("top1")
     expect(sylas?.targetRole).toBeNull()
+  })
+})
+
+/* -------------------------------------------------------------------------
+ * 24. ChampionSignal.kda — the number the ban plan is allowed to print
+ *
+ * The scoring has weighted KDA since 0.5.0, but the signal never carried it.
+ * Every consumer that wanted to *show* a KDA therefore had to re-derive one
+ * from the entries, and a second derivation is a second convention: the day
+ * the two drift apart the plan prints a number the score never saw. The field
+ * closes that door. It is the very aggregate `championStatStrengthMultiplier()`
+ * was fed, rounded for display and nothing else.
+ *
+ * THE NEUTRALITY RULE IS WHAT MOST OF THIS SECTION IS ABOUT. "not stated" and
+ * "stated 0" are different facts about a player, and `kda ?? 0` / `!kda`
+ * collapse precisely those two: the first turns every legacy row — none of
+ * which carries a KDA — into a champion with no kills and no assists, the
+ * second deletes the one row that really said so. `null` must never surface as
+ * `0`, and `0` must never surface as `null`.
+ * ------------------------------------------------------------------------- */
+
+describe("analyzeScout — the KDA on a signal", () => {
+  /** One mid player, one champion, no lineup: everything except the KDA is held
+   *  still so each case below reads as a statement about the KDA alone. */
+  function ahriSignal(entries: readonly ManualChampionEntry[]): ChampionSignal {
+    const result = analyzeScout([player("p1", "mid")], dataOf(["p1", entries]))
+    const signal = signalFor(result.players[0].signals, "Ahri")
+    if (!signal) throw new Error("Ahri signal missing")
+    return signal
+  }
+
+  it("carries a stated KDA through to the signal", () => {
+    const signal = ahriSignal([entry("Ahri", 20, 60, { role: "mid", recency: "current", kda: 3.4 })])
+
+    expect(signal.kda).toBe(3.4)
+  })
+
+  it("reports null — not undefined, not 0 — when no row states one", () => {
+    const signal = ahriSignal([entry("Ahri", 20, 60, { role: "mid", recency: "current" })])
+
+    expect(signal.kda).toBeNull()
+    // Spelled out because these are the two values a falsy check would produce
+    // here, and both would be a claim about the player nobody made.
+    expect(signal.kda).not.toBeUndefined()
+    expect(signal.kda).not.toBe(0)
+    // Required, not optional: the key exists even when there is nothing to say.
+    expect("kda" in signal).toBe(true)
+  })
+
+  it("keeps a stated 0 as 0 — no kills and no assists is a statement", () => {
+    const signal = ahriSignal([entry("Ahri", 20, 60, { role: "mid", recency: "current", kda: 0 })])
+
+    // THE discriminating case of this whole section. A test that only ever
+    // checks a non-zero KDA proves nothing about the neutrality rule: every
+    // wrong spelling of it agrees with the right one on 3.4.
+    expect(signal.kda).toBe(0)
+    expect(signal.kda).not.toBeNull()
+  })
+
+  it("aggregates several rows games-weighted, exactly as the scoring does", () => {
+    const signal = ahriSignal([
+      entry("Ahri", 40, 60, { role: "mid", recency: "current", kda: 4.2 }),
+      entry("Ahri", 10, 60, { role: "mid", recency: "current", kda: 1.2 }),
+    ])
+
+    expect(signal.games).toBe(50)
+    // (4.2 * 40 + 1.2 * 10) / 50
+    expect(signal.kda).toBeCloseTo(3.6, 10)
+    // The unweighted mean of the same two rows is 2.7 — pinned as a negative so
+    // "average the rows" cannot pass for "weight the rows by their games".
+    expect(signal.kda).not.toBeCloseTo(2.7, 1)
+  })
+
+  it("does not let a row without a KDA drag the aggregate down", () => {
+    const signal = ahriSignal([
+      entry("Ahri", 40, 60, { role: "mid", recency: "current", kda: 4.2 }),
+      entry("Ahri", 10, 60, { role: "mid", recency: "current" }),
+    ])
+
+    // The silent row is skipped, not counted as 0 and not counted as a neutral
+    // 2.5: the answer is what the one row that has a KDA says, unchanged.
+    expect(signal.games).toBe(50)
+    expect(signal.kda).toBe(4.2)
+  })
+
+  it("rounds the aggregate to three decimals, like the winrate beside it", () => {
+    const signal = ahriSignal([
+      entry("Ahri", 3, 60, { role: "mid", recency: "current", kda: 4 }),
+      entry("Ahri", 4, 60, { role: "mid", recency: "current", kda: 1 }),
+    ])
+
+    // (4 * 3 + 1 * 4) / 7 = 2.2857142857142856 raw. Chosen for exactly that:
+    // the two cases above divide out evenly and would stay green without any
+    // rounding at all.
+    expect(signal.kda).toBe(2.286)
+  })
+
+  it("never lets an implausible KDA reach the signal", () => {
+    const tooHigh = ahriSignal([
+      entry("Ahri", 20, 60, { role: "mid", recency: "current", kda: SCOUT_KDA_MAX_PLAUSIBLE + 1 }),
+    ])
+    const negative = ahriSignal([
+      entry("Ahri", 20, 60, { role: "mid", recency: "current", kda: -3 }),
+    ])
+
+    // The scoring already ignores both (they return a neutral 1.0), so the
+    // signal has to ignore them too — otherwise the plan prints a KDA of 101
+    // next to a score that never believed it. UI and score cannot be allowed
+    // to contradict each other about the same row.
+    expect(tooHigh.kda).toBeNull()
+    expect(negative.kda).toBeNull()
+  })
+
+  it("does not let one implausible row poison the rows beside it", () => {
+    const signal = ahriSignal([
+      entry("Ahri", 10, 60, { role: "mid", recency: "current", kda: 3.5 }),
+      entry("Ahri", 10, 60, { role: "mid", recency: "current", kda: SCOUT_KDA_MAX_PLAUSIBLE + 900 }),
+    ])
+
+    // Dropped before the average, not averaged in: 3.5, not 501.75.
+    expect(signal.kda).toBe(3.5)
+  })
+
+  it("shows exactly the KDA the score consumed, not a second derivation", () => {
+    const withKda = ahriSignal([entry("Ahri", 20, 62, { role: "mid", recency: "current", kda: 4 })])
+    const withoutKda = ahriSignal([entry("Ahri", 20, 62, { role: "mid", recency: "current" })])
+
+    expect(withKda.kda).toBe(4)
+    expect(withoutKda.kda).toBeNull()
+    expect(withKda.games).toBe(withoutKda.games)
+    expect(withKda.winrate).toBe(withoutKda.winrate)
+
+    // Both signals differ in the KDA and in nothing else, so the entire gap
+    // between their scores is the KDA factor. Feeding the number the signal
+    // REPORTS back into the exported multiplier has to reproduce that gap. A
+    // field aggregated differently, rounded differently or read off a second
+    // code path would not close this ratio.
+    const expectedRatio =
+      championStatStrengthMultiplier({
+        games: withKda.games,
+        winrate: withKda.winrate,
+        kda: withKda.kda,
+      }) /
+      championStatStrengthMultiplier({
+        games: withoutKda.games,
+        winrate: withoutKda.winrate,
+        kda: null,
+      })
+
+    // Not vacuous: the factor really does move the score, so a ratio of 1 —
+    // which any two equal scores would satisfy — is not what is being checked.
+    expect(expectedRatio).toBeGreaterThan(1)
+    expect(withKda.score).toBeGreaterThan(withoutKda.score)
+    // Tolerance covers `round3` on both scores (up to 5e-4 each); the measured
+    // gap is 9e-5.
+    expect(withKda.score / withoutKda.score).toBeCloseTo(expectedRatio, 2)
   })
 })

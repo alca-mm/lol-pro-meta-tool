@@ -318,8 +318,14 @@ const SCOUT_KDA_BOOST_CAP = 1.1
 const SCOUT_KDA_PENALTY_FLOOR = 0.9
 
 /** Above this a "KDA" is a parse accident (OP.GG prints "Perfect KDA"), not a
- *  ratio → scored neutrally instead of as an outlier. */
-const SCOUT_KDA_MAX_PLAUSIBLE = 100
+ *  ratio → scored neutrally instead of as an outlier.
+ *
+ *  EXPORTED so the manual editor can refuse the same values rather than keep a
+ *  second, drifting bound of its own (`parseKdaInput()` in
+ *  src/components/scout/scoutUiHelpers.ts). A typed-in 500 that the scoring
+ *  silently reads as "not stated" is worse than a rejected one: the user sees a
+ *  number sitting in the row and believes it counts. */
+export const SCOUT_KDA_MAX_PLAUSIBLE = 100
 
 /** Lower bound of the combined factor. 0.75 rather than, say, 0.5 because a
  *  weak champion has to stay visible — the weakness list is ordered by this very
@@ -1558,6 +1564,12 @@ function buildSignalContext(
     role: signalRole,
     games,
     winrate: winratePercent === null ? null : round3(winratePercent),
+    // The SAME aggregate that fed `championStatStrengthMultiplier()` above.
+    // Recomputing it here from the entries would open the door to a second
+    // convention, and the ban plan would eventually print a KDA the score
+    // never saw. `round3` matches the winrate line; it is a display rounding
+    // and happens after the scoring, so no multiplier shifts by it.
+    kda: kda === null ? null : round3(kda),
     recency,
     score,
     confidence,

@@ -15,18 +15,25 @@ import {
     type PlayerScope,
 } from "../../teams/playerResultsAnalytics"
 import { RiotAccountPanel } from "../team/RiotAccountPanel"
+import { pluralMessage } from "../team/teamUiHelpers"
 import { ChampionResultsTable } from "./ChampionResultsTable"
 import { MatchTable } from "./MatchTable"
 import { RecentFormCards } from "./RecentFormCards"
 import { ChampionHighlightCards } from "./ChampionHighlightCards"
+import { formatLastNLabel, PLAYER_RESULTS_MATCH_COUNT_KEYS } from "./playerResultsFormat"
 import { useTranslation } from "../../i18n/LanguageContext"
 
-const LAST_N_OPTIONS: Array<{ label: string; value: LastNLimit }> = [
-    { label: "all",   value: "all" },
-    { label: "10",    value: 10   },
-    { label: "20",    value: 20   },
-    { label: "50",    value: 50   },
-]
+/**
+ * The Last-N buttons, in display order.
+ *
+ * Bare `LastNLimit` values rather than `{ label, value }` pairs: the label was
+ * a hand-typed copy of the value ("10" sitting next to `10`), and the visible
+ * text now comes from `playerResults_lastN`. Keeping the copy would leave a
+ * second number that can disagree with the one handed to `applyLastNFilter`
+ * without tsc ever noticing — a "20" button that filters to 50. The values,
+ * their order and the filter behaviour are unchanged.
+ */
+const LAST_N_OPTIONS: readonly LastNLimit[] = ["all", 10, 20, 50]
 
 export function PlayerResultsPage() {
     const { t } = useTranslation()
@@ -136,16 +143,16 @@ export function PlayerResultsPage() {
                             <div className="filter-bar">
                                 {LAST_N_OPTIONS.map((opt) => (
                                     <button
-                                        key={String(opt.value)}
+                                        key={String(opt)}
                                         type="button"
-                                        className={`role-tab${lastN === opt.value ? " role-tab-active" : ""}`}
-                                        onClick={() => setLastN(opt.value)}
+                                        className={`role-tab${lastN === opt ? " role-tab-active" : ""}`}
+                                        onClick={() => setLastN(opt)}
                                     >
-                                        {opt.value === "all" ? t("filter_all") : `Last ${opt.label}`}
+                                        {opt === "all" ? t("filter_all") : formatLastNLabel(t, opt)}
                                     </button>
                                 ))}
                                 <span className="muted" style={{ fontSize: "0.8rem", alignSelf: "center" }}>
-                                    {limitedMatches.length} Match{limitedMatches.length !== 1 ? "es" : ""}
+                                    {pluralMessage(t, limitedMatches.length, PLAYER_RESULTS_MATCH_COUNT_KEYS)}
                                 </span>
                             </div>
 

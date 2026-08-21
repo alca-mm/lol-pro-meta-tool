@@ -42,6 +42,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  SCOUT_KDA_MAX_PLAUSIBLE,
   analyzeScout,
   championStatStrengthMultiplier,
   gamesImpactMultiplier,
@@ -1070,5 +1071,173 @@ describe("a weakness keeps its strong_kda line", () => {
 
     expect(withStrongKda.score).toBeGreaterThan(withoutAnyKda.score)
     expect(codesOf(withoutAnyKda)).not.toContain("strong_kda")
+  })
+})
+
+/* ==========================================================================
+ * 13. A hand-typed KDA takes exactly the same path as an imported one
+ *
+ * WHY THIS SECTION EXISTS: until 0.5.0 `ManualChampionEntry.kda` could only ever
+ * be written by the OP.GG stats import. The data editor now offers the field as
+ * well, so the same number can arrive from a keyboard. Nothing in the scoring
+ * was changed for that — and this section is the PROOF of that claim rather than
+ * a restatement of it: the engine reads `source` only to decide whether to add
+ * the `manual_entry_only` reason, never to weigh a number, so a typed 6.0 has to
+ * move the score exactly as far as an imported 6.0 does.
+ *
+ * WHY IT GOES THROUGH `analyzeScout` AND NOT THROUGH THE FOUR MULTIPLIERS:
+ * `championStatStrengthMultiplier` never sees a `ManualChampionEntry` at all —
+ * it takes a bare `{ games, winrate, kda }`. The part that can break when the
+ * editor starts writing this field is the chain IN FRONT of it: the editor's row
+ * → `normalizeEntries()` → `aggregateKda()` → the factor → `ChampionSignal.score`.
+ * A test on the pure functions stays green even if that chain drops the field on
+ * the floor, which is exactly the regression worth guarding.
+ *
+ * MEASURED against the 40 games / 55 % row every test below uses (run once
+ * through the real engine before these assertions were written):
+ *   no KDA at all ....... 0.793   — missing key, `null` and `undefined` alike
+ *   KDA 6.0 typed ....... 0.872   — +0.079
+ *   KDA 6.0 imported .... 0.872   — identical, not merely close
+ *   KDA 0 typed ......... 0.713   — −0.080 against "no KDA"
+ * All four sit well clear of the `clamp01` ceiling, and that is what makes the
+ * comparisons below say anything at all: on a saturating stat line (say 200
+ * games / 100 % / KDA 10) every one of them reads 1.000 and every `toBeLessThan`
+ * passes without testing a thing. The explicit headroom assertions keep this row
+ * honest if somebody ever "improves" the numbers.
+ *
+ * WHAT IS DELIBERATELY **NOT** REPEATED HERE:
+ *  - the off-role cap under a dream stat line. Section 8 already pins the ratio
+ *    `score(offrole) / score(onrole)` at exactly 0.4 across four stat lines
+ *    (KDA included), the `low` confidence cap, `roleFit: "offrole"` and the
+ *    `situational` phase, up to 200 games / 100 % / KDA 10 — and its rows are
+ *    built by the same `entry()` builder, i.e. with `source: "manual"`.
+ *  - the "at most one stat reason, `strong_kda` before `many_games_on_champion`"
+ *    ladder. Section 9 already walks an 810-combination matrix for it, likewise
+ *    on manual rows.
+ * Both already hold for a typed value for the very reason this section proves:
+ * the engine cannot tell a typed number from an imported one. Copying them here
+ * would add runtime and a second place to edit while proving nothing new.
+ * ========================================================================== */
+
+/** The row all of section 13 varies: solid sample, mildly positive winrate. */
+const EDITOR_GAMES = 40
+const EDITOR_WINRATE = 55
+
+/**
+ * One signal from ONE row whose fields the caller controls completely.
+ *
+ * `soloSignal` cannot serve here: it always passes `{ role, kda }`, so the `kda`
+ * key is PRESENT (holding `undefined`) even when the caller omits the argument.
+ * Telling "key absent" from "key present, value undefined" is half of what this
+ * section is about, so it needs a builder that can actually leave the key out.
+ */
+function editorSignal(overrides: Partial<ManualChampionEntry>): ChampionSignal {
+  const result = analyzeScout(
+    [player("solo", "mid")],
+    dataOf(["solo", [entry("Ahri", EDITOR_GAMES, EDITOR_WINRATE, { role: "mid", ...overrides })]]),
+  )
+  const analysis = result.players[0]
+  const found = [...analysis.signals, ...analysis.weaknesses][0]
+
+  // Guard, not decoration — see soloSignal: a missing signal would make every
+  // `.score` below `undefined` and every comparison vacuous.
+  expect(found, `no signal for ${JSON.stringify(overrides)}`).toBeDefined()
+  return found
+}
+
+const editorScore = (overrides: Partial<ManualChampionEntry>): number =>
+  editorSignal(overrides).score
+
+describe("a KDA typed into the editor scores exactly like an imported one", () => {
+  it("changes the score at all when the user types one", () => {
+    // The first thing that has to be true, and the one a broken editor→engine
+    // wiring breaks first: a value the user entered by hand is READ.
+    const typed = editorScore({ kda: 6 })
+    const fieldLeftEmpty = editorScore({})
+
+    expect(typed).toBeGreaterThan(fieldLeftEmpty)
+    // Measured +0.079, so this is a real effect and not `round3` noise — the
+    // rounding could only ever hide a difference below 0.001.
+    expect(typed - fieldLeftEmpty).toBeGreaterThan(0.05)
+  })
+
+  it("scores the same number identically whoever wrote it", () => {
+    // Provenance must not be worth a single point in either direction. If this
+    // ever fails, somebody started treating hand-typed data as less (or more)
+    // trustworthy inside the scoring, where that decision does not belong.
+    for (const kda of [0, 1.2, 2.5, 4.5, 6, 9]) {
+      expect(editorScore({ kda, source: "manual" }), `kda ${kda}`).toBe(
+        editorScore({ kda, source: "opgg" }),
+      )
+    }
+
+    // NOT VACUOUS, twice over. First: the loop above would also pass on an
+    // engine that ignored `kda` entirely and returned one constant.
+    expect(editorScore({ kda: 6, source: "opgg" })).toBeGreaterThan(
+      editorScore({ kda: 1, source: "opgg" }),
+    )
+    // Second: the two rows really ARE different rows and not the same object
+    // compared with itself — the engine notices the source, it just does not
+    // let it near the score. `manual_entry_only` is the observable difference.
+    expect(codesOf(editorSignal({ kda: 6, source: "manual" }))).toContain("manual_entry_only")
+    expect(codesOf(editorSignal({ kda: 6, source: "opgg" }))).not.toContain("manual_entry_only")
+  })
+
+  it("treats an empty field as neutral however it reaches the engine", () => {
+    // THREE SPELLINGS OF "the user stated nothing", all of which really occur:
+    // a row saved before 0.5.0 has no `kda` KEY at all, the editor writes `null`
+    // when the field is cleared, and a spread of a row that never had one can
+    // hand `undefined` down. `Object.hasOwn`-style or `in`-style guards separate
+    // exactly these, so they are tested separately rather than assumed equal.
+    const keyAbsent = editorScore({})
+
+    expect(editorScore({ kda: null })).toBe(keyAbsent)
+    expect(editorScore({ kda: undefined })).toBe(keyAbsent)
+
+    // The three inputs are genuinely three shapes, or the two lines above are
+    // one assertion written out twice.
+    expect("kda" in entry("Ahri", EDITOR_GAMES, EDITOR_WINRATE, { role: "mid" })).toBe(false)
+    expect(
+      "kda" in entry("Ahri", EDITOR_GAMES, EDITOR_WINRATE, { role: "mid", kda: undefined }),
+    ).toBe(true)
+
+    // NOT VACUOUS: neutral where nothing was stated AND alive where something
+    // was — "every score is equal" does not explain this pair.
+    expect(editorScore({ kda: 6 })).toBeGreaterThan(keyAbsent)
+    expect(editorScore({ kda: 0.5 })).toBeLessThan(keyAbsent)
+  })
+
+  it("scores a typed 0 strictly below an empty field", () => {
+    // THE ONE THE OBVIOUS IMPLEMENTATIONS GET WRONG. `!kda` reads the typed 0 as
+    // "nothing stated" and makes these two equal; `kda ?? 0` reads the empty
+    // field as a typed 0 and makes them equal from the other side. The editor
+    // makes this reachable by hand for the first time: 0 is a value a user can
+    // now type, and it means "no kills, no assists", not "I did not look".
+    const typedZero = editorScore({ kda: 0 })
+    const fieldLeftEmpty = editorScore({})
+
+    expect(typedZero).toBeLessThan(fieldLeftEmpty)
+    // Measured 0.080 apart, far above the 0.001 `round3` could account for.
+    expect(fieldLeftEmpty - typedZero).toBeGreaterThan(0.05)
+
+    // THE ANTI-VACUITY GUARD, and the reason this row is 40 games / 55 % and
+    // not something impressive: at the top of the range `clamp01` saturates both
+    // sides to 1.000 and `toBeLessThan` above would compare 1.000 with 1.000
+    // forever. Both values have to keep visible headroom at both ends.
+    expect(fieldLeftEmpty).toBeLessThan(0.99)
+    expect(typedZero).toBeGreaterThan(0)
+  })
+
+  it("believes exactly the values the editor lets through", () => {
+    // The editor refuses anything above SCOUT_KDA_MAX_PLAUSIBLE (`parseKdaInput`
+    // in src/components/scout/scoutUiHelpers.ts imports this very constant), and
+    // it does so BECAUSE the scoring would read such a value as "not stated".
+    // tests/scoutUiHelpers.test.ts pins the editor half of that bargain; this is
+    // the engine half, at the boundary itself. A typed 100 that silently scored
+    // as nothing would leave a number sitting in the row that does not count.
+    const fieldLeftEmpty = editorScore({})
+
+    expect(editorScore({ kda: SCOUT_KDA_MAX_PLAUSIBLE })).toBeGreaterThan(fieldLeftEmpty)
+    expect(editorScore({ kda: SCOUT_KDA_MAX_PLAUSIBLE + 1 })).toBe(fieldLeftEmpty)
   })
 })

@@ -6,6 +6,7 @@ import {
     type PlayerChampionResultStats,
 } from "../../teams/playerResultsAnalytics"
 import type { RankedMatch } from "../../teams/riotService"
+import { formatRatio, formatWinRatePercentShort } from "./playerResultsFormat"
 import { useTranslation } from "../../i18n/LanguageContext"
 
 interface CardProps {
@@ -13,6 +14,15 @@ interface CardProps {
     accent: "pos" | "neg"
 }
 
+/**
+ * One highlight tile.
+ *
+ * Deliberately hook-free: everything it prints is either data (the champion
+ * name, the counts) or a locale-neutral number, so it needs neither `t()` nor
+ * the active language. `W`, `L`, `G` and `KDA` are LoL stat tokens that read
+ * the same in German and English; translating them would invent terms nobody
+ * uses at a scrim.
+ */
 function ChampionCard({ stat, accent }: CardProps) {
     const winColor = stat.winRate >= 0.5 ? "var(--green)" : "var(--red)"
     const borderColor = accent === "pos"
@@ -37,13 +47,13 @@ function ChampionCard({ stat, accent }: CardProps) {
                 {stat.championName}
             </span>
             <span style={{ color: winColor, fontWeight: 700, fontSize: "0.85rem" }}>
-                {(stat.winRate * 100).toFixed(0)}%
+                {formatWinRatePercentShort(stat.winRate)}
                 <span className="muted" style={{ fontWeight: 400, fontSize: "0.75rem", marginLeft: "0.35rem" }}>
                     {stat.wins}W {stat.losses}L
                 </span>
             </span>
             <span className="muted" style={{ fontSize: "0.75rem" }}>
-                {stat.avgKda.toFixed(2)} KDA · {stat.games}G
+                {formatRatio(stat.avgKda, 2)} KDA · {stat.games}G
             </span>
         </div>
     )

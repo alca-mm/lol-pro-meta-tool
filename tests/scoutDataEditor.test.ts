@@ -30,6 +30,7 @@ import {
   createManualEntry,
   isManualEntryFilled,
   roleMismatchHint,
+  withKdaValue,
 } from "../src/components/scout/ScoutDataEditor"
 
 const t = (key: TranslationKey): string => de[key]
@@ -104,6 +105,7 @@ describe("isManualEntryFilled", () => {
       ["games", { games: NEW_ENTRY_GAMES + 1 }],
       ["winrate", { winrate: NEW_ENTRY_WINRATE + 1 }],
       ["note", { note: "smurf" }],
+      ["kda", { kda: 3.2 }],
     ]
 
     for (const [label, patch] of cases) {
@@ -122,6 +124,16 @@ describe("isManualEntryFilled", () => {
     expect(isManualEntryFilled({ ...createManualEntry("bot"), winrate: 0 })).toBe(true)
   })
 
+  it("counts a KDA of 0 as filled, but an absent KDA as empty", () => {
+    // Two different statements that a falsy check would merge: 0 means "no
+    // kills and no assists", absent means "nobody stated one". Only the first
+    // is something the user would miss on an accidental delete.
+    expect(isManualEntryFilled({ ...createManualEntry("bot"), kda: 0 })).toBe(true)
+    expect(isManualEntryFilled({ ...createManualEntry("bot"), kda: 3.2 })).toBe(true)
+    expect(isManualEntryFilled({ ...createManualEntry("bot"), kda: null })).toBe(false)
+    expect(isManualEntryFilled(createManualEntry("bot"))).toBe(false)
+  })
+
   it("does not depend on role, source or recency alone", () => {
     // Those three always carry a value; if they counted, every untouched row
     // would ask for a confirmation on delete.
@@ -136,7 +148,87 @@ describe("isManualEntryFilled", () => {
 })
 
 /* ==========================================================================
- * 3. roleMismatchHint — only speaks about a slot the player really holds
+ * 3. withKdaValue — "not stated" is an ABSENT key, never a stored null
+ *
+ * `ManualChampionEntry.kda` promises (src/scout/types.ts) that a row without a
+ * usable KDA serialises exactly as it did before the field existed. That is
+ * what lets SCOUT_SCHEMA_VERSION stay at 2: an older build reading such a state
+ * finds nothing new, and a newer build reading an older one finds no `kda` and
+ * reads that as "not stated".
+ *
+ * `normalizeManualEntry()` already keeps that promise on load and on save. This
+ * helper keeps it one layer earlier, in the editor's own state, so the promise
+ * holds even between two saves — and so `JSON.stringify` of an untouched row is
+ * byte-for-byte what it was. `{ ...entry, kda: null }` would look harmless and
+ * break exactly that.
+ * ========================================================================== */
+
+describe("withKdaValue", () => {
+  const filled: ManualChampionEntry = {
+    ...createManualEntry("mid"),
+    championName: "Ahri",
+    games: 12,
+    winrate: 58,
+    note: "smurf",
+  }
+
+  it("writes a stated number onto the row", () => {
+    expect(withKdaValue(filled, 3.2).kda).toBe(3.2)
+    expect(withKdaValue(filled, 12).kda).toBe(12)
+  })
+
+  it("keeps a stated 0 — a real bad value, not an empty field", () => {
+    const out = withKdaValue(filled, 0)
+    expect(out.kda).toBe(0)
+    // The falsiness trap: `if (kda)` here would drop a genuine 0 and turn the
+    // worst KDA in the list into "not stated", which scores NEUTRALLY.
+    expect(Object.hasOwn(out, "kda")).toBe(true)
+    expect(Object.keys(out)).toContain("kda")
+  })
+
+  it("REMOVES the key for 'not stated' instead of storing null", () => {
+    const stated = withKdaValue(filled, 4.1)
+    const cleared = withKdaValue(stated, null)
+
+    expect(cleared.kda).toBeUndefined()
+    expect("kda" in cleared).toBe(false)
+    expect(Object.hasOwn(cleared, "kda")).toBe(false)
+    expect(Object.keys(cleared)).not.toContain("kda")
+    // The reason the three checks above are not just style: only this one fails
+    // for `{ ...entry, kda: null }`, and that is the whole point of the helper.
+    expect(JSON.stringify(cleared)).not.toContain("kda")
+  })
+
+  it("leaves a row that never had a KDA byte-for-byte unchanged", () => {
+    const fresh = createManualEntry("top")
+    expect(JSON.stringify(withKdaValue(fresh, null))).toBe(JSON.stringify(fresh))
+  })
+
+  it("touches no other field", () => {
+    for (const value of [3.2, 0, null] as const) {
+      const out = withKdaValue(filled, value)
+      expect(out.championName, String(value)).toBe("Ahri")
+      expect(out.games, String(value)).toBe(12)
+      expect(out.winrate, String(value)).toBe(58)
+      expect(out.note, String(value)).toBe("smurf")
+      expect(out.role, String(value)).toBe(filled.role)
+      expect(out.source, String(value)).toBe(filled.source)
+      expect(out.recency, String(value)).toBe(filled.recency)
+      expect(out.id, String(value)).toBe(filled.id)
+    }
+  })
+
+  it("does not mutate the row it is handed", () => {
+    const before = JSON.stringify(filled)
+    withKdaValue(filled, 5)
+    withKdaValue({ ...filled, kda: 5 }, null)
+    expect(JSON.stringify(filled)).toBe(before)
+    expect(filled.kda).toBeUndefined()
+  })
+})
+
+/* ==========================================================================
+ * 4. roleMismatchHint — only speaks about a slot the player really holds
  * ========================================================================== */
 
 describe("roleMismatchHint", () => {

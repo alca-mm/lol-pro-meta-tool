@@ -31,6 +31,7 @@ export const en: Translations = {
     ds_latestPatch: "Latest patch:",
     ds_matches: "Matches:",
     ds_dismiss: "Dismiss data notice",
+    ds_unknownDate: "unknown",
 
     section_championStats: "Champion Statistics",
     section_synergies: "Top Synergies",
@@ -54,6 +55,10 @@ export const en: Translations = {
     dataLoad_retrying: "Loading…",
 
     // DraftHelper — header & controls
+    dh_title_draftCockpit: "Draft Cockpit",
+    dh_title_draftEdge: "Draft Edge",
+    dh_title_teamIdentity: "Team Identity",
+    dh_title_compChecks: "Comp Checks",
     dh_patchInfo: "Recommendations use a weighted patch selection:",
     dh_rawSample: "Raw sample:",
     dh_weightedSample: "weighted sample:",
@@ -98,6 +103,7 @@ export const en: Translations = {
     dh_patchOldN: "patches old",
 
     // Patch weight preset labels
+    dh_pPresetsAriaLabel: "Patch weighting presets",
     dh_pPreset_balanced: "Balanced",
     dh_pPreset_currentFocused: "Current focus",
     dh_pPreset_stable: "Meta stable",
@@ -167,6 +173,20 @@ export const en: Translations = {
     // Best next picks table
     dh_bestPicksTitle: "Best next picks for",
     dh_noRecs: "No recommendations found. Reduce min picks or check your filters.",
+    // Recommendation table headers. Short on purpose: twelve columns share one
+    // horizontally scrolling row. The wording follows the dh_wLabel_* sliders
+    // that weight these very columns, shortened where the slider is a phrase
+    // ("Champion Priority" -> "Priority", "Matchup / Counter" -> "Matchup").
+    dh_recoTableChampion: "Champion",
+    dh_recoTableRole: "Role",
+    dh_recoTableTotal: "Total Score",
+    dh_recoTablePriority: "Priority",
+    dh_recoTableRoleStrength: "Role Strength",
+    dh_recoTableSynergy: "Synergy",
+    dh_recoTableMatchup: "Matchup",
+    dh_recoTablePicks: "Picks",
+    dh_recoTableWinrate: "Winrate",
+    dh_recoTablePool: "Team Pool",
     dh_tableReasons: "Reasons",
 
     // Pick/recommendation button tooltips
@@ -398,7 +418,6 @@ export const en: Translations = {
     common_loading: "Loading…",
 
     // Player Results
-    playerResults_view: "View",
     playerResults_teamOverview: "Team Overview",
     playerResults_noMatchesForPlayer: "No matches for this player.",
     playerResults_championStats: "Champion Statistics",
@@ -421,6 +440,24 @@ export const en: Translations = {
     playerResults_viewLabel: "View:",
     playerResults_noTeam: "No team selected.",
     playerResults_noTeamHint: "Select a team in the Team Dashboard to view Player Results.",
+    playerResults_lastN: "Last {count}",
+    playerResults_matchCountOne: "{count} match",
+    playerResults_matchCountMany: "{count} matches",
+    playerResults_recentForm: "Recent Form",
+    playerResults_teammate: "Teammate",
+    playerResults_tipGames: "Games",
+    playerResults_tipWins: "Wins",
+    playerResults_tipLosses: "Losses",
+    playerResults_tipWinRate: "Winrate",
+    playerResults_tipAvgKda: "Average KDA: kills plus assists, divided by deaths. With no deaths it divides by 1.",
+    playerResults_tipAvgKills: "Average kills",
+    playerResults_tipAvgDeaths: "Average deaths",
+    playerResults_tipAvgAssists: "Average assists",
+    playerResults_tipCsPerMinute: "CS per minute",
+    playerResults_tipDamagePerMinute: "Damage to champions per minute",
+    playerResults_tipGoldPerMinute: "Gold per minute",
+    playerResults_tipSoloqGames: "Ranked Solo/Duo games",
+    playerResults_tipFlexqGames: "Ranked Flex games",
 
     // Sample size labels (translation keys returned by sampleSizeLabel())
     sample_veryLow: "very low confidence",
@@ -553,6 +590,10 @@ export const en: Translations = {
     scout_manual_winrate: "Winrate",
     scout_manual_winratePlaceholder: "e.g. 62",
     scout_manual_winrateInvalid: "Enter the winrate as a value between 0 and 100.",
+    scout_manual_kda: "KDA",
+    scout_manual_kdaHint: "Optional. Leave empty if unknown.",
+    scout_manual_kdaPlaceholder: "e.g. 3.2",
+    scout_manual_kdaInvalid: "Enter the KDA as a value between 0 and 100, or leave it empty.",
     scout_manual_note: "Note",
     scout_manual_source: "Source",
     scout_manual_recency: "Recency",
@@ -560,7 +601,7 @@ export const en: Translations = {
     scout_manual_role: "Role",
     scout_manual_add: "Add entry",
     scout_manual_remove: "Remove entry",
-    scout_manual_removeConfirm: "Really remove this entry? Its games, winrate and note go with it.",
+    scout_manual_removeConfirm: "Really remove this entry? Its games, winrate, KDA and note go with it.",
     scout_manual_empty: "No scouting data for this player yet.",
 
     // Tournament Scout — recency
@@ -606,6 +647,8 @@ export const en: Translations = {
     scout_comfortPicks: "Comfort picks",
     scout_weaknesses: "Weak spots",
     scout_confidence: "Confidence",
+    scout_banPriorityValue: "Priority {priority}%",
+    scout_kdaValue: "KDA {kda}",
     scout_sourceHint: "Based solely on the scouting data you entered.",
     scout_lowData: "Thin data. Add more champions or games so the recommendation becomes reliable.",
     scout_noAnalysis: "No analysis possible yet. Enter scouting data for at least one player.",

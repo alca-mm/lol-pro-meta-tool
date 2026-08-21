@@ -21,6 +21,7 @@ import { ChampionNotesPanel } from "./draft/ChampionNotesPanel"
 import { TeamDraftLibraryPanel } from "./draft/TeamDraftLibraryPanel"
 import { findSimilarDrafts } from "../draft/similarDrafts"
 import { useTranslation } from "../i18n/LanguageContext"
+import { formatNumber } from "../i18n/format"
 import { useTeam } from "../teams/TeamContext"
 import type { SavedTeamDraft } from "../teams/teamDraftsService"
 
@@ -880,7 +881,7 @@ function formatSingleGameDraftForExport(game: CompletedGameDraft, labelSuffix = 
 }
 
 export function DraftHelper({ matches }: DraftHelperProps) {
-    const { t } = useTranslation()
+    const { t, lang } = useTranslation()
     const { activeTeam, myRole } = useTeam()
 
     const [bluePickSlots, setBluePickSlots] = useState<PickSlot[]>(createEmptyPickSlots)
@@ -1585,12 +1586,12 @@ export function DraftHelper({ matches }: DraftHelperProps) {
         <section className="draft-helper">
             <div className="section-header">
                 <div>
-                    <h2>Draft Cockpit</h2>
+                    <h2>{t("dh_title_draftCockpit")}</h2>
                     <p>
                         {t("dh_patchInfo")} {formatPatchWindowSummary(recentPatchData)}
                     </p>
                     <p className="muted">
-                        {t("dh_rawSample")} {recentPatchData.rawSample.toLocaleString("de-DE")} {t("dh_games")} · {t("dh_weightedSample")} {recentPatchData.weightedSample.toLocaleString("de-DE")} {t("dh_games")}
+                        {t("dh_rawSample")} {formatNumber(recentPatchData.rawSample, lang)} {t("dh_games")} · {t("dh_weightedSample")} {formatNumber(recentPatchData.weightedSample, lang)} {t("dh_games")}
                     </p>
                 </div>
 
@@ -1667,7 +1668,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
             <div className="recommendation-section">
                 <div className="champion-picker-header">
                     <div>
-                        <h3>Draft Edge</h3>
+                        <h3>{t("dh_title_draftEdge")}</h3>
                         <p className="muted">{t("dh_edgeDesc")}</p>
                     </div>
                     <strong className={draftEdgeDelta >= 0 ? "score-pos" : "score-neg"}>
@@ -1705,7 +1706,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         ))}
                     </div>
                     <div className="recommendation-card">
-                        <h3>Team Identity</h3>
+                        <h3>{t("dh_title_teamIdentity")}</h3>
 
                         <p className="draft-comp-identity">{activeTeamCompReport.identity}</p>
                         <div className="draft-comp-pills">
@@ -1720,11 +1721,11 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                             )}
                         </div>
                         <p className="muted">
-                            Damage: {activeTeamCompReport.damageProfile.label} · AP {activeTeamCompReport.damageProfile.ap} · AD {activeTeamCompReport.damageProfile.ad} · Mixed {activeTeamCompReport.damageProfile.mixed}
+                            Damage: {activeTeamCompReport.damageProfile.label} · AP {activeTeamCompReport.damageProfile.ap} · AD {activeTeamCompReport.damageProfile.ad} · {t("comp_damage_mixed")} {activeTeamCompReport.damageProfile.mixed}
                         </p>
                     </div>
                     <div className="recommendation-card">
-                        <h3>Comp Checks</h3>
+                        <h3>{t("dh_title_compChecks")}</h3>
                         {activeTeamCompReport.warnings.length === 0 ? (
                             <p className="muted">{t("dh_noWarnings")}</p>
                         ) : (
@@ -1935,17 +1936,17 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         <table>
                             <thead>
                             <tr>
-                                <th>Champion</th>
-                                <th>Rolle</th>
-                                <th>Total</th>
-                                <th>Priority</th>
-                                <th>Role</th>
-                                <th>Synergy</th>
-                                <th>Matchup</th>
-                                <th>Picks</th>
-                                <th>Winrate</th>
-                                <th>Sample</th>
-                                <th>Pool</th>
+                                <th>{t("dh_recoTableChampion")}</th>
+                                <th>{t("dh_recoTableRole")}</th>
+                                <th>{t("dh_recoTableTotal")}</th>
+                                <th>{t("dh_recoTablePriority")}</th>
+                                <th>{t("dh_recoTableRoleStrength")}</th>
+                                <th>{t("dh_recoTableSynergy")}</th>
+                                <th>{t("dh_recoTableMatchup")}</th>
+                                <th>{t("dh_recoTablePicks")}</th>
+                                <th>{t("dh_recoTableWinrate")}</th>
+                                <th>{t("tbl_confidence")}</th>
+                                <th>{t("dh_recoTablePool")}</th>
                                 <th>{t("dh_tableReasons")}</th>
                             </tr>
                             </thead>

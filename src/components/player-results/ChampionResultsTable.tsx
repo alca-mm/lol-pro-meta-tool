@@ -5,54 +5,55 @@ import {
 } from "../../teams/playerResultsAnalytics"
 import type { RankedMatch } from "../../teams/riotService"
 import { useTranslation } from "../../i18n/LanguageContext"
+import type { TranslationKey } from "../../i18n/types"
+import { formatChampionStatCell } from "./playerResultsFormat"
 
 type SortKey = keyof PlayerChampionResultStats
 
 interface Col {
     key: SortKey
+    /**
+     * The header text. Deliberately NOT translated: these are LoL stat tokens
+     * (`Win%`, `KDA`, `CS/min`, `SoloQ`) that a German player reads exactly as
+     * written. The tooltip below carries the explanation instead.
+     */
     label: string
-    title?: string
+    /**
+     * The i18n KEY of the tooltip, not the tooltip text.
+     *
+     * COLUMNS is a module-level constant, evaluated once at import time, where
+     * `t()` does not exist yet. Baking the sentence in here is what made these
+     * tooltips English-only. Holding the key and resolving it inside the
+     * component keeps the column list single and module-scoped while letting
+     * the text follow the language switch on re-render.
+     */
+    titleKey?: TranslationKey
     numeric?: boolean
 }
 
 const COLUMNS: Col[] = [
     { key: "championName",    label: "Champion" },
-    { key: "games",           label: "G",        title: "Games",                              numeric: true },
-    { key: "wins",            label: "W",        title: "Wins",                               numeric: true },
-    { key: "losses",          label: "L",        title: "Losses",                             numeric: true },
-    { key: "winRate",         label: "Win%",     title: "Win Rate",                           numeric: true },
-    { key: "avgKda",          label: "KDA",      title: "Avg KDA (kills+assists)/deaths",      numeric: true },
-    { key: "avgKills",        label: "K",        title: "Avg Kills",                          numeric: true },
-    { key: "avgDeaths",       label: "D",        title: "Avg Deaths",                         numeric: true },
-    { key: "avgAssists",      label: "A",        title: "Avg Assists",                        numeric: true },
-    { key: "csPerMinute",     label: "CS/min",   title: "CS per minute",                      numeric: true },
-    { key: "damagePerMinute", label: "Dmg/min",  title: "Damage per minute",                  numeric: true },
-    { key: "goldPerMinute",   label: "Gold/min", title: "Gold per minute",                    numeric: true },
-    { key: "soloqGames",      label: "SoloQ",    title: "Solo Queue games",                   numeric: true },
-    { key: "flexqGames",      label: "FlexQ",    title: "Flex Queue games",                   numeric: true },
+    { key: "games",           label: "G",        titleKey: "playerResults_tipGames",           numeric: true },
+    { key: "wins",            label: "W",        titleKey: "playerResults_tipWins",            numeric: true },
+    { key: "losses",          label: "L",        titleKey: "playerResults_tipLosses",          numeric: true },
+    { key: "winRate",         label: "Win%",     titleKey: "playerResults_tipWinRate",         numeric: true },
+    { key: "avgKda",          label: "KDA",      titleKey: "playerResults_tipAvgKda",          numeric: true },
+    { key: "avgKills",        label: "K",        titleKey: "playerResults_tipAvgKills",        numeric: true },
+    { key: "avgDeaths",       label: "D",        titleKey: "playerResults_tipAvgDeaths",       numeric: true },
+    { key: "avgAssists",      label: "A",        titleKey: "playerResults_tipAvgAssists",      numeric: true },
+    { key: "csPerMinute",     label: "CS/min",   titleKey: "playerResults_tipCsPerMinute",     numeric: true },
+    { key: "damagePerMinute", label: "Dmg/min",  titleKey: "playerResults_tipDamagePerMinute", numeric: true },
+    { key: "goldPerMinute",   label: "Gold/min", titleKey: "playerResults_tipGoldPerMinute",   numeric: true },
+    { key: "soloqGames",      label: "SoloQ",    titleKey: "playerResults_tipSoloqGames",      numeric: true },
+    { key: "flexqGames",      label: "FlexQ",    titleKey: "playerResults_tipFlexqGames",      numeric: true },
 ]
-
-function fCell(key: SortKey, value: PlayerChampionResultStats[SortKey]): string {
-    if (value === null) return "—"
-    switch (key) {
-        case "winRate":         return `${((value as number) * 100).toFixed(1)}%`
-        case "avgKda":
-        case "avgKills":
-        case "avgDeaths":
-        case "avgAssists":      return (value as number).toFixed(2)
-        case "csPerMinute":     return (value as number).toFixed(1)
-        case "damagePerMinute":
-        case "goldPerMinute":   return Math.round(value as number).toLocaleString("de-DE")
-        default:                return String(value)
-    }
-}
 
 interface Props {
     matches: RankedMatch[]
 }
 
 export function ChampionResultsTable({ matches }: Props) {
-    const { t } = useTranslation()
+    const { t, lang } = useTranslation()
     const [sortKey, setSortKey] = useState<SortKey>("games")
     const [sortAsc, setSortAsc] = useState(false)
 
@@ -88,7 +89,7 @@ export function ChampionResultsTable({ matches }: Props) {
                                 {COLUMNS.map((col) => (
                                     <th
                                         key={col.key}
-                                        title={col.title}
+                                        title={col.titleKey ? t(col.titleKey) : undefined}
                                         className={col.numeric ? "numeric" : undefined}
                                         style={{
                                             ...thStyle,
@@ -115,7 +116,7 @@ export function ChampionResultsTable({ matches }: Props) {
                                 <tr key={row.championName}>
                                     {COLUMNS.map((col) => {
                                         const val = row[col.key]
-                                        const text = fCell(col.key, val)
+                                        const text = formatChampionStatCell(col.key, val, lang)
                                         const isWinRate = col.key === "winRate"
                                         return (
                                             <td

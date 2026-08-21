@@ -116,6 +116,11 @@ function ScoutPlayerAnalysisCard({ player }: { player: ScoutPlayerAnalysis }) {
                                     key={candidate.championName}
                                     candidate={candidate}
                                     rank={index + 1}
+                                    // This card IS one player, and an overlap
+                                    // ban lands in several cards. Without this
+                                    // the row would print the candidate's
+                                    // global target KDA under everyone.
+                                    forPlayerId={player.playerId}
                                 />
                             ))}
                         </ol>

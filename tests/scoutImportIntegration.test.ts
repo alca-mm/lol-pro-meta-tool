@@ -1127,9 +1127,10 @@ const MID_TABLE_40_AT_50 = paste("Champion\tGames\tWin Rate\tKDA", "Ahri\t40\t50
  *   Ahri   72 games · 50 % · KDA 2.60  ->  0.766
  *
  * So the reversal below is the REQUIREMENT, not a broken expectation. Every
- * flipped line in this section carries a back-reference to this block; the
- * numbers themselves are pinned in tests/scoutStatWeighting.test.ts and the
- * statement they encode has its own test at the end of section 11.1.
+ * flipped line in this section carries a back-reference to this block. These
+ * three numbers are frozen as literals by the last test of section 11.1, the
+ * multipliers that produce them by tests/scoutStatWeighting.test.ts, and the
+ * statement they encode has its own test in between.
  *
  * What did NOT change, and is asserted unchanged at every one of those spots:
  * Ahri still carries its 72 games, all three rows are still on-role mid, still
@@ -1266,13 +1267,20 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
       expect(volumeSignal?.games).toBeGreaterThan((qualitySignal?.games ?? 0) * 2)
       expect(volumeSignal?.winrate).toBe(50)
       expect(qualitySignal?.winrate).toBeGreaterThan(volumeSignal?.winrate ?? 0)
-      // `ChampionSignal` carries no KDA — it enters the score inside
-      // `analyzeScout` and is not re-exported — so the premise is read off the
-      // entries the import produced, which is where the KDA lives.
-      const kdaOf = (championName: string): number =>
-        entries.find((entry) => entry.championName === championName)?.kda ?? 0
+      // Since 0.5.2 the KDA travels ON the signal. `ChampionSignal.kda` is the
+      // games-weighted aggregate `analyzeScout` handed to the scoring, and the
+      // ban plan and the scout export render exactly that figure — so the third
+      // part of the premise is no longer invisible to the user reading the plan.
+      // It is checked against the imported entries as well, because the two are
+      // required to agree: one number, read once, shown and scored. A second
+      // reading of the same rows is what "the KDA on screen and the KDA in the
+      // ban order disagree" would look like.
+      const kdaOf = (championName: string): number | null | undefined =>
+        entries.find((entry) => entry.championName === championName)?.kda
       expect(kdaOf("Ahri")).toBe(2.6)
       expect(kdaOf("Milio")).toBe(4.2)
+      expect(volumeSignal?.kda).toBe(2.6)
+      expect(qualitySignal?.kda).toBe(4.2)
 
       // The conclusion: the smaller but clearly better sample wins anyway.
       expect(quality?.priority).toBeGreaterThan(volume?.priority ?? 0)
@@ -1282,6 +1290,49 @@ describe("scout import integration — the OP.GG raw champion-page copy", () => 
       // And the margin is not a rounding artefact: the old engine's whole lead
       // was 0.008, so anything at that scale would prove nothing.
       expect((quality?.priority ?? 0) - (volume?.priority ?? 0)).toBeGreaterThan(0.05)
+    })
+
+    it("freezes the three scores STAT_WEIGHTING_ORDER states, to the last digit", () => {
+      // THE ONLY LITERAL SCORES IN THIS FILE, and here is why they earn their
+      // maintenance cost: every other assertion in this section is an ORDER or a
+      // MARGIN, and both survive a change that moves all three values together.
+      // Rescale the whole formula by a tenth and the lists still read Milio,
+      // Lux, Ahri, the margin only grows, and the suite stays green — which is
+      // precisely the change 0.5.2 promised not to make while it made the KDA
+      // visible. This test is that promise, executed.
+      //
+      // tests/scoutStatWeighting.test.ts pins four scores of its own, but on
+      // hand-built entries. These three are what the WHOLE chain produces from a
+      // pasted page, so they also fail if the parser starts reading 36S/36N or
+      // "2.60:1" differently — a difference no unit test of the scoring can see.
+      const players = parseScoutInput(MID_LINK).players
+      const lineup = starter(createEmptyScoutLineup(), "mid", MID_ID)
+      const entries = importInto([], OPGG_RAW_COPY, "mid")
+      const analysis = analyzeScout(players, dataOf([MID_ID, entries]), { lineup })
+
+      expect(
+        analysis.players[0].signals.map((signal) => [signal.championName, signal.score]),
+      ).toEqual([
+        ["Milio", 0.859],
+        ["Lux", 0.823],
+        ["Ahri", 0.766],
+      ])
+
+      // The ban plan does not rescale what the signals scored. One player and
+      // one signal per champion means no overlap bonus and no meta bonus, so
+      // here the priority IS the score — stated rather than assumed, because a
+      // candidate that quietly renormalised would keep the order and lose the
+      // numbers, and the priority is the value the UI puts on screen.
+      expect(
+        analysis.banPlan.prioritizedBans.map((candidate) => [
+          candidate.championName,
+          candidate.priority,
+        ]),
+      ).toEqual([
+        ["Milio", 0.859],
+        ["Lux", 0.823],
+        ["Ahri", 0.766],
+      ])
     })
   })
 

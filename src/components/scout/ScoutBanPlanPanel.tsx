@@ -9,7 +9,7 @@
 
 import { useTranslation } from "../../i18n/LanguageContext"
 import type { ScoutAnalysisResult } from "../../scout/analysis"
-import type { BanCandidate, ScoutBanPhases } from "../../scout/types"
+import type { BanCandidate, ScoutBanPhases, ScoutPlayerId } from "../../scout/types"
 import { ScoutBanRow, ScoutWarningList } from "./ScoutShared"
 import { scoutRoleLabel } from "./scoutUiHelpers"
 import type { TranslationKey } from "../../i18n/types"
@@ -78,6 +78,11 @@ export function ScoutBanPlanPanel({ analysis }: { analysis: ScoutAnalysisResult 
                                     0,
                                     MAX_TARGET_PER_PLAYER,
                                 )}
+                                // The heading names this player, so the rows
+                                // must show this player's numbers. The phase
+                                // and overlap groups above claim no player and
+                                // deliberately pass nothing.
+                                forPlayerId={player.playerId}
                             />
                         ))}
                     </div>
@@ -90,9 +95,12 @@ export function ScoutBanPlanPanel({ analysis }: { analysis: ScoutAnalysisResult 
 function BanGroup({
     heading,
     candidates,
+    forPlayerId,
 }: {
     heading: string
     candidates: readonly BanCandidate[]
+    /** Set only by a group whose heading names a player. See `ScoutBanRow`. */
+    forPlayerId?: ScoutPlayerId
 }) {
     const { t } = useTranslation()
     return (
@@ -107,6 +115,7 @@ function BanGroup({
                             key={candidate.championName}
                             candidate={candidate}
                             rank={index + 1}
+                            forPlayerId={forPlayerId}
                         />
                     ))}
                 </ol>

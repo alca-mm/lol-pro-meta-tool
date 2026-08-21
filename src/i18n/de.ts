@@ -29,6 +29,7 @@ export const de = {
     ds_latestPatch: "Neuester Patch:",
     ds_matches: "Matches:",
     ds_dismiss: "Datenhinweis ausblenden",
+    ds_unknownDate: "unbekannt",
 
     section_championStats: "Champion-Statistiken",
     section_synergies: "Top Synergien",
@@ -52,6 +53,10 @@ export const de = {
     dataLoad_retrying: "Wird geladen…",
 
     // DraftHelper — header & controls
+    dh_title_draftCockpit: "Draft-Cockpit",
+    dh_title_draftEdge: "Draft-Edge",
+    dh_title_teamIdentity: "Team-Identität",
+    dh_title_compChecks: "Comp-Checks",
     dh_patchInfo: "Empfehlungen nutzen eine gewichtete Patch-Auswahl:",
     dh_rawSample: "Roh-Sample:",
     dh_weightedSample: "gewichtetes Sample:",
@@ -96,6 +101,7 @@ export const de = {
     dh_patchOldN: "Patches alt",
 
     // Patch weight preset labels
+    dh_pPresetsAriaLabel: "Patch-Gewichtungs-Presets",
     dh_pPreset_balanced: "Balanced",
     dh_pPreset_currentFocused: "Aktueller Patch",
     dh_pPreset_stable: "Meta stabil",
@@ -165,6 +171,20 @@ export const de = {
     // Best next picks table
     dh_bestPicksTitle: "Beste nächste Picks für",
     dh_noRecs: "Keine Empfehlungen gefunden. Reduziere die Mindest-Picks oder prüfe deine Filter.",
+    // Recommendation table headers. Short on purpose: twelve columns share one
+    // horizontally scrolling row. The wording follows the dh_wLabel_* sliders
+    // that weight these very columns, shortened where the slider is a phrase
+    // ("Champion-Priorität" -> "Priorität", "Matchup / Counter" -> "Matchup").
+    dh_recoTableChampion: "Champion",
+    dh_recoTableRole: "Rolle",
+    dh_recoTableTotal: "Gesamtscore",
+    dh_recoTablePriority: "Priorität",
+    dh_recoTableRoleStrength: "Rollenstärke",
+    dh_recoTableSynergy: "Synergie",
+    dh_recoTableMatchup: "Matchup",
+    dh_recoTablePicks: "Picks",
+    dh_recoTableWinrate: "Winrate",
+    dh_recoTablePool: "Team-Pool",
     dh_tableReasons: "Gründe",
 
     // Pick/recommendation button tooltips
@@ -396,8 +416,7 @@ export const de = {
     common_loading: "Lädt…",
 
     // Player Results
-    playerResults_view: "Ansicht",
-    playerResults_teamOverview: "Team Overview",
+    playerResults_teamOverview: "Team-Übersicht",
     playerResults_noMatchesForPlayer: "Keine Matches für diesen Spieler.",
     playerResults_championStats: "Champion-Statistiken",
     playerResults_matchHistory: "Match-Verlauf",
@@ -413,12 +432,30 @@ export const de = {
     playerResults_date: "Datum",
     playerResults_noData: "Keine Daten.",
     playerResults_bestChampions: "Beste Champions",
-    playerResults_needsReview: "Needs Review",
+    playerResults_needsReview: "Zum Überprüfen",
     playerResults_noSavedMatches: "Noch keine Matches gespeichert.",
-    playerResults_syncHint: "Klicke oben auf \"Matches syncen\" um Daten zu laden.",
+    playerResults_syncHint: "Klicke oben auf „Matches syncen“, um Daten zu laden.",
     playerResults_viewLabel: "Ansicht:",
     playerResults_noTeam: "Kein Team ausgewählt.",
     playerResults_noTeamHint: "Wähle ein Team im Team Dashboard aus, um Player Results zu sehen.",
+    playerResults_lastN: "Letzte {count}",
+    playerResults_matchCountOne: "{count} Match",
+    playerResults_matchCountMany: "{count} Matches",
+    playerResults_recentForm: "Aktuelle Form",
+    playerResults_teammate: "Mitspieler",
+    playerResults_tipGames: "Spiele",
+    playerResults_tipWins: "Siege",
+    playerResults_tipLosses: "Niederlagen",
+    playerResults_tipWinRate: "Winrate",
+    playerResults_tipAvgKda: "KDA im Schnitt: Kills plus Assists, geteilt durch Tode. Ohne Tod wird durch 1 geteilt.",
+    playerResults_tipAvgKills: "Kills im Schnitt",
+    playerResults_tipAvgDeaths: "Tode im Schnitt",
+    playerResults_tipAvgAssists: "Assists im Schnitt",
+    playerResults_tipCsPerMinute: "CS pro Minute",
+    playerResults_tipDamagePerMinute: "Schaden an Champions pro Minute",
+    playerResults_tipGoldPerMinute: "Gold pro Minute",
+    playerResults_tipSoloqGames: "Spiele in Ranked Solo/Duo",
+    playerResults_tipFlexqGames: "Spiele in Ranked Flex",
 
     // Sample size labels (translation keys returned by sampleSizeLabel())
     sample_veryLow: "sehr geringe Aussagekraft",
@@ -552,6 +589,10 @@ export const de = {
     scout_manual_winrate: "Winrate",
     scout_manual_winratePlaceholder: "z. B. 62",
     scout_manual_winrateInvalid: "Winrate als Wert zwischen 0 und 100 eintragen.",
+    scout_manual_kda: "KDA",
+    scout_manual_kdaHint: "Optional. Leer lassen, wenn unbekannt.",
+    scout_manual_kdaPlaceholder: "z. B. 3.2",
+    scout_manual_kdaInvalid: "KDA als Wert zwischen 0 und 100 eintragen oder leer lassen.",
     scout_manual_note: "Notiz",
     scout_manual_source: "Quelle",
     scout_manual_recency: "Aktualität",
@@ -559,7 +600,7 @@ export const de = {
     scout_manual_role: "Rolle",
     scout_manual_add: "Eintrag hinzufügen",
     scout_manual_remove: "Eintrag entfernen",
-    scout_manual_removeConfirm: "Diesen Eintrag wirklich entfernen? Games, Winrate und Notiz gehen dabei verloren.",
+    scout_manual_removeConfirm: "Diesen Eintrag wirklich entfernen? Games, Winrate, KDA und Notiz gehen dabei verloren.",
     scout_manual_empty: "Noch keine Scout-Daten für diesen Spieler.",
 
     // Tournament Scout — recency
@@ -605,6 +646,8 @@ export const de = {
     scout_comfortPicks: "Comfort Picks",
     scout_weaknesses: "Schwachstellen",
     scout_confidence: "Aussagekraft",
+    scout_banPriorityValue: "Priorität {priority}%",
+    scout_kdaValue: "KDA {kda}",
     scout_sourceHint: "Basiert ausschließlich auf den Scout-Daten, die du eingetragen hast.",
     scout_lowData: "Dünne Datenlage. Trage mehr Champions oder Games ein, damit die Empfehlung belastbar wird.",
     scout_noAnalysis: "Noch keine Analyse möglich. Trage für mindestens einen Spieler Scout-Daten ein.",

@@ -563,3 +563,141 @@ describe("scout i18n keys are all referenced", () => {
         ).toEqual([])
     })
 })
+
+// ---------------------------------------------------------------------------
+// 9. Numeric example placeholders spell a decimal the way the app does
+// ---------------------------------------------------------------------------
+
+/**
+ * The three `scout_manual_*Placeholder` values are the only Scout strings that
+ * teach a *notation* instead of describing something, and one of them taught
+ * the wrong one until 0.5.3: `scout_manual_kdaPlaceholder` read "z. B. 3,2" in
+ * German while the app renders that very number as "3.2".
+ *
+ * Why the app is right and the placeholder was wrong:
+ *  - `formatScoutNumber()` (src/components/scout/scoutUiHelpers.ts) is
+ *    locale-neutral on purpose and formats through `String()`, so every number
+ *    the Scout prints carries a decimal point in both languages.
+ *  - `kdaInputText()` is `String(kda)` and writes back into this exact input.
+ *    The user types "3,2" once, the row is stored, and from the next render on
+ *    the field reads "3.2". The placeholder was teaching the one spelling the
+ *    user never sees again.
+ *
+ * THE FIX IS NEVER TO TIGHTEN THE PARSER. `parseKdaInput()` and
+ * `parseWinrateInput()` both open with `raw.trim().replace(",", ".")` and
+ * accept a German comma as a deliberate courtesy to a German keyboard. 0.5.3
+ * was a copy change, not a parser change; making the field reject "3,2" would
+ * turn a cosmetic inconsistency into a real usability regression.
+ *
+ * Scope — these three keys, and deliberately nothing else. A blanket "no comma
+ * in scout_ copy" rule is out of the question: German prose is full of
+ * legitimate commas, and such a rule would flag most of the catalogue.
+ *
+ * Which of the three carries which half of the rule, and why:
+ *  - "no comma-formed decimal" covers all three. It is written as `\d,\d`, a
+ *    comma *between digits*, so an ordinary punctuation comma in some later
+ *    rewrite ("z. B. 14, gern mehr") cannot trip it.
+ *      · kda is the key this section exists for.
+ *      · winrate earns it on its own merits: `parseWinrateInput()` accepts
+ *        decimals and winrates print through `formatScoutNumber()` too, so
+ *        "z. B. 62,5" would be the identical mistake, one edit away.
+ *      · games is the weakest of the three and is included with open eyes.
+ *        `parseGamesInput()` is `/^\d+$/`, so a decimal cannot legitimately
+ *        appear there at all and this half can only ever catch a typo. It costs
+ *        nothing given the digit-anchored pattern, and leaving one member of a
+ *        three-key family out of a family rule only makes the next reader
+ *        wonder whether the omission was an oversight.
+ *  - "must show a point-formed decimal" covers the KDA key ALONE. The other two
+ *    examples are integers ("14", "62") and read better that way; demanding a
+ *    decimal point from them would force a decimal into two examples that do
+ *    not want one.
+ *
+ * The lead-in check below is the closest this file comes to pinning text down,
+ * and it stays narrow for that reason: it asserts only that the value still
+ * *reads as an example*. A bare "3.2" in a placeholder looks like a value that
+ * is already filled in, not like guidance, and guidance is this string's entire
+ * job. If the copy ever moves to another example marker, widen the pattern
+ * here; the wording itself stays free.
+ */
+const NUMERIC_EXAMPLE_PLACEHOLDERS = [
+    "scout_manual_gamesPlaceholder",
+    "scout_manual_winratePlaceholder",
+    "scout_manual_kdaPlaceholder",
+] as const
+
+/** The subset whose example is a decimal, and must therefore show a point. */
+const DECIMAL_EXAMPLE_PLACEHOLDERS = ["scout_manual_kdaPlaceholder"] as const
+
+/** A comma between two digits: a decimal separator, not prose punctuation. */
+const COMMA_DECIMAL = /\d,\d/
+
+/** A point between two digits, i.e. the notation the app itself renders. */
+const POINT_DECIMAL = /\d\.\d/
+
+/** How each language marks "this is only an example". */
+const EXAMPLE_LEAD_IN: Record<string, RegExp> = {
+    de: /^z\.\s?B\.\s/,
+    en: /^e\.\s?g\.\s/,
+}
+
+const SEPARATOR_HINT =
+    "The Scout prints numbers through formatScoutNumber(), which is locale-neutral, and " +
+    "kdaInputText() writes String(kda) back into this same field - so the user reads a decimal " +
+    "POINT there from the first save onwards, and the placeholder has to teach that spelling.\n" +
+    "Do NOT 'fix' this in the parser: parseKdaInput() and parseWinrateInput() accept both ',' " +
+    "and '.' on purpose, and have to keep doing so."
+
+describe("scout numeric example placeholders", () => {
+    for (const [lang, dict] of LANGS) {
+        it(`${lang}: numeric example placeholders spell a decimal the way the app does`, () => {
+            for (const key of NUMERIC_EXAMPLE_PLACEHOLDERS) {
+                const value = dict[key]
+                expect(
+                    COMMA_DECIMAL.test(value),
+                    `${lang}.${key} spells a decimal with a comma: "${preview(value)}"\n${SEPARATOR_HINT}`,
+                ).toBe(false)
+            }
+
+            for (const key of DECIMAL_EXAMPLE_PLACEHOLDERS) {
+                const value = dict[key]
+                expect(
+                    POINT_DECIMAL.test(value),
+                    `${lang}.${key} no longer shows a point-formed decimal: "${preview(value)}"\n${SEPARATOR_HINT}`,
+                ).toBe(true)
+            }
+        })
+
+        it(`${lang}: numeric example placeholders still read as an example`, () => {
+            const leadIn = EXAMPLE_LEAD_IN[lang]
+            expect(leadIn, `no example lead-in pattern is defined for "${lang}"`).toBeDefined()
+
+            for (const key of NUMERIC_EXAMPLE_PLACEHOLDERS) {
+                const value = dict[key]
+                expect(
+                    leadIn.test(value),
+                    `${lang}.${key} lost its example lead-in: "${preview(value)}"\n` +
+                        "Without it the placeholder reads as a value that is already filled in " +
+                        "rather than as guidance.",
+                ).toBe(true)
+            }
+        })
+    }
+
+    /**
+     * Anti-vacuity, same idea as the allowlist guards above: a rename would
+     * leave the checks looping over keys that resolve to `undefined`, and
+     * `RegExp.test(undefined)` matches nothing at all - the section would go
+     * quiet instead of red. Both fixes are one line in this file.
+     */
+    it("the placeholder keys this section guards still exist", () => {
+        for (const key of NUMERIC_EXAMPLE_PLACEHOLDERS) {
+            for (const [lang, dict] of LANGS) {
+                expect(
+                    dict[key],
+                    `${lang}.ts no longer holds ${key} - this section would pass vacuously. ` +
+                        "Rename it in NUMERIC_EXAMPLE_PLACEHOLDERS too.",
+                ).toBeTypeOf("string")
+            }
+        }
+    })
+})

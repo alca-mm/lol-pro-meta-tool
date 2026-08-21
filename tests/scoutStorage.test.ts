@@ -23,6 +23,8 @@ import type {
   ScoutState,
   ScoutStateV1,
 } from "../src/scout/types"
+import { withKdaValue } from "../src/components/scout/ScoutDataEditor"
+import { parseKdaInput } from "../src/components/scout/scoutUiHelpers"
 
 /* ==========================================================================
  * localStorage mock
@@ -1702,5 +1704,169 @@ describe("normalizeScoutState - ManualChampionEntry.kda", () => {
     // `undefined` does not even survive JSON.stringify, so this is what a row
     // written with an explicit `kda: undefined` really looks like on reload.
     expect("kda" in loadedEntry({ ...entryLeeSin, kda: undefined })).toBe(false)
+  })
+})
+
+/* ==========================================================================
+ * 21. The editor writes, the storage reads - the seam between them
+ *
+ * WHY THIS SECTION EXISTS: section 20 above proves what src/scout/storage.ts
+ * does with a `kda` it FINDS in a blob, and tests/scoutDataEditor.test.ts
+ * proves what `withKdaValue()` BUILDS. Neither of them puts the two together,
+ * so the one step nobody asserted is the handover: that the row the editor
+ * hands over is still the same row after `saveScoutState()` -> localStorage ->
+ * `loadScoutState()`. That step is also the only one the user ever sees. A KDA
+ * lost there is indistinguishable from a KDA that was never typed.
+ *
+ * WHAT THIS PINS DOWN AND THE TWO NEIGHBOURING SECTIONS DO NOT:
+ *   1. a stated value survives the handover to the exact number, `0` included.
+ *      Losing a `0` is the expensive direction: "not stated" is scored
+ *      NEUTRALLY, so the champion the user marked as their worst would come
+ *      back looking average;
+ *   2. clearing the field leaves no `"kda"` in the written JSON at all. That is
+ *      the byte-for-byte promise of `ManualChampionEntry.kda`, and it is
+ *      asserted on the editor's own object BEFORE saving, because that is the
+ *      half storage cannot make for it - see the comment in that test;
+ *   3. the comma a German keyboard produces travels all the way into storage.
+ *      `parseKdaInput()` is the only place `,` is understood, and a test that
+ *      stops at the parser cannot tell whether the number it returned ever
+ *      reached the disk;
+ *   4. writing a KDA does not move SCOUT_SCHEMA_VERSION.
+ * ========================================================================== */
+
+describe("ManualChampionEntry.kda - editor to storage and back", () => {
+  /**
+   * A savable state around rows this build can construct. Deliberately a local
+   * copy of the helper in section 20 rather than a shared one: both sections
+   * are about `kda`, but they exercise opposite directions, and hoisting it
+   * would tie a change in one to the other. The file already re-declares small
+   * per-section helpers this way (`firstEntry` exists twice above).
+   */
+  function stateWithEntries(entries: ManualChampionEntry[]): ScoutState {
+    return {
+      ...EMPTY_STATE,
+      players: [playerAgurin],
+      playerData: { [playerAgurin.id]: { playerId: playerAgurin.id, entries } },
+    }
+  }
+
+  /** Save one editor-built row and read back what a reload would show. */
+  function roundTrip(entry: ManualChampionEntry): ManualChampionEntry {
+    saveScoutState(stateWithEntries([entry]))
+    return loadScoutState().playerData[playerAgurin.id].entries[0]
+  }
+
+  it("carries a KDA set in the editor into storage, to the exact value", () => {
+    const loaded = roundTrip(withKdaValue(entryLeeSin, 2.5))
+
+    expect(loaded.kda).toBe(2.5)
+    // Nothing else about the row moved on the way. A KDA is additional context,
+    // not a rewrite of the two numbers the ban plan is actually built from.
+    expect(loaded).toEqual({ ...entryLeeSin, kda: 2.5 })
+  })
+
+  it("carries a KDA of 0 into storage instead of quietly improving the row", () => {
+    const loaded = roundTrip(withKdaValue(entryLeeSin, 0))
+
+    expect(loaded.kda).toBe(0)
+    // Present WITH the value 0, not merely readable as 0. A dropped key reads
+    // back as "not stated", which the analysis scores neutrally - i.e. better
+    // than the terrible KDA the user actually entered.
+    expect(Object.hasOwn(loaded, "kda")).toBe(true)
+    expect(store[SCOUT_STORAGE_KEY]).toContain('"kda":0')
+  })
+
+  it("clears a KDA in the editor and leaves no trace of the key in storage", () => {
+    const cleared = withKdaValue(entryLeeSinWithKda, null)
+
+    // ASSERTED ON THE EDITOR'S OBJECT, BEFORE SAVING, AND THAT IS THE POINT:
+    // `saveScoutState()` normalises on write and drops an unusable `kda` by
+    // itself, so a `withKdaValue()` that returned `{ ...entry, kda: null }`
+    // would still round-trip perfectly green. Only this line sees the
+    // difference. Confirmed by mutation: replacing the `delete` in
+    // `withKdaValue()` with `kda: null` turns exactly this test red, while
+    // every round-trip assertion below stays green.
+    expect(Object.hasOwn(cleared, "kda")).toBe(false)
+    // The shape that mutant would produce, spelled out so the contrast is
+    // visible rather than implied.
+    expect(JSON.stringify(cleared)).not.toBe(
+      JSON.stringify({ ...entryLeeSinWithKda, kda: null }),
+    )
+
+    saveScoutState(stateWithEntries([cleared]))
+    expect(store[SCOUT_STORAGE_KEY]).not.toContain('"kda"')
+
+    const loaded = loadScoutState().playerData[playerAgurin.id].entries[0]
+    expect(loaded.kda).toBeUndefined()
+    expect(Object.hasOwn(loaded, "kda")).toBe(false)
+    // The row is back to exactly the fixture it started from - clearing a KDA
+    // costs the KDA and nothing else.
+    expect(loaded).toEqual(entryLeeSin)
+  })
+
+  it("serialises a row the editor never gave a KDA like a row from before the field", () => {
+    // What the editor commits when the KDA field is left empty on a row that
+    // never carried one: parse -> null -> the key that was never there stays
+    // away.
+    const throughEditor = JSON.stringify(roundTrip(withKdaValue(entryLeeSin, null)))
+    // The same row as a bundle without the field would have written it.
+    const beforeTheField = JSON.stringify(roundTrip(entryLeeSin))
+
+    expect(throughEditor).toBe(beforeTheField)
+    expect(throughEditor).not.toContain("kda")
+
+    // HONEST LIMIT OF THIS TEST, so nobody reads more into it than it says:
+    // both strings come out of `normalizeManualEntry()`, so their key ORDER
+    // agrees by construction and the equality alone would survive an editor
+    // that slipped a `null` in. The weight sits on the missing substring and on
+    // the editor-side assertion in the test above. What it does buy is the
+    // end-to-end half of the SCOUT_SCHEMA_VERSION argument: an older bundle
+    // reading this blob finds a byte sequence it already understood.
+  })
+
+  it("carries what the user typed, comma included, from the field into storage", () => {
+    // (typed text, what a reload has to show). Every row starts from a stated
+    // 3.2 on purpose, so the empty field has something to CLEAR - starting from
+    // a row without a KDA would let a `withKdaValue()` that ignores `null` pass.
+    const typed: readonly (readonly [string, number | undefined])[] = [
+      ["", undefined],
+      ["0", 0],
+      ["2.5", 2.5],
+      ["3,2", 3.2],
+    ]
+
+    for (const [raw, expected] of typed) {
+      const parsed = parseKdaInput(raw)
+      // Thrown, not asserted and skipped: a loop that walks on after a rejected
+      // input would report green while having checked nothing.
+      if (!parsed.ok) throw new Error(`parseKdaInput rejected ${JSON.stringify(raw)}`)
+
+      const loaded = roundTrip(withKdaValue(entryLeeSinWithKda, parsed.value))
+
+      expect(loaded.kda, raw).toBe(expected)
+      expect(Object.hasOwn(loaded, "kda"), raw).toBe(expected !== undefined)
+      // The comma is a keyboard courtesy, never a stored value: `"3,2"` is not
+      // a JSON number at all, and a stored string would make the scoring read
+      // the row through a different path than the one it was tested on.
+      expect(store[SCOUT_STORAGE_KEY], raw).not.toContain('"kda":"')
+    }
+  })
+
+  it("keeps SCOUT_SCHEMA_VERSION at 2 across the round trip", () => {
+    saveScoutState(stateWithEntries([withKdaValue(entryLeeSin, 2.5)]))
+
+    expect(store[SCOUT_STORAGE_KEY]).toContain('"schemaVersion":2')
+    expect(loadScoutState().schemaVersion).toBe(SCOUT_SCHEMA_VERSION)
+    expect(SCOUT_SCHEMA_VERSION).toBe(2)
+
+    // WHY A BUMP HERE WOULD BE ACTIVELY HARMFUL, not merely unnecessary: the
+    // version gate discards a HIGHER version wholesale (see "returns the empty
+    // state for an unknown HIGHER schemaVersion" in section 1-6). A still-open
+    // older tab would therefore throw the user's entire scouting session away
+    // the next time it read this blob - to protect it from one extra key it
+    // simply ignores. Left at 2, the worst an older bundle can do is drop that
+    // single KDA on its next save: `kda` is purely additive, and
+    // `normalizeManualEntry()` builds its result field by field instead of
+    // spreading the input, so no other field can travel out with it.
   })
 })

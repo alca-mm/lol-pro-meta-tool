@@ -7,18 +7,20 @@ import {
     type PlayerAccount,
 } from "../../teams/riotService"
 import { useTranslation } from "../../i18n/LanguageContext"
+import { pluralMessage } from "../team/teamUiHelpers"
+import {
+    formatKdaTriple,
+    formatMatchDate,
+    formatWholeNumber,
+    PLAYER_RESULTS_MATCH_COUNT_KEYS,
+} from "./playerResultsFormat"
 
+/**
+ * Queue names stay hardcoded: "SoloQ" and "FlexQ" are the League client's own
+ * labels and read identically in German and English. Translating them would
+ * invent terms no player uses.
+ */
 const QUEUE_LABELS: Record<number, string> = { 420: "SoloQ", 440: "FlexQ" }
-
-function formatDate(iso: string): string {
-    return new Date(iso).toLocaleDateString("de-DE", {
-        day: "2-digit", month: "2-digit", year: "2-digit",
-    })
-}
-
-function kda(k: number, d: number, a: number): string {
-    return `${k}/${d}/${a}`
-}
 
 interface Props {
     matches: RankedMatch[]
@@ -27,7 +29,7 @@ interface Props {
 }
 
 export function MatchTable({ matches, participants, accounts }: Props) {
-    const { t } = useTranslation()
+    const { t, lang } = useTranslation()
     const [queueFilter, setQueueFilter] = useState<number | "">("")
     const [resultFilter, setResultFilter] = useState<"" | "win" | "loss">("")
     const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null)
@@ -63,7 +65,7 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                 </select>
 
                 <span className="muted" style={{ alignSelf: "center" }}>
-                    {filtered.length} Match{filtered.length !== 1 ? "es" : ""}
+                    {pluralMessage(t, filtered.length, PLAYER_RESULTS_MATCH_COUNT_KEYS)}
                 </span>
             </div>
 
@@ -113,13 +115,13 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                                         <td style={{ ...tdStyle, color: m.win ? "var(--green)" : "var(--red)" }}>
                                             {m.win ? t("playerResults_win") : t("playerResults_loss")}
                                         </td>
-                                        <td className="numeric" style={tdStyle}>{kda(m.kills, m.deaths, m.assists)}</td>
+                                        <td className="numeric" style={tdStyle}>{formatKdaTriple(m.kills, m.deaths, m.assists)}</td>
                                         <td className="numeric" style={tdStyle}>{m.cs}</td>
-                                        <td className="numeric" style={tdStyle}>{m.damage_to_champs.toLocaleString()}</td>
-                                        <td className="numeric" style={tdStyle}>{m.gold_earned.toLocaleString()}</td>
+                                        <td className="numeric" style={tdStyle}>{formatWholeNumber(m.damage_to_champs, lang)}</td>
+                                        <td className="numeric" style={tdStyle}>{formatWholeNumber(m.gold_earned, lang)}</td>
                                         <td className="numeric" style={tdStyle}>{m.vision_score}</td>
                                         <td style={tdStyle}>{formatGameDuration(m.game_duration)}</td>
-                                        <td style={{ ...tdStyle, color: "var(--text-dim)" }}>{formatDate(m.game_start)}</td>
+                                        <td style={{ ...tdStyle, color: "var(--text-dim)" }}>{formatMatchDate(m.game_start, lang)}</td>
                                         <td style={tdStyle}>
                                             {teammates.length > 0 && (
                                                 <button
@@ -140,13 +142,13 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                                             style={{ background: "rgba(34,38,58,0.6)", fontSize: "0.75rem" }}
                                         >
                                             <td style={tdStyle} colSpan={2}>
-                                                <span className="muted" style={{ paddingLeft: "1rem" }}>↳ Teammate</span>
+                                                <span className="muted" style={{ paddingLeft: "1rem" }}>↳ {t("playerResults_teammate")}</span>
                                             </td>
                                             <td style={tdStyle}>{tp.champion_name}</td>
                                             <td style={{ ...tdStyle, color: tp.win ? "var(--green)" : "var(--red)" }}>
                                                 {tp.win ? t("playerResults_win") : t("playerResults_lossShort")}
                                             </td>
-                                            <td className="numeric" style={tdStyle}>{kda(tp.kills, tp.deaths, tp.assists)}</td>
+                                            <td className="numeric" style={tdStyle}>{formatKdaTriple(tp.kills, tp.deaths, tp.assists)}</td>
                                             <td className="numeric" style={tdStyle}>{tp.cs}</td>
                                             <td style={tdStyle} colSpan={5}></td>
                                             <td style={tdStyle}></td>

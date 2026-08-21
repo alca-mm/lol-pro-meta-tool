@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "../i18n/LanguageContext"
+import { formatDateNumeric, formatDateTimeNumeric, formatNumber } from "../i18n/format"
+import type { Lang } from "../i18n/types"
 import type { Match } from "../domain/types"
 
 type SyncReportInfo = {
@@ -35,8 +37,23 @@ function parseDate(value: string | null | undefined): Date | null {
     return parsed
 }
 
-function formatDate(value: string | null | undefined): string {
-    if (!value) return "unbekannt"
+/**
+ * A sync/match date for the badge, in the active language.
+ *
+ * Stays module-level and pure, so `lang` and the translated "unknown" label
+ * are threaded in as arguments rather than read from a hook. `unknownLabel` is
+ * `t("ds_unknownDate")` at the call site: this used to be a hardcoded German
+ * word, which an English user read right next to `08/21/2026`.
+ *
+ * Three fallbacks, in order: no value at all -> the label; a value that is not
+ * a date -> the raw string, so the user sees what the data actually says; a
+ * `Date` the formatter refuses (`formatDateNumeric` answers `""` for an
+ * invalid one) -> the raw string as well. `parseDate` already rules that last
+ * case out, but a bare `formatted` return would render an empty gap after the
+ * "Letzter Sync:" label if it ever stopped doing so.
+ */
+function formatDate(value: string | null | undefined, lang: Lang, unknownLabel: string): string {
+    if (!value) return unknownLabel
 
     const parsed = parseDate(value)
 
@@ -44,15 +61,12 @@ function formatDate(value: string | null | undefined): string {
         return value
     }
 
-    return new Intl.DateTimeFormat("de-DE", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-    }).format(parsed)
+    return formatDateNumeric(parsed, lang) || value
 }
 
-function formatDateTime(value: string | null | undefined): string {
-    if (!value) return "unbekannt"
+/** {@link formatDate} plus the time. Same fallback chain, same reasons. */
+function formatDateTime(value: string | null | undefined, lang: Lang, unknownLabel: string): string {
+    if (!value) return unknownLabel
 
     const parsed = parseDate(value)
 
@@ -60,13 +74,7 @@ function formatDateTime(value: string | null | undefined): string {
         return value
     }
 
-    return new Intl.DateTimeFormat("de-DE", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    }).format(parsed)
+    return formatDateTimeNumeric(parsed, lang) || value
 }
 
 function getLatestMatchDate(matches: Match[]): string | null {
@@ -149,8 +157,11 @@ export function DataSourceInfo({
                                    syncReport,
                                    syncReportFailed = false,
                                }: DataSourceInfoProps) {
-    const { t } = useTranslation()
+    const { t, lang } = useTranslation()
     const [isVisible, setIsVisible] = useState(true)
+    // Read once: the two module-level date helpers take it as an argument,
+    // because they must stay pure and cannot call `t` themselves.
+    const unknownDate = t("ds_unknownDate")
 
     const dataSummary = useMemo(() => {
         const oldestDate = getOldestMatchDate(matches)
@@ -199,15 +210,15 @@ export function DataSourceInfo({
             <span>{t("ds_synced")}</span>
 
             <span className="datasource-meta">
-                {t("ds_lastSync")} {formatDateTime(lastSyncDate)}
+                {t("ds_lastSync")} {formatDateTime(lastSyncDate, lang, unknownDate)}
             </span>
 
             <span className="datasource-meta">
-                {t("ds_dataUpTo")} {formatDate(latestMatchDate)}
+                {t("ds_dataUpTo")} {formatDate(latestMatchDate, lang, unknownDate)}
             </span>
 
             <span className="datasource-meta">
-                {t("ds_dateRange")} {formatDate(oldestMatchDate)} – {formatDate(latestMatchDate)}
+                {t("ds_dateRange")} {formatDate(oldestMatchDate, lang, unknownDate)} – {formatDate(latestMatchDate, lang, unknownDate)}
             </span>
 
             {dataSummary.latestPatch && (
@@ -217,7 +228,7 @@ export function DataSourceInfo({
             )}
 
             <span className="datasource-meta">
-                {t("ds_matches")} {dataSummary.matchCount.toLocaleString("de-DE")}
+                {t("ds_matches")} {formatNumber(dataSummary.matchCount, lang)}
             </span>
 
             {syncReportFailed && (

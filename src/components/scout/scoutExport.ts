@@ -33,9 +33,11 @@ import type {
   ScoutReason,
 } from "../../scout/types"
 import {
+  banCandidateKda,
   banRoleLabels,
   formatScoutNumber,
   scoutConfidenceKey,
+  scoutKdaLabel,
   scoutMembershipKey,
   scoutRoleKey,
   scoutRoleLabel,
@@ -59,9 +61,20 @@ export interface ScoutExportOptions {
   includeSubstitutes?: boolean
 }
 
+/**
+ * `Ahri (30 Spiele, 68%, KDA 2.6)`.
+ *
+ * Games, winrate and KDA are items of ONE parenthesis, so they take the `", "`
+ * of the separator rule above, never the middot. A value the rows never stated
+ * is left out rather than printed as an empty or zero one — the reader of this
+ * text cannot ask a follow-up question, so a number that is not there must not
+ * look like a number that is.
+ */
 function formatSignal(t: ScoutTranslate, signal: ChampionSignal): string {
   const parts = [`${signal.games} ${t("common_games")}`]
   if (signal.winrate !== null) parts.push(`${formatScoutNumber(signal.winrate)}%`)
+  const kdaLabel = scoutKdaLabel(t, signal.kda)
+  if (kdaLabel !== null) parts.push(kdaLabel)
   return `${signal.championName} (${parts.join(", ")})`
 }
 
@@ -70,11 +83,17 @@ function formatReasons(t: ScoutTranslate, reasons: readonly ScoutReason[]): stri
 }
 
 /**
- * `1. Karma gegen Mid · Gegner#EUW · [Hoch]`, die Begründungen darunter.
+ * `1. Karma gegen Mid · Gegner#EUW · KDA 3.2 · [Hoch]`, die Begründungen darunter.
  *
  * The lane suffix hangs directly off the champion name (the i18n texts are
  * lower-case and unpunctuated for exactly that), the target player follows,
- * then the confidence, then every reason the engine gave.
+ * then their KDA, then the confidence, then every reason the engine gave.
+ *
+ * THE KDA SITS BEHIND THE PLAYER AND BEFORE THE CONFIDENCE, and that order is
+ * the statement: it belongs to the player just named (`banCandidateKda()`
+ * reads it off exactly that player's signal), while the bracketed confidence
+ * closes the line as the verdict over everything in front of it. Absent when
+ * the rows behind the ban stated no KDA.
  */
 function formatCandidate(
   t: ScoutTranslate,
@@ -89,6 +108,8 @@ function formatCandidate(
   const targetName =
     candidate.targetPlayerId === null ? undefined : displayNameById.get(candidate.targetPlayerId)
   if (targetName !== undefined) head.push(targetName)
+  const kdaLabel = scoutKdaLabel(t, banCandidateKda(candidate))
+  if (kdaLabel !== null) head.push(kdaLabel)
   head.push(`[${t(scoutConfidenceKey(candidate.confidence))}]`)
 
   const lines = [head.join(" · ")]

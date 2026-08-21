@@ -37,6 +37,7 @@
 import { pluralKey } from "../../i18n/plural"
 import type { PluralKeys } from "../../i18n/plural"
 import type { TranslationKey } from "../../i18n/types"
+import { SCOUT_KDA_MAX_PLAUSIBLE } from "../../scout/analysis"
 import {
   SCOUT_LINEUP_SLOTS,
   SCOUT_REMOVED_PLAYERS_MAX,
@@ -201,6 +202,52 @@ export function fillPlaceholders(template: string, params?: ScoutReasonParams): 
     return typeof value === "number" ? formatScoutNumber(value) : String(value)
   })
   return tidyText(replaced)
+}
+
+/**
+ * `"KDA 3.2"` for a stated KDA, `null` when there is nothing to state.
+ *
+ * The `null` return is the whole point: the caller renders the KDA segment
+ * only when it gets a string, so a champion whose rows never mentioned a KDA
+ * shows no KDA at all instead of a "KDA unknown" line on every single row.
+ * That is the P4c rule ("only what belongs to the next action") applied to a
+ * value that is missing far more often than it is present.
+ *
+ * `0` RETURNS `"KDA 0"`, not `null`. A falsy check here would hide precisely
+ * the worst KDA in the list while the score is busy punishing it, so screen
+ * and ban order would tell two different stories about the same champion.
+ * Hence the explicit `=== null || === undefined` — see `ChampionSignal.kda`.
+ *
+ * Anything that is not a finite number (`NaN`, `Infinity`, a value that
+ * survived a bad cast) is treated as "not stated" rather than printed: the
+ * scoring reads it as neutral, so showing it would advertise a figure that
+ * counts for nothing.
+ */
+export function scoutKdaLabel(t: ScoutTranslate, kda: number | null | undefined): string | null {
+  if (kda === null || kda === undefined) return null
+  if (typeof kda !== "number" || !Number.isFinite(kda)) return null
+  return fillPlaceholders(t("scout_kdaValue"), { kda })
+}
+
+/**
+ * `"Priorität 67%"` — the ban row's own number, labelled.
+ *
+ * WHY IT CARRIES A WORD AT ALL: the row used to hold exactly one figure, so a
+ * bare `67%` was unambiguous. Since the KDA moved in beside it the run reads
+ * `67% · KDA 3.2`, and only the second number says what it is. The label is
+ * what keeps the first one from being read as another rating of the same kind.
+ *
+ * The percent sign lives in the i18n text, not here, so a language that puts
+ * it elsewhere can move it. Rounding happens before the value is handed over
+ * because `fillPlaceholders` would otherwise print one decimal of a figure
+ * that is a coarse ranking, not a measurement.
+ *
+ * Always a string: unlike a KDA, a candidate always has a priority — it is
+ * computed, never absent — so there is no "nothing to state" case here.
+ */
+export function scoutBanPriorityLabel(t: ScoutTranslate, candidate: BanCandidate): string {
+  const percent = Math.round(candidate.priority * 100)
+  return fillPlaceholders(t("scout_banPriorityValue"), { priority: percent })
 }
 
 /**
@@ -436,7 +483,11 @@ export const SCOUT_IMPORT_SKIPPED_RECOMMENDED_KEYS: PluralKeys = {
  *
  * src/scout/storage.ts silently DROPS a row whose `games` is negative or whose
  * `winrate` leaves 0–100. The editor therefore must not let such a row come
- * into existence in the first place — these two parsers are that gate.
+ * into existence in the first place — the first two parsers are that gate.
+ *
+ * `parseKdaInput()` guards a different thing and therefore has a different
+ * shape. A KDA can never drop a row, so its job is not to protect the storage
+ * layer but to keep "not stated" and a stated `0` apart. Its own doc says why.
  * ========================================================================== */
 
 /** Games: non-negative integer. Returns `null` for anything else. */
@@ -457,6 +508,64 @@ export function parseWinrateInput(raw: string): number | null {
   const value = Number(text)
   if (!Number.isFinite(value) || value < 0 || value > 100) return null
   return value
+}
+
+/**
+ * The result of reading the OPTIONAL KDA field.
+ *
+ * Three outcomes, and they must not be folded into two. `parseGamesInput()` and
+ * `parseWinrateInput()` above can return `number | null` because for them an
+ * empty field IS an error: storage drops the row without a games count. A KDA
+ * is different. Absent is the normal, expected state of the field, it is scored
+ * neutrally, and `0` is a real and very bad value that has to stay apart from
+ * it (see `ManualChampionEntry.kda` in src/scout/types.ts).
+ *
+ *   { ok: true, value: null }    the field is empty: not stated, scored neutral
+ *   { ok: true, value: 0 }       the user stated a genuinely bad KDA
+ *   { ok: false }                unusable input: keep the draft, flag the field
+ */
+export type KdaInputResult = { ok: true; value: number | null } | { ok: false }
+
+/**
+ * KDA for the editor: empty, or a non-negative number no larger than
+ * {@link SCOUT_KDA_MAX_PLAUSIBLE}. `,` is accepted as a decimal separator, the
+ * same courtesy `parseWinrateInput()` extends to a German keyboard.
+ *
+ * The upper bound is imported from the scoring rather than restated: above it
+ * `normalizeKda()` reads the value as "not stated" and scores it neutrally, so
+ * a typed-in 500 would sit in the row looking like data while doing nothing.
+ * Refusing it is the honest answer. Nothing is clamped here either — a value
+ * quietly pulled down to 100 would change a ban order invisibly.
+ *
+ * THIS ALSO CATCHES A VALUE NOBODY TYPED, and that is wanted rather than
+ * tolerated. `importRowToManualEntry()` and `normalizeManualEntry()` both accept
+ * any finite KDA `>= 0` with no upper bound, so an implausible one can arrive
+ * from a stats import and open the editor already flagged. It should be: that
+ * value is scored as "not stated" either way, so leaving it unmarked would show
+ * the user a number that quietly counts for nothing. The message offers the way
+ * out ("or leave it empty"), and clearing the field is a valid commit.
+ */
+export function parseKdaInput(raw: string): KdaInputResult {
+  const text = raw.trim().replace(",", ".")
+  if (text.length === 0) return { ok: true, value: null }
+  if (!/^\d+(\.\d+)?$/.test(text)) return { ok: false }
+  const value = Number(text)
+  if (!Number.isFinite(value) || value < 0 || value > SCOUT_KDA_MAX_PLAUSIBLE) return { ok: false }
+  return { ok: true, value }
+}
+
+/**
+ * The text an existing KDA shows in the input: nothing when the row states
+ * none, the number itself otherwise.
+ *
+ * Written out rather than `String(kda ?? "")` shorthand because the interesting
+ * case is `0`: `kda ? String(kda) : ""` blanks a real zero out, the user sees an
+ * empty field, types nothing, and the worst KDA of the list silently becomes
+ * "not stated" — which scores NEUTRALLY, i.e. better.
+ */
+export function kdaInputText(kda: number | null | undefined): string {
+  if (kda === null || kda === undefined) return ""
+  return String(kda)
 }
 
 let entryCounter = 0
@@ -879,6 +988,48 @@ export function banRoleLabels(t: ScoutTranslate, candidate: BanCandidate): strin
   }
 
   return labels
+}
+
+/**
+ * The KDA behind a ban recommendation, or `null` when none was stated.
+ *
+ * `forPlayerId` DECIDES WHOSE KDA IT IS, and passing it is not optional
+ * politeness. The same candidate is listed in several places: once in the
+ * team-wide plan, and again under the heading of EVERY player it takes
+ * something away from, because `targetBansByPlayer` filters on
+ * `affectedPlayerIds`, not on the target. A ban row under "Spieler B, Mid"
+ * that printed the KDA of `targetPlayerId` would show a number player B never
+ * posted, and without a lineup there is not even a lane suffix to hint at it.
+ * So every per-player list passes its own player, and only the team-wide list
+ * omits the argument.
+ *
+ * WITHOUT IT the fallback is `targetPlayerId`, the player the ban is *aimed*
+ * at. The engine picked them with care (the strongest on-role signal, only
+ * then the strongest signal at all), so the team-wide row reuses the engine's
+ * decision instead of re-deriving one here. The export takes the same route
+ * and prints that player's name directly in front of the KDA, which is what
+ * keeps the number attached to somebody there.
+ *
+ * A LOOKUP BY PLAYER IS EXACT, not an approximation: one candidate is one
+ * champion, and one player contributes at most one signal per champion (the
+ * analysis groups their rows before it scores them). So at most one signal can
+ * match. The engine itself relies on the same identity when it sorts
+ * `targetBansByPlayer`.
+ *
+ * Deliberately NOT an average across the candidate's signals. On an overlap
+ * ban that would blend two different players' numbers into a figure neither of
+ * them ever posted, and no second aggregation convention should exist next to
+ * `aggregateKda()`.
+ */
+export function banCandidateKda(
+  candidate: BanCandidate,
+  forPlayerId?: ScoutPlayerId,
+): number | null {
+  const playerId = forPlayerId ?? candidate.targetPlayerId
+  if (playerId === null) return null
+  const signal = candidate.signals.find((item) => item.playerId === playerId)
+  if (signal === undefined) return null
+  return signal.kda
 }
 
 /* ==========================================================================

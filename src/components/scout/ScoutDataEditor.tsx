@@ -12,6 +12,15 @@
  * comes back on blur. Nothing is clamped — a winrate quietly pulled up to 100
  * would change a ban priority and nobody would ever see it happen.
  *
+ * THE KDA FIELD IS THE ONE EXCEPTION TO THE PARAGRAPH ABOVE, and it is the
+ * reason `withKdaValue()` exists. Games and winrate are mandatory: an empty
+ * field is an error there. A KDA is optional, so an empty field is a legitimate
+ * answer ("not stated") that the analysis scores NEUTRALLY, while `0` is a real
+ * and very bad value. Those two must never collapse into one another, which is
+ * why the parser returns a result object and why "not stated" is written as an
+ * ABSENT key rather than a stored `null` - see `ManualChampionEntry.kda` in
+ * src/scout/types.ts. An unusable KDA costs the KDA and never the row.
+ *
  * ROLE: every row carries the role its numbers were recorded on. Two different
  * roles reach this editor and they must not be confused. `defaultRole` is the
  * role a *new* row starts on — a pre-selection that saves a click, and it may
@@ -44,7 +53,9 @@ import {
     type ScoutTranslate,
     createEntryId,
     fillPlaceholders,
+    kdaInputText,
     parseGamesInput,
+    parseKdaInput,
     parseWinrateInput,
     scoutRecencyKey,
     scoutRoleKey,
@@ -87,8 +98,35 @@ export function isManualEntryFilled(entry: ManualChampionEntry): boolean {
         entry.championName.trim().length > 0 ||
         entry.games !== NEW_ENTRY_GAMES ||
         entry.winrate !== NEW_ENTRY_WINRATE ||
+        // Explicitly against null/undefined, never falsiness: a stated `0` is
+        // the worst KDA there is and losing it to a mis-click is a real loss.
+        (entry.kda !== undefined && entry.kda !== null) ||
         entry.note.trim().length > 0
     )
+}
+
+/**
+ * Set or clear the optional KDA of a row.
+ *
+ * `null` means "not stated" and REMOVES the key instead of storing `null`. That
+ * is not tidiness: `ManualChampionEntry.kda` promises that a row without a
+ * usable KDA serialises exactly as it did before the field existed, and that
+ * promise is what lets `SCOUT_SCHEMA_VERSION` stay at 2 - an older build reading
+ * the state finds nothing new, a newer build reading an older state finds no
+ * `kda` and reads that as "not stated". `normalizeManualEntry()` keeps the same
+ * promise on load and on save; this keeps it in the editor's own state, so an
+ * untouched row still stringifies to the very same JSON in between.
+ *
+ * A stated `0` is kept. It is a real value (no kills, no assists) and the only
+ * thing separating it from "not stated" is that the key is there at all.
+ */
+export function withKdaValue(entry: ManualChampionEntry, kda: number | null): ManualChampionEntry {
+    if (kda === null) {
+        const next = { ...entry }
+        delete next.kda
+        return next
+    }
+    return { ...entry, kda }
 }
 
 /**
@@ -208,16 +246,25 @@ interface RowProps {
 }
 
 /**
- * One champion row. `games` / `winrate` live twice: as the committed number in
- * `entry` and as the in-progress text in local state. Only a value that passes
- * the parser is written back up — everything else stays here, visible and
+ * One champion row. `games` / `winrate` / `kda` live twice: as the committed
+ * value in `entry` and as the in-progress text in local state. Only a value that
+ * passes the parser is written back up — everything else stays here, visible and
  * flagged, so the storage layer never gets a chance to drop the row.
+ *
+ * KDA joins that pair rather than getting a mechanism of its own, but it commits
+ * `number | null` where the other two commit `number`: clearing the field is a
+ * valid commit ("not stated"), not a refusal.
  */
 function ScoutEntryRow({ entry, lineupRole, onChange, onRemove }: RowProps) {
     const { t } = useTranslation()
     const [gamesText, setGamesText] = useState(() => String(entry.games))
     const [winrateText, setWinrateText] = useState(() => String(entry.winrate))
-    const [committed, setCommitted] = useState({ games: entry.games, winrate: entry.winrate })
+    const [kdaText, setKdaText] = useState(() => kdaInputText(entry.kda))
+    const [committed, setCommitted] = useState({
+        games: entry.games,
+        winrate: entry.winrate,
+        kda: entry.kda ?? null,
+    })
     const [championTouched, setChampionTouched] = useState(false)
     /** Only used when a persisted row predates entry ids — see `withEntryIds()`. */
     const [fallbackId] = useState(createEntryId)
@@ -227,20 +274,33 @@ function ScoutEntryRow({ entry, lineupRole, onChange, onRemove }: RowProps) {
     // shows numbers that are no longer stored. Adjusting state during render is
     // React's documented pattern for this; our own commits update `committed`
     // themselves, so typing never trips this branch.
-    if (committed.games !== entry.games || committed.winrate !== entry.winrate) {
+    // `undefined` and `null` are the same statement here ("not stated"), so the
+    // comparison runs on the normalised value. Comparing `entry.kda` raw would
+    // make a cleared row fight this branch on every single render.
+    const entryKda = entry.kda ?? null
+    if (
+        committed.games !== entry.games ||
+        committed.winrate !== entry.winrate ||
+        committed.kda !== entryKda
+    ) {
         if (committed.games !== entry.games) setGamesText(String(entry.games))
         if (committed.winrate !== entry.winrate) setWinrateText(String(entry.winrate))
-        setCommitted({ games: entry.games, winrate: entry.winrate })
+        if (committed.kda !== entryKda) setKdaText(kdaInputText(entryKda))
+        setCommitted({ games: entry.games, winrate: entry.winrate, kda: entryKda })
     }
 
     const rowId = entry.id ?? fallbackId
     const championErrorId = `${rowId}-champion-error`
     const gamesErrorId = `${rowId}-games-error`
     const winrateErrorId = `${rowId}-winrate-error`
+    const kdaErrorId = `${rowId}-kda-error`
     const roleHintId = `${rowId}-role-hint`
 
     const gamesValid = parseGamesInput(gamesText) !== null
     const winrateValid = parseWinrateInput(winrateText) !== null
+    // An empty KDA field is VALID, so this reads `.ok` and is never a null
+    // check. A row that simply states no KDA must not be born red.
+    const kdaValid = parseKdaInput(kdaText).ok
     // An empty champion name is dropped by the loader just as hard as a broken
     // number, so it is flagged and explained — but only once the user left the
     // field or put data into the row, so a fresh row is never born red.
@@ -248,20 +308,35 @@ function ScoutEntryRow({ entry, lineupRole, onChange, onRemove }: RowProps) {
         entry.championName.trim().length === 0 && (championTouched || isManualEntryFilled(entry))
     const roleHint = roleMismatchHint(t, entry.role, lineupRole)
 
+    // One place that records what was committed, so no third number can be
+    // added without its draft following along. Each handler used to rebuild the
+    // committed pair by hand, which is exactly the shape that goes stale.
+    function commit(next: ManualChampionEntry) {
+        setCommitted({ games: next.games, winrate: next.winrate, kda: next.kda ?? null })
+        onChange(next)
+    }
+
     function handleGames(value: string) {
         setGamesText(value)
         const parsed = parseGamesInput(value)
         if (parsed === null) return
-        setCommitted({ games: parsed, winrate: entry.winrate })
-        onChange({ ...entry, games: parsed })
+        commit({ ...entry, games: parsed })
     }
 
     function handleWinrate(value: string) {
         setWinrateText(value)
         const parsed = parseWinrateInput(value)
         if (parsed === null) return
-        setCommitted({ games: entry.games, winrate: parsed })
-        onChange({ ...entry, winrate: parsed })
+        commit({ ...entry, winrate: parsed })
+    }
+
+    function handleKda(value: string) {
+        setKdaText(value)
+        const parsed = parseKdaInput(value)
+        // Refused input stays in the draft and stays flagged, and the row keeps
+        // the KDA it had. Clearing the field IS accepted and commits `null`.
+        if (!parsed.ok) return
+        commit(withKdaValue(entry, parsed.value))
     }
 
     function handleRemove() {
@@ -326,6 +401,29 @@ ${confirmText}` : confirmText
                     onChange={(event) => handleWinrate(event.target.value)}
                     onBlur={() => {
                         if (!winrateValid) setWinrateText(String(entry.winrate))
+                    }}
+                />
+            </div>
+
+            <div className="scout-entry-field scout-entry-number">
+                <span className="scout-entry-label" title={t("scout_manual_kdaHint")}>
+                    {t("scout_manual_kda")}
+                </span>
+                <input
+                    type="text"
+                    inputMode="decimal"
+                    value={kdaText}
+                    aria-label={t("scout_manual_kda")}
+                    aria-invalid={!kdaValid}
+                    aria-describedby={kdaValid ? undefined : kdaErrorId}
+                    className={kdaValid ? undefined : "scout-input-invalid"}
+                    placeholder={t("scout_manual_kdaPlaceholder")}
+                    title={t("scout_manual_kdaHint")}
+                    onChange={(event) => handleKda(event.target.value)}
+                    onBlur={() => {
+                        // Back to the committed value, which for a row that
+                        // states no KDA is an empty field, not the word "null".
+                        if (!kdaValid) setKdaText(kdaInputText(entry.kda))
                     }}
                 />
             </div>
@@ -421,6 +519,11 @@ ${confirmText}` : confirmText
             {winrateValid ? null : (
                 <p className="scout-error" id={winrateErrorId}>
                     {t("scout_manual_winrateInvalid")}
+                </p>
+            )}
+            {kdaValid ? null : (
+                <p className="scout-error" id={kdaErrorId}>
+                    {t("scout_manual_kdaInvalid")}
                 </p>
             )}
             {roleHint === null ? null : (

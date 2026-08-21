@@ -4,11 +4,14 @@
  */
 
 import { useTranslation } from "../../i18n/LanguageContext"
-import type { BanCandidate, ChampionSignal, ScoutConfidence, ScoutReason, ScoutRoleFit, ScoutWarning } from "../../scout/types"
+import type { BanCandidate, ChampionSignal, ScoutConfidence, ScoutPlayerId, ScoutReason, ScoutRoleFit, ScoutWarning } from "../../scout/types"
 import {
+    banCandidateKda,
     banRoleLabels,
     formatScoutNumber,
+    scoutBanPriorityLabel,
     scoutConfidenceKey,
+    scoutKdaLabel,
     scoutRoleFitKey,
     translateScoutReason,
     translateScoutWarning,
@@ -74,9 +77,13 @@ export function ScoutWarningList({ warnings }: { warnings: readonly ScoutWarning
     )
 }
 
-/** `Champion · 14 Spiele · 62 %` plus every reason behind the signal. */
+/** `Champion` plus `14 Spiele · 62% · KDA 3.2` and every reason behind the signal. */
 export function ScoutSignalRow({ signal }: { signal: ChampionSignal }) {
     const { t } = useTranslation()
+    // `null` whenever no row behind this champion stated a KDA, which is the
+    // common case. The segment then disappears instead of announcing that
+    // something is unknown on every single line.
+    const kdaLabel = scoutKdaLabel(t, signal.kda)
     return (
         <li className="scout-signal">
             <div className="scout-signal-head">
@@ -84,6 +91,7 @@ export function ScoutSignalRow({ signal }: { signal: ChampionSignal }) {
                 <span className="muted scout-signal-facts">
                     {signal.games} {t("common_games")}
                     {signal.winrate !== null ? ` · ${formatScoutNumber(signal.winrate)}%` : ""}
+                    {kdaLabel !== null ? ` · ${kdaLabel}` : ""}
                 </span>
                 <ScoutRoleFitBadge roleFit={signal.roleFit} />
                 {signal.fromSubstitute && (
@@ -114,10 +122,26 @@ export function ScoutSignalRow({ signal }: { signal: ChampionSignal }) {
  * texts are lower-case and unpunctuated so the row reads as one phrase:
  * "Karma gegen Mid". They come from `banRoleLabels()` and are empty when no
  * lineup is known, which is the only honest output in that case.
+ *
+ * `forPlayerId` IS REQUIRED OF EVERY PER-PLAYER LIST. The same candidate shows
+ * up under each player it hits, so a row rendered under "Spieler B" has to
+ * read the KDA off player B, not off the candidate's global target. Only the
+ * team-wide plan, which claims no player, leaves it out. See
+ * `banCandidateKda()` for the full argument.
  */
-export function ScoutBanRow({ candidate, rank }: { candidate: BanCandidate; rank: number }) {
+export function ScoutBanRow({
+    candidate,
+    rank,
+    forPlayerId,
+}: {
+    candidate: BanCandidate
+    rank: number
+    forPlayerId?: ScoutPlayerId
+}) {
     const { t } = useTranslation()
     const roleLabels = banRoleLabels(t, candidate)
+    const priorityLabel = scoutBanPriorityLabel(t, candidate)
+    const kdaLabel = scoutKdaLabel(t, banCandidateKda(candidate, forPlayerId))
 
     return (
         <li className="scout-ban">
@@ -127,8 +151,21 @@ export function ScoutBanRow({ candidate, rank }: { candidate: BanCandidate; rank
                 {roleLabels.length > 0 && (
                     <span className="scout-ban-lane">{roleLabels.join(" · ")}</span>
                 )}
+                {/*
+                  * Priority and KDA share ONE span, joined by the same middot
+                  * the signal row and the export use between facts. Two
+                  * sibling spans carry identical styling and only the flex
+                  * gap between them, so the two figures would read as one run
+                  * — and the ban row would be the only place in the tab with a
+                  * third separator convention.
+                  *
+                  * BOTH numbers name themselves. `Priorität 67% · KDA 3.2`:
+                  * one labelled figure beside one bare one invites reading the
+                  * bare one as more of the same.
+                  */}
                 <span className="muted scout-signal-facts">
-                    {formatScoutNumber(Math.round(candidate.priority * 100))}%
+                    {priorityLabel}
+                    {kdaLabel !== null ? ` · ${kdaLabel}` : ""}
                 </span>
                 <ScoutRoleFitBadge roleFit={candidate.roleFit} />
                 <span className={`scout-chip scout-chip-${candidate.confidence}`}>

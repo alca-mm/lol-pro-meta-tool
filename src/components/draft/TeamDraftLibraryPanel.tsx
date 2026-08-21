@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react"
 import { useTranslation } from "../../i18n/LanguageContext"
+import { formatDateMedium } from "../../i18n/format"
+import type { Lang } from "../../i18n/types"
 import type { PickSlot } from "../../draft/types"
 import type { TeamRole } from "../../teams/teamService"
 import type { SavedTeamDraft } from "../../teams/teamDraftsService"
@@ -22,6 +24,36 @@ interface TeamDraftLibraryPanelProps {
     onLoadDraft: (draft: SavedTeamDraft) => void
 }
 
+/**
+ * The stored ISO timestamp as a readable date in the APP's language:
+ * `21. Aug. 2026` / `Aug 21, 2026`.
+ *
+ * This was the only place in the app that passed `undefined` as the locale, so
+ * it followed the browser instead of the language switch. That is worst here of
+ * all places, because `month: "short"` prints a translated month NAME: a German
+ * user on an English system read "Aug 21, 2026" in an otherwise German panel.
+ *
+ * WHY THERE IS NO try/catch ANY MORE, stated carefully because an earlier
+ * version of this comment got it wrong: the OLD code called
+ * `toLocaleDateString`, which does not throw on garbage — it returns the
+ * literal string "Invalid Date". So that `catch { return iso }` really was
+ * unreachable, and the real failure mode was "Invalid Date" sitting in the UI
+ * looking like data.
+ *
+ * The NEW path is not throw-free by nature. `formatDateMedium` uses
+ * `Intl.DateTimeFormat(...).format(...)`, which DOES throw a RangeError on an
+ * invalid date; it is that function's own `isValidDate` guard that turns the
+ * throw into `""`. The safety lives there now, not here. We fall back to the
+ * raw `iso`: it keeps the original intent, and a visibly odd timestamp beats a
+ * label reading "Aktualisiert:" with nothing behind it.
+ *
+ * Module level, not inside the component: it closes over nothing, so its two
+ * arguments are its whole input.
+ */
+function formatUpdatedAt(iso: string, lang: Lang): string {
+    return formatDateMedium(new Date(iso), lang) || iso
+}
+
 export function TeamDraftLibraryPanel({
     activeTeamId,
     activeTeamName,
@@ -33,7 +65,7 @@ export function TeamDraftLibraryPanel({
     patch,
     onLoadDraft,
 }: TeamDraftLibraryPanelProps) {
-    const { t } = useTranslation()
+    const { t, lang } = useTranslation()
     const [drafts, setDrafts] = useState<SavedTeamDraft[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -95,14 +127,6 @@ export function TeamDraftLibraryPanel({
         if (activeTeamId) {
             const updated = await fetchTeamDrafts(activeTeamId)
             setDrafts(updated)
-        }
-    }
-
-    function formatUpdatedAt(iso: string): string {
-        try {
-            return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-        } catch {
-            return iso
         }
     }
 
@@ -193,7 +217,7 @@ export function TeamDraftLibraryPanel({
                                         )}
                                         <br />
                                         <span className="muted" style={{ fontSize: "0.75rem" }}>
-                                            {t("drafts_updated")}: {formatUpdatedAt(draft.updatedAt)}
+                                            {t("drafts_updated")}: {formatUpdatedAt(draft.updatedAt, lang)}
                                         </span>
                                         {draft.note && (
                                             <p className="muted" style={{ margin: "0.2rem 0 0", fontSize: "0.8rem", maxWidth: "20rem" }}>

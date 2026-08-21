@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest"
 import { de } from "../src/i18n/de"
 import { en } from "../src/i18n/en"
 import type { TranslationKey } from "../src/i18n/types"
-import { analyzeScout } from "../src/scout/analysis"
+import { SCOUT_KDA_MAX_PLAUSIBLE, analyzeScout } from "../src/scout/analysis"
 import { parseScoutInput } from "../src/scout/linkParser"
 import { createEmptyScoutLineup, normalizeScoutState } from "../src/scout/storage"
 import {
@@ -24,6 +24,7 @@ import {
 } from "../src/scout/types"
 import type {
   BanCandidate,
+  ChampionSignal,
   ManualChampionEntry,
   ScoutLineup,
   ScoutPlayer,
@@ -39,6 +40,7 @@ import {
   archiveRemovedPlayers,
   assignPlayerToSlot,
   autofillLineupFromRoles,
+  banCandidateKda,
   banRoleLabels,
   buildScoutLineupSummary,
   clearLineupSlot,
@@ -56,12 +58,16 @@ import {
   liveScoutPlayerDataIds,
   localizeScoutParams,
   orderLineupRoles,
+  kdaInputText,
   parseGamesInput,
+  parseKdaInput,
   parseWinrateInput,
   pruneLineup,
   removePlayerFromLineup,
+  scoutBanPriorityLabel,
   scoutBlockedKey,
   scoutConfidenceKey,
+  scoutKdaLabel,
   scoutMembershipKey,
   scoutNoteKey,
   scoutReasonKey,
@@ -338,6 +344,204 @@ describe("parseWinrateInput", () => {
   })
 })
 
+/**
+ * The KDA field is the one OPTIONAL number in a champion row, and that makes it
+ * a different kind of gate from `parseGamesInput` / `parseWinrateInput`. Those
+ * two answer a single question ("is this a usable number?") and can therefore
+ * fold "empty" and "nonsense" into one `null`: an empty games field IS nonsense,
+ * because `normalizeManualEntry()` drops the whole row over it.
+ *
+ * KDA cannot do that. An empty KDA field is a legitimate and very common state
+ * meaning "not stated", which `ManualChampionEntry.kda` scores NEUTRALLY on
+ * purpose, while `0` is a real and genuinely bad value (no kills, no assists).
+ * Three outcomes have to stay apart, so this parser returns a result object
+ * instead of `number | null`:
+ *
+ *   ""     -> { ok: true, value: null }   not stated, scored neutrally
+ *   "0"    -> { ok: true, value: 0 }      stated and bad
+ *   "abc"  -> { ok: false }               refuse, keep the draft on screen
+ *
+ * Folding the first two together is precisely the `!kda` / `kda ?? 0` mistake
+ * the field doc in src/scout/types.ts forbids, so it is pinned here twice.
+ */
+describe("parseKdaInput", () => {
+  it("reads an empty field as 'not stated', never as a refusal", () => {
+    expect(parseKdaInput("")).toEqual({ ok: true, value: null })
+    expect(parseKdaInput("   ")).toEqual({ ok: true, value: null })
+  })
+
+  it("keeps 0 apart from an empty field — both usable, only one stated", () => {
+    expect(parseKdaInput("0")).toEqual({ ok: true, value: 0 })
+    expect(parseKdaInput("0,0")).toEqual({ ok: true, value: 0 })
+    // Same `ok`, different `value`. A parser returning `number | null` could not
+    // express this pair at all, which is the reason for the result object.
+    expect(parseKdaInput("")).toEqual({ ok: true, value: null })
+  })
+
+  it("accepts decimals with either separator, like the winrate field", () => {
+    expect(parseKdaInput("2.5")).toEqual({ ok: true, value: 2.5 })
+    expect(parseKdaInput("3,2")).toEqual({ ok: true, value: 3.2 })
+    expect(parseKdaInput("1")).toEqual({ ok: true, value: 1 })
+    expect(parseKdaInput("  4.75 ")).toEqual({ ok: true, value: 4.75 })
+  })
+
+  it("refuses anything that is not a plain non-negative number", () => {
+    const refused = ["-1", "-0.5", "abc", "NaN", "Infinity", "-Infinity", "1e3", "3.", ".5", "2..5", "4/1", "3:1", "+2", "2 5"]
+    for (const raw of refused) {
+      expect(parseKdaInput(raw), raw).toEqual({ ok: false })
+    }
+  })
+
+  it("refuses a value the scoring would not believe anyway", () => {
+    // Same bound `normalizeKda()` uses in src/scout/analysis.ts, imported rather
+    // than repeated: a number above it is a typo or a parse accident, and the
+    // scoring would silently treat it as "not stated". Refusing it in the editor
+    // means the user sees the problem instead of a value that quietly does
+    // nothing. The bound itself stays valid input.
+    expect(parseKdaInput(String(SCOUT_KDA_MAX_PLAUSIBLE))).toEqual({
+      ok: true,
+      value: SCOUT_KDA_MAX_PLAUSIBLE,
+    })
+    expect(parseKdaInput(String(SCOUT_KDA_MAX_PLAUSIBLE + 1))).toEqual({ ok: false })
+    expect(parseKdaInput("999")).toEqual({ ok: false })
+  })
+})
+
+/**
+ * The bound lives in the code, the number lives in the sentence the user reads.
+ * Nothing connected the two until this test: `scout_manual_kdaInvalid` spells
+ * out "between 0 and 100" while `parseKdaInput()` reads
+ * {@link SCOUT_KDA_MAX_PLAUSIBLE}. Re-tune the constant and the error message
+ * starts lying, silently and in both languages at once.
+ *
+ * A guard rather than a `{max}` placeholder on purpose: the placeholder would
+ * buy the same safety at the price of routing this one short string through
+ * `fillPlaceholders`, and the constant has not moved since it was written. If
+ * it ever does move, this test says so and the fix is two words in two files.
+ *
+ * The word boundaries matter. A plain `includes(String(bound))` would still
+ * pass for a bound of 10 against the sentence "between 0 and 100", which is the
+ * exact drift the test exists to catch.
+ */
+describe("the KDA error message and the parser agree on the bound", () => {
+  const mentionsBound = new RegExp(`\\b${SCOUT_KDA_MAX_PLAUSIBLE}\\b`)
+
+  it("names the very number the parser enforces, in both languages", () => {
+    for (const [lang, message] of [
+      ["de", de.scout_manual_kdaInvalid],
+      ["en", en.scout_manual_kdaInvalid],
+    ] as const) {
+      expect(
+        message,
+        `${lang}: scout_manual_kdaInvalid must name ${SCOUT_KDA_MAX_PLAUSIBLE}, the bound ` +
+          "parseKdaInput() actually enforces. Update the copy, or the sentence lies.",
+      ).toMatch(mentionsBound)
+    }
+  })
+
+  it("draws the line where the message says it does", () => {
+    // Both halves of the promise, so the sentence is checked against behaviour
+    // and not just against itself.
+    expect(parseKdaInput(String(SCOUT_KDA_MAX_PLAUSIBLE)).ok).toBe(true)
+    expect(parseKdaInput(String(SCOUT_KDA_MAX_PLAUSIBLE + 1)).ok).toBe(false)
+    expect(parseKdaInput("0").ok).toBe(true)
+  })
+})
+
+describe("kdaInputText", () => {
+  it("shows an empty field for a row that states no KDA", () => {
+    expect(kdaInputText(undefined)).toBe("")
+    expect(kdaInputText(null)).toBe("")
+  })
+
+  it("shows a stated 0 rather than an empty field", () => {
+    // The falsiness trap in its display form: `kda ? String(kda) : ""` would
+    // blank out a real 0 and the user would retype nothing, losing the value.
+    expect(kdaInputText(0)).toBe("0")
+  })
+
+  it("round-trips every value the parser accepts", () => {
+    for (const value of [0, 1, 2.5, 3.2, 12, 47.75, SCOUT_KDA_MAX_PLAUSIBLE]) {
+      expect(parseKdaInput(kdaInputText(value)), String(value)).toEqual({ ok: true, value })
+    }
+  })
+})
+
+/**
+ * `kdaInputText()` above renders a KDA back into the *editor field*;
+ * `scoutKdaLabel()` renders it into the *read-only* surfaces — the signal rows,
+ * the ban plan and the export. The two answer different questions and must not
+ * be confused: the field has to show something for every state (an empty string
+ * is a legitimate, editable value), while a read-only surface has to show
+ * *nothing at all* when nothing was stated. That is why this one returns
+ * `string | null` and not `string`: the `null` is the instruction to the caller
+ * to omit the whole segment, so a KDA-less champion carries no "KDA unbekannt"
+ * noise on every single row (project rule P4c).
+ *
+ * The `0` case is the discriminating one and is pinned twice, here and in the
+ * export below. The KDA is the one displayed number where a falsy check hides
+ * exactly the worst value in the list while the 0.5.0 scoring is busy punishing
+ * it — screen and ban order would then tell two different stories about the
+ * same champion.
+ */
+describe("scoutKdaLabel", () => {
+  const tEn = (key: TranslationKey): string => en[key]
+
+  it("uses one shared i18n key, spelled identically in both catalogues", () => {
+    // "KDA" is an acronym, not copy. A translated variant would make the two
+    // languages disagree about a number that is the same number.
+    expect(de.scout_kdaValue).toBe("KDA {kda}")
+    expect(en.scout_kdaValue).toBe(de.scout_kdaValue)
+  })
+
+  it("states a KDA with one decimal, identically in both languages", () => {
+    expect(scoutKdaLabel(t, 3.2)).toBe("KDA 3.2")
+    expect(scoutKdaLabel(tEn, 3.2)).toBe("KDA 3.2")
+    // Through `formatScoutNumber`, so the same rounding the rest of the tab uses.
+    expect(scoutKdaLabel(t, 3.167)).toBe("KDA 3.2")
+    expect(scoutKdaLabel(tEn, 3.167)).toBe("KDA 3.2")
+    expect(scoutKdaLabel(t, 4)).toBe("KDA 4")
+  })
+
+  it("prints a stated 0 instead of swallowing it", () => {
+    // `!kda` and `kda ?? 0` both collapse "stated 0" into "not stated" — the
+    // mistake src/scout/types.ts forbids in so many words. `"KDA 0"` is the
+    // only answer that keeps the two apart on screen.
+    expect(scoutKdaLabel(t, 0)).toBe("KDA 0")
+    expect(scoutKdaLabel(tEn, 0)).toBe("KDA 0")
+    expect(scoutKdaLabel(t, 0)).not.toBeNull()
+    expect(scoutKdaLabel(t, 0)).not.toBe("")
+  })
+
+  it("says nothing at all when there is nothing to state", () => {
+    for (const translate of [t, tEn]) {
+      expect(scoutKdaLabel(translate, null)).toBeNull()
+      expect(scoutKdaLabel(translate, undefined)).toBeNull()
+      // Not stated is the honest reading of a value the scoring counts as
+      // neutral — printing it would advertise a figure that changes nothing.
+      expect(scoutKdaLabel(translate, Number.NaN)).toBeNull()
+      expect(scoutKdaLabel(translate, Number.POSITIVE_INFINITY)).toBeNull()
+      expect(scoutKdaLabel(translate, Number.NEGATIVE_INFINITY)).toBeNull()
+    }
+  })
+
+  it("never lets a machine value or a raw placeholder reach the label", () => {
+    for (const translate of [t, tEn]) {
+      for (const kda of [0, 0.5, 2, 3.2, 12.75, SCOUT_KDA_MAX_PLAUSIBLE]) {
+        const label = scoutKdaLabel(translate, kda)
+        expect(label, String(kda)).not.toBeNull()
+
+        const text = label ?? ""
+        expect(text, String(kda)).toMatch(/^KDA \d/)
+        expect(text, String(kda)).not.toContain("undefined")
+        expect(text, String(kda)).not.toContain("null")
+        expect(text, String(kda)).not.toContain("NaN")
+        expect(text, String(kda)).not.toMatch(/\{[a-z]+\}/i)
+      }
+    }
+  })
+})
+
 describe("withEntryIds / createEntryId", () => {
   const base: ManualChampionEntry = {
     championName: "Ahri",
@@ -551,6 +755,190 @@ describe("buildScoutExportText", () => {
     // "contains no dash" check without proving anything.
     expect(text.length).toBeGreaterThan(0)
     expect(text).not.toMatch(/[\u2014\u2013]/)
+  })
+
+  /* ------------------------------------------------------------------------
+   * The KDA in the export.
+   *
+   * It has weighted the ban score since 0.5.0 and appeared nowhere in the text,
+   * so one champion could outrank another for a reason the exported plan never
+   * stated. What these tests pin is WHERE the number goes, because the position
+   * carries the meaning:
+   *
+   *  - inside the champion parenthesis it is a third fact about the champion,
+   *    and therefore takes the `", "` of this file's separator rule;
+   *  - in the ban head it is its own `" \u00b7 "` segment behind the target player,
+   *    because `banCandidateKda()` reads it off exactly that player's signal;
+   *  - never behind the `[confidence]` bracket, which closes the line as the
+   *    verdict over everything in front of it.
+   *
+   * A "does the text contain KDA 3.2" check would be green for all three
+   * layouts, so every one of them is asserted against the surrounding
+   * characters instead.
+   * ---------------------------------------------------------------------- */
+
+  const KDA_ROSTER = [player("euw:mid#euw", "Mid", "mid")]
+
+  function midData(entries: ManualChampionEntry[]): Record<ScoutPlayerId, ScoutPlayerData> {
+    return { "euw:mid#euw": { playerId: "euw:mid#euw", entries } }
+  }
+
+  it("adds a stated KDA to the champion parenthesis, behind the winrate", () => {
+    const text = buildScoutExportText(
+      t,
+      analyzeScout(
+        KDA_ROSTER,
+        midData([entry({ championName: "Ahri", games: 30, winrate: 68, kda: 2.6 })]),
+      ),
+    )
+
+    // One parenthesis, one separator: `", "`, never the middot. The positive
+    // assertion already fixes that (a middot join would not produce this exact
+    // string), the negative one names the mutant it rules out.
+    expect(text).toContain(`Ahri (30 ${de.common_games}, 68%, KDA 2.6)`)
+    expect(text).not.toContain("68% \u00b7 KDA 2.6")
+    // And not in front of the winrate either.
+    expect(text).not.toContain("KDA 2.6, 68%")
+  })
+
+  it("carries the KDA into the weakness line too", () => {
+    const text = buildScoutExportText(
+      t,
+      analyzeScout(
+        KDA_ROSTER,
+        midData([
+          entry({ championName: "Ahri", games: 30, winrate: 68 }),
+          entry({ championName: "Yone", games: 12, winrate: 40, kda: 1.2 }),
+        ]),
+      ),
+    )
+
+    expect(text).toContain(`${de.scout_weaknesses}: Yone (12 ${de.common_games}, 40%, KDA 1.2)`)
+  })
+
+  it("gives a ban its own KDA segment between the target player and the confidence", () => {
+    const analysis = analyzeScout(
+      KDA_ROSTER,
+      midData([entry({ championName: "Karma", games: 40, winrate: 72, kda: 3.2 })]),
+    )
+    const text = buildScoutExportText(t, analysis)
+    const banLine = text.split("\n").find((line) => line.startsWith("1. "))
+
+    expect(banLine).toBeDefined()
+    const line = banLine ?? ""
+    const top = analysis.banPlan.prioritizedBans[0]
+
+    // The whole head, spelled out \u2014 this is the assertion that fixes the order.
+    expect(line).toBe(`1. Karma \u00b7 Mid#EUW \u00b7 KDA 3.2 \u00b7 [${de[scoutConfidenceKey(top.confidence)]}]`)
+    // And the order again on its own, so a failure says *which* half moved.
+    expect(line.indexOf("KDA 3.2")).toBeGreaterThan(line.indexOf("Mid#EUW"))
+    expect(line.indexOf("KDA 3.2")).toBeLessThan(line.indexOf("["))
+  })
+
+  it("prints a stated 0 in the export as well", () => {
+    const analysis = analyzeScout(
+      KDA_ROSTER,
+      midData([entry({ championName: "Ahri", games: 30, winrate: 68, kda: 0 })]),
+    )
+    const text = buildScoutExportText(t, analysis)
+
+    expect(text).toContain(`Ahri (30 ${de.common_games}, 68%, KDA 0)`)
+    expect(text).toContain("\u00b7 KDA 0 \u00b7 [")
+    // Neither dropped as falsy nor dressed up as a decimal.
+    expect(text).not.toContain("KDA 0.0")
+  })
+
+  it("says nothing about a champion whose rows stated no KDA", () => {
+    const text = buildScoutExportText(
+      t,
+      analyzeScout(
+        KDA_ROSTER,
+        midData([
+          entry({ championName: "Ahri", games: 30, winrate: 68, kda: 2.6 }),
+          entry({ championName: "Zed", games: 25, winrate: 66 }),
+        ]),
+      ),
+    )
+
+    const threats = text.split("\n").filter((line) => line.startsWith("- "))
+    const ahri = threats.find((line) => line.includes("Ahri")) ?? ""
+    const zed = threats.find((line) => line.includes("Zed")) ?? ""
+    const zedBan = text.split("\n").find((line) => /^\d+\. Zed\b/.test(line)) ?? ""
+
+    expect(ahri).toContain("KDA 2.6")
+    // The discriminating half: `kda ?? 0` would print "KDA 0" on both of these
+    // and claim a number nobody ever entered.
+    expect(zed.length).toBeGreaterThan(0)
+    expect(zed).toContain(`Zed (25 ${de.common_games}, 66%)`)
+    expect(zed).not.toContain("KDA")
+    expect(zedBan.length).toBeGreaterThan(0)
+    expect(zedBan).not.toContain("KDA")
+  })
+
+  it("leaves an export built from KDA-less data exactly as it was", () => {
+    // The "old data" case, and by far the common one: every row saved before
+    // 0.5.0 carries no KDA at all. The 0.5.1 text has to come back unchanged,
+    // down to the closing bracket of the parenthesis.
+    const players = [player("euw:mid#euw", "Mid", "mid"), player("euw:top#euw", "Top", "top")]
+    const playerData: Record<ScoutPlayerId, ScoutPlayerData> = {
+      "euw:mid#euw": {
+        playerId: "euw:mid#euw",
+        entries: [
+          entry({ championName: "Ahri", games: 30, winrate: 68 }),
+          entry({ championName: "Yone", games: 12, winrate: 40 }),
+        ],
+      },
+      "euw:top#euw": {
+        playerId: "euw:top#euw",
+        entries: [entry({ championName: "Sett", games: 18, winrate: 61, role: "top" })],
+      },
+    }
+    const text = buildScoutExportText(t, analyzeScout(players, playerData))
+
+    expect(text).toContain(`Ahri (30 ${de.common_games}, 68%)`)
+    expect(text).toContain(`Sett (18 ${de.common_games}, 61%)`)
+    expect(text).toContain(`${de.scout_weaknesses}: Yone (12 ${de.common_games}, 40%)`)
+    // Not one mention, not even an empty stub.
+    expect(text).not.toContain("KDA")
+    expect(text).not.toContain("undefined")
+    expect(text).not.toContain("null")
+    expect(text).not.toContain("NaN")
+  })
+
+  it("writes no bare KDA stub and no machine value, in either language", () => {
+    const tEn = (key: TranslationKey): string => en[key]
+    const analysis = analyzeScout(
+      KDA_ROSTER,
+      midData([
+        entry({ championName: "Karma", games: 40, winrate: 72, kda: 3.2 }),
+        entry({ championName: "Ahri", games: 30, winrate: 68, kda: 0 }),
+        entry({ championName: "Zed", games: 25, winrate: 66 }),
+        entry({ championName: "Yone", games: 12, winrate: 40, kda: 1.2 }),
+      ]),
+    )
+
+    for (const [lang, translate, games] of [
+      ["de", t, de.common_games],
+      ["en", tEn, en.common_games],
+    ] as const) {
+      const text = buildScoutExportText(translate, analysis)
+      const banLine = text.split("\n").find((line) => line.startsWith("1. ")) ?? ""
+
+      expect(text, lang).toContain(`Karma (40 ${games}, 72%, KDA 3.2)`)
+      expect(text, lang).toContain(`Ahri (30 ${games}, 68%, KDA 0)`)
+      expect(text, lang).toContain(`Zed (25 ${games}, 66%)`)
+      expect(banLine, lang).toContain(" \u00b7 KDA 3.2 \u00b7 [")
+
+      expect(text, lang).not.toContain("undefined")
+      expect(text, lang).not.toContain("NaN")
+      expect(text, lang).not.toMatch(/\{[a-z]+\}/i)
+      // "KDA" with nothing behind it \u2014 the shape a `null` would leave once the
+      // label was pushed into the line unconditionally.
+      expect(text, lang).not.toMatch(/KDA\s*(?=[\u00b7,)\n]|$)/)
+      // The separator rule of scoutExport.ts survives the extra segment.
+      expect(text, lang).not.toMatch(/[\u2014\u2013]/)
+      expect(text, lang).not.toContain("--")
+    }
   })
 })
 
@@ -937,6 +1325,434 @@ describe("banRoleLabels", () => {
 
   it("says nothing at all without a lineup", () => {
     expect(banRoleLabels(t, candidate({}))).toEqual([])
+  })
+})
+
+/**
+ * Which KDA a ban row shows.
+ *
+ * `BanCandidate` carries one signal per affected player, and the engine has
+ * already named the one the recommendation is aimed at (`targetPlayerId`: the
+ * strongest ON-role signal, and only failing that the strongest signal at all).
+ * `banCandidateKda()` reads the number off exactly that signal, which is what
+ * keeps the figure under the headline attached to the player in the headline.
+ *
+ * The overlap case below is the one that discriminates: it is built so the
+ * target is deliberately NOT the first-listed and NOT the highest-scoring
+ * signal, because an off-role signal is only weighted down by 0.4 and can still
+ * outscore a genuine on-role one. `signals[0].kda` and "the biggest score wins"
+ * both look correct on a single-player candidate and both quote the wrong
+ * player here.
+ *
+ * That target rule is only HALF the contract, and the other half is the one
+ * that broke: the very same candidate is rendered again under the heading of
+ * every player it affects, because `targetBansByPlayer` filters on
+ * `affectedPlayerIds` and not on the target. A row under player B that read its
+ * KDA off `targetPlayerId` printed a number B never posted, and without a
+ * lineup there is not even a lane suffix to hint at it. `forPlayerId` is what
+ * the per-player lists pass; the team-wide plan and the export keep the target
+ * semantics and omit it. Both halves are pinned below, against one shared
+ * overlap fixture so "whose number is it" is always asked of the same numbers.
+ */
+describe("banCandidateKda", () => {
+  function signal(overrides: Partial<ChampionSignal>): ChampionSignal {
+    return {
+      championName: "Karma",
+      playerId: MID.id,
+      role: "mid",
+      games: 20,
+      winrate: 60,
+      kda: null,
+      recency: "current",
+      score: 0.5,
+      confidence: "medium",
+      reasons: [],
+      sources: ["opgg"],
+      roleFit: "unknown",
+      lineupRole: null,
+      fromSubstitute: false,
+      ...overrides,
+    }
+  }
+
+  /**
+   * Two players on one champion, with the numbers arranged so that every wrong
+   * answer is a different number: TOP's off-role signal is listed FIRST and
+   * scores HIGHER (6.4), and the engine still aimed the ban at MID (2.1).
+   * `signals[0]`, "the strongest one" and "the target" therefore all disagree.
+   */
+  function overlapCandidate(): BanCandidate {
+    return candidate({
+      isOverlap: true,
+      affectedPlayerIds: [TOP.id, MID.id],
+      // The engine picked the on-role player, even though the off-role signal
+      // in front of them scores higher.
+      targetPlayerId: MID.id,
+      targetRole: "mid",
+      lineupRoles: ["mid"],
+      roleFit: "flex",
+      signals: [
+        signal({ playerId: TOP.id, role: "mid", roleFit: "offrole", score: 0.91, kda: 6.4 }),
+        signal({
+          playerId: MID.id,
+          role: "mid",
+          roleFit: "onrole",
+          score: 0.62,
+          kda: 2.1,
+          lineupRole: "mid",
+        }),
+      ],
+    })
+  }
+
+  it("reads the KDA off the signal the ban is aimed at", () => {
+    const aimed = candidate({
+      targetPlayerId: MID.id,
+      affectedPlayerIds: [MID.id],
+      signals: [signal({ playerId: MID.id, kda: 3.2 })],
+    })
+
+    expect(banCandidateKda(aimed)).toBe(3.2)
+    expect(scoutKdaLabel(t, banCandidateKda(aimed))).toBe("KDA 3.2")
+  })
+
+  it("keeps a stated 0 apart from 'no KDA stated'", () => {
+    const zero = candidate({
+      targetPlayerId: MID.id,
+      affectedPlayerIds: [MID.id],
+      signals: [signal({ playerId: MID.id, kda: 0 })],
+    })
+
+    expect(banCandidateKda(zero)).toBe(0)
+    expect(banCandidateKda(zero)).not.toBeNull()
+    // And the row really renders it, rather than falling into the "omit" branch.
+    expect(scoutKdaLabel(t, banCandidateKda(zero))).toBe("KDA 0")
+  })
+
+  it("returns null for every shape that states nothing", () => {
+    // No target and no signals at all.
+    expect(banCandidateKda(candidate({}))).toBeNull()
+
+    // Signals, but the engine named no target — nothing may be quoted then.
+    const untargeted = candidate({
+      targetPlayerId: null,
+      signals: [signal({ playerId: MID.id, kda: 3.2 })],
+    })
+    expect(banCandidateKda(untargeted)).toBeNull()
+
+    // A target whose signal is not in the list (a hand-edited or stale blob).
+    const mismatched = candidate({
+      targetPlayerId: MID.id,
+      signals: [signal({ playerId: TOP.id, kda: 4.4 })],
+    })
+    expect(banCandidateKda(mismatched)).toBeNull()
+
+    // The matching signal simply never stated one.
+    const silent = candidate({
+      targetPlayerId: MID.id,
+      signals: [signal({ playerId: MID.id, kda: null })],
+    })
+    expect(banCandidateKda(silent)).toBeNull()
+
+    // Which is the instruction to the ban row to print no KDA segment at all.
+    for (const c of [candidate({}), untargeted, mismatched, silent]) {
+      expect(scoutKdaLabel(t, banCandidateKda(c))).toBeNull()
+    }
+  })
+
+  it("follows targetPlayerId on an overlap, not the first or the strongest signal", () => {
+    const overlap = overlapCandidate()
+
+    expect(banCandidateKda(overlap)).toBe(2.1)
+    // Spelled out: quoting 6.4 would put a number under the headline that the
+    // named player never posted.
+    expect(banCandidateKda(overlap)).not.toBe(6.4)
+    expect(scoutKdaLabel(t, banCandidateKda(overlap))).toBe("KDA 2.1")
+  })
+
+  /* ------------------------------------------------------------------------
+   * `forPlayerId` — whose KDA the row is actually about.
+   * ---------------------------------------------------------------------- */
+
+  it("answers for the player it was ASKED about, not the one the ban is aimed at", () => {
+    const overlap = overlapCandidate()
+
+    // The row as it appears under TOP's heading. TOP is not the target, and
+    // their signal is precisely the one the engine passed over.
+    expect(banCandidateKda(overlap, TOP.id)).toBe(6.4)
+    expect(scoutKdaLabel(t, banCandidateKda(overlap, TOP.id))).toBe("KDA 6.4")
+    // The defect this pins: both headings used to print 2.1, so TOP's row
+    // stated a number TOP never posted.
+    expect(banCandidateKda(overlap, TOP.id)).not.toBe(2.1)
+    // ...and asking about the target still yields the target's own number, so
+    // the fix is an extra answer rather than a different one.
+    expect(banCandidateKda(overlap, MID.id)).toBe(2.1)
+  })
+
+  it("returns a stated 0 for the asked player instead of falling through", () => {
+    const zeroed = candidate({
+      isOverlap: true,
+      affectedPlayerIds: [TOP.id, MID.id],
+      targetPlayerId: MID.id,
+      signals: [signal({ playerId: TOP.id, kda: 0 }), signal({ playerId: MID.id, kda: 2.1 })],
+    })
+
+    // The discriminating case, as everywhere the KDA is touched: `0` is a real
+    // and genuinely bad value, not "nothing stated". A falsy check anywhere on
+    // this path would hand back the target's 2.1 or a bare `null`, and TOP's
+    // row would look better than TOP played.
+    expect(banCandidateKda(zeroed, TOP.id)).toBe(0)
+    expect(banCandidateKda(zeroed, TOP.id)).not.toBeNull()
+    expect(banCandidateKda(zeroed, TOP.id)).not.toBe(2.1)
+    expect(scoutKdaLabel(t, banCandidateKda(zeroed, TOP.id))).toBe("KDA 0")
+  })
+
+  it("stays silent for a player with no signal, rather than quoting somebody else", () => {
+    const overlap = overlapCandidate()
+
+    // SUP is on neither signal of this candidate. A wrong id must degrade to
+    // silence; degrading to the target would be the original bug wearing a
+    // different hat, because it is exactly the number that does not belong to
+    // the heading the row sits under.
+    expect(banCandidateKda(overlap, SUP.id)).toBeNull()
+    expect(banCandidateKda(overlap, SUP.id)).not.toBe(2.1)
+    expect(banCandidateKda(overlap, SUP.id)).not.toBe(6.4)
+    // `toBeNull()` already refuses an `undefined`; naming it separately says
+    // which of the two a failure means. The caller cannot tell them apart --
+    // `scoutKdaLabel()` omits the segment for both -- so the contract has to be
+    // pinned here or not at all.
+    expect(banCandidateKda(overlap, SUP.id)).not.toBeUndefined()
+    expect(scoutKdaLabel(t, banCandidateKda(overlap, SUP.id))).toBeNull()
+  })
+
+  it("returns null when the asked player's own signal states no KDA", () => {
+    const partial = candidate({
+      isOverlap: true,
+      affectedPlayerIds: [TOP.id, MID.id],
+      targetPlayerId: MID.id,
+      signals: [signal({ playerId: TOP.id, kda: null }), signal({ playerId: MID.id, kda: 2.1 })],
+    })
+
+    expect(banCandidateKda(partial, TOP.id)).toBeNull()
+    // Not the target's number: a fallback placed AFTER the lookup instead of
+    // before it would substitute 2.1 here, which reads as data and is not.
+    expect(banCandidateKda(partial, TOP.id)).not.toBe(2.1)
+    expect(scoutKdaLabel(t, banCandidateKda(partial, TOP.id))).toBeNull()
+    // The other heading is untouched and still states its own.
+    expect(banCandidateKda(partial, MID.id)).toBe(2.1)
+  })
+
+  it("falls back to the target when no player is named, in both spellings", () => {
+    const overlap = overlapCandidate()
+
+    // How the team-wide plan and the export call it.
+    expect(banCandidateKda(overlap)).toBe(2.1)
+    // And the spelling an optional prop produces once it is threaded through a
+    // component that has nothing to pass. TypeScript allows both, so both are
+    // pinned rather than assumed equivalent.
+    expect(banCandidateKda(overlap, undefined)).toBe(2.1)
+
+    // `??`, never `||`. An empty id is a value, not an absence, and it names
+    // nobody -- so it has to be looked up and come back empty-handed. Under
+    // `||` it would quietly become the target and print 2.1 for a player who
+    // does not exist.
+    expect(banCandidateKda(overlap, "")).toBeNull()
+  })
+
+  it("has no answer without a target, and the right one as soon as a player is named", () => {
+    const untargeted = candidate({
+      affectedPlayerIds: [TOP.id, MID.id],
+      targetPlayerId: null,
+      signals: [signal({ playerId: TOP.id, kda: 6.4 }), signal({ playerId: MID.id, kda: 2.1 })],
+    })
+
+    // The team-wide row: the engine named nobody, so nothing may be quoted --
+    // even though two perfectly good numbers are sitting right there.
+    expect(banCandidateKda(untargeted)).toBeNull()
+    // The per-player rows each state their own regardless. Together with the
+    // line above this is what fixes the ORDER of the two steps: the argument is
+    // consulted first and the `null` check runs on the result, not the reverse.
+    expect(banCandidateKda(untargeted, TOP.id)).toBe(6.4)
+    expect(banCandidateKda(untargeted, MID.id)).toBe(2.1)
+  })
+
+  /**
+   * Every fixture above hands the helper a candidate this file built, which
+   * makes the one invariant it leans on true by construction: that the target
+   * player's signal is really among `candidate.signals`. Nothing here would
+   * notice if `analyzeScout()` stopped shipping it -- the ban plan would simply
+   * lose its KDA, in silence, in both languages.
+   *
+   * So the last one runs against a candidate the ENGINE built, with the setup
+   * of section 23 in tests/scoutAnalysis.test.ts: the starting jungler carries
+   * strong Karma numbers in the WRONG lane, the benched support weak ones in
+   * the right lane. The engine lists the jungler first because he scores
+   * higher, and still aims the ban at the support because that signal is
+   * onrole. `signals[0]`, "the strongest" and "the target" therefore point at
+   * three different things again, this time without anybody arranging it.
+   */
+  it("quotes the right KDA on an overlap the engine really built", () => {
+    const analysis = analyzeScout(
+      [JGL, SUP],
+      {
+        [JGL.id]: {
+          playerId: JGL.id,
+          entries: [entry({ championName: "Karma", games: 40, winrate: 80, role: "support", kda: 6.4 })],
+        },
+        [SUP.id]: {
+          playerId: SUP.id,
+          entries: [entry({ championName: "Karma", games: 6, winrate: 45, role: "support", kda: 2.1 })],
+        },
+      },
+      {
+        lineup: assignPlayerToSlot(
+          assignPlayerToSlot(createEmptyScoutLineup(), { kind: "starter", slot: "jungle" }, JGL.id)
+            .lineup,
+          { kind: "substitute", slot: "sub1" },
+          SUP.id,
+        ).lineup,
+        includeSubstitutes: true,
+      },
+    )
+
+    const karma = analysis.banPlan.prioritizedBans.find((ban) => ban.championName === "Karma")
+    expect(karma).toBeDefined()
+    const ban = karma as BanCandidate
+
+    // The setup, restated from the engine's own output, so a failure below says
+    // whether the helper broke or the engine's target rule moved.
+    expect(ban.isOverlap).toBe(true)
+    expect(ban.signals[0].playerId).toBe(JGL.id)
+    expect(ban.targetPlayerId).toBe(SUP.id)
+
+    // The team-wide plan and the export: the target's number, not the first
+    // and higher-scoring one sitting in front of it.
+    expect(banCandidateKda(ban)).toBe(2.1)
+    expect(banCandidateKda(ban)).not.toBe(6.4)
+
+    // The per-player lists, end to end on real engine output: under the
+    // jungler's heading the row states what the JUNGLER posted.
+    expect(banCandidateKda(ban, JGL.id)).toBe(6.4)
+    expect(banCandidateKda(ban, SUP.id)).toBe(2.1)
+    expect(scoutKdaLabel(t, banCandidateKda(ban, JGL.id))).toBe("KDA 6.4")
+  })
+})
+
+/**
+ * The OTHER number in the same ban row head.
+ *
+ * The priority used to render bare, and that was defensible while it was the
+ * only figure on the line: one number, nothing to confuse it with. Since the
+ * KDA moved in beside it the run reads `Priorität 67% · KDA 3.2`, and a bare
+ * percentage sitting next to a labelled one invites being read as more of the
+ * same kind — a winrate above all, which is the one number in this tab a
+ * percentage plausibly could be. So the priority names itself now too.
+ *
+ * WHAT THAT MAKES THIS BLOCK ABOUT: the label as much as the number. A test
+ * asking whether the row contains "67%" stays green on precisely the
+ * regression that would undo this change, so every case below pins the whole
+ * string, and one of them says separately that the output is not a bare
+ * percentage.
+ *
+ * Unlike {@link scoutKdaLabel} there is NO `null` case here, and the
+ * difference is not an oversight on either side. A KDA is a value a source may
+ * simply never have stated; a priority is computed for every candidate the
+ * engine emits, so "nothing to state" cannot arise. That makes `0` a real
+ * value — the lowest possible ranking — rather than an absence, which is the
+ * same falsy trap the KDA keeps setting, in its third form.
+ */
+describe("scoutBanPriorityLabel", () => {
+  const tEn = (key: TranslationKey): string => en[key]
+
+  it("states a labelled whole percent, in both languages", () => {
+    const ban = candidate({ priority: 0.67 })
+
+    expect(scoutBanPriorityLabel(t, ban)).toBe("Priorität 67%")
+    expect(scoutBanPriorityLabel(tEn, ban)).toBe("Priority 67%")
+  })
+
+  it("rounds to a whole percent instead of printing a decimal", () => {
+    // Two values that both land on 67, approached from opposite sides. The
+    // pair is what pins `Math.round` specifically: `Math.floor` turns the first
+    // into 66, `Math.ceil` the second into 68, and dropping the rounding
+    // altogether prints "66.6" and "67.4" — `fillPlaceholders()` formats
+    // numbers through `formatScoutNumber()`, which keeps one decimal.
+    expect(scoutBanPriorityLabel(t, candidate({ priority: 0.666 }))).toBe("Priorität 67%")
+    expect(scoutBanPriorityLabel(t, candidate({ priority: 0.674 }))).toBe("Priorität 67%")
+    expect(scoutBanPriorityLabel(tEn, candidate({ priority: 0.666 }))).toBe("Priority 67%")
+    // A ranking is not a measurement; one decimal would claim a precision the
+    // score does not have.
+    expect(scoutBanPriorityLabel(t, candidate({ priority: 0.666 }))).not.toContain("66.6")
+  })
+
+  it("prints a priority of 0 rather than blanking it", () => {
+    // The discriminating case. A falsy guard that skipped the parameter would
+    // leave `fillPlaceholders()` to strip the placeholder and `tidyText()` to
+    // pull the percent sign back against the word, so the row would read
+    // "Priorität%" — and there is no `null` branch to fall into either, because
+    // this helper does not have one.
+    expect(scoutBanPriorityLabel(t, candidate({ priority: 0 }))).toBe("Priorität 0%")
+    expect(scoutBanPriorityLabel(tEn, candidate({ priority: 0 }))).toBe("Priority 0%")
+    expect(scoutBanPriorityLabel(t, candidate({ priority: 0 }))).not.toBe("")
+    expect(scoutBanPriorityLabel(t, candidate({ priority: 0 }))).not.toBe("Priorität%")
+  })
+
+  it("prints a full priority as 100%", () => {
+    expect(scoutBanPriorityLabel(t, candidate({ priority: 1 }))).toBe("Priorität 100%")
+    expect(scoutBanPriorityLabel(tEn, candidate({ priority: 1 }))).toBe("Priority 100%")
+    // The fraction-instead-of-percent mutant: handing `candidate.priority`
+    // straight to the template renders "1%" here and "0.7%" for the 0.67 case
+    // above, both of which look like perfectly ordinary numbers on screen.
+    expect(scoutBanPriorityLabel(t, candidate({ priority: 1 }))).not.toBe("Priorität 1%")
+  })
+
+  it("labels the number instead of printing a bare percentage", () => {
+    // The whole point of the change, asserted on its own so a failure says the
+    // label went missing rather than that some number moved.
+    for (const [lang, translate, word] of [
+      ["de", t, "Priorität"],
+      ["en", tEn, "Priority"],
+    ] as const) {
+      const label = scoutBanPriorityLabel(translate, candidate({ priority: 0.67 }))
+
+      expect(label, lang).not.toBe("67%")
+      expect(label, lang).not.toMatch(/^\s*\d+\s*%\s*$/)
+      // And the word leads the figure, rather than trailing it or being lost to
+      // a template that kept only the placeholder.
+      expect(label, lang).toContain(word)
+      expect(label.indexOf(word), lang).toBe(0)
+      expect(label.indexOf(word), lang).toBeLessThan(label.indexOf("67"))
+    }
+  })
+
+  it("never lets a machine value or a raw placeholder reach the label", () => {
+    for (const translate of [t, tEn]) {
+      for (const priority of [0, 0.004, 0.5, 0.666, 0.674, 0.999, 1]) {
+        const label = scoutBanPriorityLabel(translate, candidate({ priority }))
+
+        // Word, then whole number, then the percent sign — the shape rules out
+        // a bare "67%" and a stray decimal in one expression.
+        expect(label, String(priority)).toMatch(/^\D+\d+%$/)
+        expect(label, String(priority)).not.toContain("undefined")
+        expect(label, String(priority)).not.toContain("null")
+        expect(label, String(priority)).not.toContain("NaN")
+        expect(label, String(priority)).not.toMatch(/\{[a-z]+\}/i)
+      }
+    }
+  })
+
+  it("really is translated, so a German string left in the English catalogue goes red", () => {
+    // Spelled out rather than derived from the catalogue: comparing the helper
+    // against the very key it renders would be true by construction and would
+    // catch nothing at all.
+    expect(de.scout_banPriorityValue).toBe("Priorität {priority}%")
+    expect(en.scout_banPriorityValue).toBe("Priority {priority}%")
+    expect(en.scout_banPriorityValue).not.toBe(de.scout_banPriorityValue)
+
+    const ban = candidate({ priority: 0.42 })
+    expect(scoutBanPriorityLabel(tEn, ban)).not.toBe(scoutBanPriorityLabel(t, ban))
+    expect(scoutBanPriorityLabel(tEn, ban)).not.toContain("Priorität")
+    expect(scoutBanPriorityLabel(t, ban)).not.toContain("Priority")
   })
 })
 

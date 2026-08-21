@@ -1,5 +1,6 @@
 import { useTranslation } from "../../i18n/LanguageContext"
 import type { TranslationKey } from "../../i18n/types"
+import { formatNumber } from "../../i18n/format"
 import type { PatchWindowSummary, PatchWeightPresetKey } from "../../draft/types"
 import { PATCH_WEIGHT_PRESETS, PATCH_WEIGHT_MAX_PATCHES } from "../../draft/constants"
 
@@ -29,7 +30,6 @@ export function PatchWeightPanel({
 
     function patchLabel(index: number): string {
         if (index === 0) return t("dh_currentPatch")
-        if (lang === "de") return `${index} Patch${index === 1 ? "" : "es"} alt`
         return `${index} ${index === 1 ? t("dh_patchOld1") : t("dh_patchOldN")}`
     }
 
@@ -47,7 +47,7 @@ export function PatchWeightPanel({
                 </button>
             </div>
 
-            <div className="role-filter-tabs" aria-label="Patch-Gewichtungs-Presets">
+            <div className="role-filter-tabs" aria-label={t("dh_pPresetsAriaLabel")}>
                 {(Object.keys(PATCH_WEIGHT_PRESETS) as PatchWeightPresetKey[]).map((preset) => (
                     <button
                         key={preset}
@@ -72,7 +72,7 @@ export function PatchWeightPanel({
                                 <strong>{patchWeights[index] ?? 0}%</strong>
                             </span>
                             <span className="muted">
-                                {patch} · {rawMatches.toLocaleString("de-DE")} {t("dh_games")}
+                                {patch} · {formatNumber(rawMatches, lang)} {t("dh_games")}
                             </span>
                             <input
                                 type="range"
