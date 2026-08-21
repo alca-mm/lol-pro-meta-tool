@@ -495,6 +495,62 @@ const expectedTooltipKey = (columnKey: string): string =>
     `${PREFIX}tip${columnKey.charAt(0).toUpperCase()}${columnKey.slice(1)}`
 
 /* --------------------------------------------------------------------------
+ * The teammate toggle's two accessible names (0.6.3)
+ * -------------------------------------------------------------------------- */
+
+/** The file that renders the expand button. */
+const TEAMMATE_TOGGLE_FILE = "MatchTable.tsx"
+
+/**
+ * The pair 0.6.3 added, in the order the button reads them: the collapsed
+ * button offers to SHOW, the expanded one offers to HIDE.
+ *
+ * They are the button's `aria-label`, and the button's own content is the glyph
+ * `▼`/`▲`. `aria-label` overrides that content outright, so these two strings
+ * are the ONLY thing a screen reader announces here - there is no visible text
+ * underneath them to fall back on, which is what makes a half-wired pair worse
+ * than a missing one.
+ */
+const TEAMMATE_TOGGLE_KEYS = [
+    "playerResults_showTeammates",
+    "playerResults_hideTeammates",
+] as const
+
+/**
+ * The contents of every `aria-label={…}` expression in a source.
+ *
+ * `[^{}]*` refuses a nested brace on purpose. An accessible name assembled from
+ * an object literal or a nested template is not a shape this rule claims to
+ * understand, and coming back empty makes {@link namesBothStates} report it
+ * rather than guessing at it.
+ */
+const ariaLabelExpressions = (source: string): string[] =>
+    [...source.matchAll(/aria-label=\{([^{}]*)\}/g)].map((match) =>
+        match[1].replace(/\s+/g, " ").trim(),
+    )
+
+/**
+ * Does one accessible name follow the open/closed state?
+ *
+ * The requirement is BOTH keys inside ONE ternary. Each half of that is a real
+ * defect this project could ship and tsc could not see:
+ *
+ *  - the same key on both branches, or a single key with no ternary, leaves the
+ *    button announcing "Mitspieler anzeigen" while the teammate rows are
+ *    already on screen,
+ *  - one key plus a string literal puts half the name outside every catalogue,
+ *    so the language switch moves one state and not the other.
+ *
+ * `TranslationKey` rejects a key that does not exist; it has nothing to say
+ * about a key used twice. With no jsdom nothing in this repo can read the
+ * rendered attribute, so the source is where this gets checked.
+ */
+const namesBothStates = (expression: string): boolean =>
+    expression.includes("?") &&
+    expression.includes(":") &&
+    TEAMMATE_TOGGLE_KEYS.every((key) => expression.includes(key))
+
+/* --------------------------------------------------------------------------
  * Telling the two languages apart
  * -------------------------------------------------------------------------- */
 
@@ -512,6 +568,14 @@ const expectedTooltipKey = (columnKey: string): string =>
  * The two entries that matter most are `overview` and `review`: they are what
  * "Team Overview" and "Needs Review" - the two English strings that sat in
  * de.ts until 0.5.4 - are made of.
+ *
+ * `show`, `hide` and `teammates` arrived with the 0.6.3 pair and are ACCUSING
+ * markers on purpose, not COMPARISON_ONLY_MARKERS ones. The failure message of
+ * section 2c suggests the latter, and for a homograph that is right - but these
+ * three are not homographs. Every German value in both catalogues was checked
+ * before they were added and not one contains any of them, while "Show
+ * teammates" sitting in de.ts is the 0.5.4 bug verbatim. A word that can only
+ * be English belongs where it can say so.
  */
 const ENGLISH_MARKERS = [
     "the", "to", "of", "and", "or", "is", "are", "be", "this", "that", "with",
@@ -519,6 +583,7 @@ const ENGLISH_MARKERS = [
     "overview", "average", "per", "win", "wins", "loss", "losses", "game",
     "games", "best", "needs", "review", "statistics", "history", "duration",
     "date", "found", "saved", "recent", "last", "deaths", "damage", "divided",
+    "show", "hide", "teammates",
 ] as const
 
 /**
@@ -700,6 +765,22 @@ describe("playerResults_ catalogue parity", () => {
                     placeholdersOf(dict[key] ?? ""),
                     `${lang}.${key} lost its {count}: "${preview(dict[key] ?? "")}"`,
                 ).toEqual(["{count}"])
+            }
+        }
+    })
+
+    it("no value is empty or blank", () => {
+        // The whitespace rule below cannot see this: `expect("").toBe("".trim())`
+        // passes, and so does a value of three spaces once it is compared with
+        // its own trim. An empty aria-label is the worst version of it - the
+        // button keeps overriding its glyph and announces nothing at all.
+        for (const [lang, dict] of LANGS) {
+            for (const key of familyKeys(dict)) {
+                expect(dict[key], `${lang}.${key} is not a string`).toBeTypeOf("string")
+                expect(
+                    (dict[key] ?? "").trim().length,
+                    `${lang}.${key} is empty or whitespace only`,
+                ).toBeGreaterThan(0)
             }
         }
     })
@@ -1174,6 +1255,100 @@ describe("champion table tooltips point at their own column", () => {
     })
 })
 
+/**
+ * The teammate toggle, added in 0.6.3.
+ *
+ * Same class of defect as the block above it: two hand-typed keys that have to
+ * end up on the right side of a decision, in a place no test in this repo can
+ * see rendered. The difference is what a mistake costs. A column showing the
+ * neighbouring tooltip is wrong but visible to anyone who hovers it; a toggle
+ * that announces "Mitspieler anzeigen" in both states is invisible to everyone
+ * except the screen-reader user it misleads.
+ *
+ * The generic dead-key guard in section 2 already refuses a key that nothing in
+ * src/ mentions, which covers "the pair was added and never used". It cannot
+ * tell the halves apart: `hideTeammates` referenced from anywhere - a stray
+ * import, the other half's own file, a comment - satisfies it. This block is
+ * the specific claim, that both halves are wired into ONE state-dependent name
+ * on the button that needs them.
+ */
+describe("the teammate toggle names both of its states", () => {
+    it("both halves of the pair exist, in both catalogues", () => {
+        for (const [lang, dict] of LANGS) {
+            for (const key of TEAMMATE_TOGGLE_KEYS) {
+                expect(
+                    dict[key],
+                    `${lang}.ts has no ${key}. It is the accessible name of the expand button in ` +
+                        `${TEAMMATE_TOGGLE_FILE}, which renders a bare glyph otherwise.`,
+                ).toBeTypeOf("string")
+                expect(
+                    (dict[key] ?? "").trim().length,
+                    `${lang}.${key} is empty or whitespace only`,
+                ).toBeGreaterThan(0)
+                expect(
+                    dict[key],
+                    `${lang}.${key} has leading or trailing whitespace: "${preview(dict[key])}"`,
+                ).toBe(dict[key].trim())
+            }
+        }
+    })
+
+    it("the two halves say different things within each language", () => {
+        // The pair only earns its keep by DIFFERING. Both values set to the
+        // same sentence compiles, renders, passes the parity and dead-key
+        // rules, and announces one name in two states - which is the exact
+        // outcome the comment in MatchTable.tsx says a state-independent
+        // "Mitspieler" would have produced.
+        for (const [lang, dict] of LANGS) {
+            const [showKey, hideKey] = TEAMMATE_TOGGLE_KEYS
+            expect(
+                sameSentence(dict[showKey] ?? "", dict[hideKey] ?? ""),
+                `${lang}.ts says the same thing for both states: "${preview(dict[showKey] ?? "")}". ` +
+                    "The button's whole job is to tell them apart.",
+            ).toBe(false)
+        }
+    })
+
+    it(`${TEAMMATE_TOGGLE_FILE} picks between both halves on one state expression`, () => {
+        const source = stripComments(readPanel(TEAMMATE_TOGGLE_FILE))
+        const expressions = ariaLabelExpressions(source)
+
+        expect(
+            expressions.length,
+            `${TEAMMATE_TOGGLE_FILE} has no aria-label={…} expression at all any more. The expand ` +
+                "button is a glyph with no accessible name, and both keys are dead.",
+        ).toBeGreaterThan(0)
+        expect(
+            expressions.some(namesBothStates),
+            `no aria-label in ${TEAMMATE_TOGGLE_FILE} names both halves of the pair in one ` +
+                `ternary. Found: ${expressions.map((e) => `"${preview(e)}"`).join(" | ")}\n` +
+                "Half a pair is the failure mode: one key on both branches, or one key beside a " +
+                "string literal, still compiles and still passes every other rule in this file.",
+        ).toBe(true)
+    })
+
+    it("neither value carries a dash aside", () => {
+        // CLAUDE.md P4a, applied where this file can reach. There is no
+        // family-wide dash guard for playerResults_ (tests/i18nScoutCopy.test.ts
+        // says in so many words that its own is `scout_` only), so this is the
+        // narrow version for the two values added here - not a new rule for the
+        // whole catalogue, which would need the EMPTY_CELL "—" carve-out that
+        // HARDCODED_TOKENS documents.
+        for (const [lang, dict] of LANGS) {
+            for (const key of TEAMMATE_TOGGLE_KEYS) {
+                expect(
+                    dict[key] ?? "",
+                    `${lang}.${key} contains an em dash or en dash: "${preview(dict[key] ?? "")}"`,
+                ).not.toMatch(/[—–]/)
+                expect(
+                    dict[key] ?? "",
+                    `${lang}.${key} contains a double hyphen: "${preview(dict[key] ?? "")}"`,
+                ).not.toContain("--")
+            }
+        }
+    })
+})
+
 describe("no player-results file substitutes {count} by hand", () => {
     it("only playerResultsFormat.ts names the {count} placeholder", () => {
         const offenders: string[] = []
@@ -1412,6 +1587,63 @@ describe("the scans can go red", () => {
         // A parse that finds nothing must come back empty, not throw, so the
         // entry-count assertion is what reports it.
         expect(parseColumnTooltipPairs("const OTHER = []")).toEqual([])
+    })
+
+    it("catches a half-wired teammate toggle", () => {
+        const wired = [
+            "<button",
+            "    aria-expanded={isExpanded}",
+            "    aria-label={",
+            "        isExpanded",
+            '            ? t("playerResults_hideTeammates")',
+            '            : t("playerResults_showTeammates")',
+            "    }",
+            ">",
+        ].join("\n")
+
+        // The real shape, read across lines and normalised to one.
+        expect(ariaLabelExpressions(wired)).toEqual([
+            'isExpanded ? t("playerResults_hideTeammates") : t("playerResults_showTeammates")',
+        ])
+        expect(ariaLabelExpressions(wired).some(namesBothStates)).toBe(true)
+
+        // The three ways to have half of it. Each one compiles, renders, and
+        // leaves the button announcing one name in two states.
+        const sameKeyTwice =
+            'aria-label={isExpanded ? t("playerResults_showTeammates") : t("playerResults_showTeammates")}'
+        const keyPlusLiteral =
+            'aria-label={isExpanded ? t("playerResults_hideTeammates") : "Mitspieler anzeigen"}'
+        const noTernary = 'aria-label={t("playerResults_showTeammates")}'
+
+        for (const bad of [sameKeyTwice, keyPlusLiteral, noTernary]) {
+            expect(ariaLabelExpressions(bad).some(namesBothStates), bad).toBe(false)
+        }
+
+        // A name assembled inside braces is not a shape this rule reads, and it
+        // comes back empty rather than pretending to have understood it.
+        expect(
+            ariaLabelExpressions('aria-label={`${prefix} ${t("playerResults_showTeammates")}`}'),
+        ).toEqual([])
+        // A button with no accessible name at all.
+        expect(ariaLabelExpressions('<button type="button" onClick={onToggle}>')).toEqual([])
+    })
+
+    it("reads the teammate pair's English as English, and its German as clean", () => {
+        // The three markers 0.6.3 added. They have to fire on the English
+        // values - otherwise section 2c stops comparing these two keys and the
+        // `compared` count goes red - and stay silent on the German ones, or
+        // they would accuse correct copy.
+        expect(markerHits("Show teammates", ENGLISH_MARKERS)).toEqual(
+            expect.arrayContaining(["show", "teammates"]),
+        )
+        expect(markerHits("Hide teammates", ENGLISH_MARKERS)).toEqual(
+            expect.arrayContaining(["hide", "teammates"]),
+        )
+        expect(markerHits("Mitspieler anzeigen", ENGLISH_MARKERS)).toEqual([])
+        expect(markerHits("Mitspieler ausblenden", ENGLISH_MARKERS)).toEqual([])
+        // "Mitspieler" is the German marker that would catch the mirror mistake.
+        expect(markerHits("Mitspieler anzeigen", GERMAN_MARKERS)).toContain("Mitspieler")
+        expect(markerHits("Show teammates", GERMAN_MARKERS)).toEqual([])
     })
 
     it("catches a typo'd placeholder", () => {

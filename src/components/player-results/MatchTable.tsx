@@ -124,10 +124,40 @@ export function MatchTable({ matches, participants, accounts }: Props) {
                                         <td style={{ ...tdStyle, color: "var(--text-dim)" }}>{formatMatchDate(m.game_start, lang)}</td>
                                         <td style={tdStyle}>
                                             {teammates.length > 0 && (
+                                                /* The glyph stays on screen and stops being the accessible
+                                                   name: `aria-label` wins step 2C of the accname algorithm,
+                                                   name-from-content only step 2F, so "black up-pointing
+                                                   triangle" is no longer what gets announced.
+                                                   The name follows the state, which is a JUDGEMENT CALL and
+                                                   not the only defensible one. A stable name plus
+                                                   `aria-expanded` is the canonical disclosure pattern and
+                                                   suits speech-input users better, since they otherwise have
+                                                   to say a different phrase depending on a state they cannot
+                                                   see. It was chosen because "Mitspieler" alone names a noun
+                                                   and no action; "Mitspieler ein-/ausklappen" would satisfy
+                                                   both and is the obvious thing to try next.
+                                                   NO `aria-controls`: what it would point at is
+                                                   `teammates.map(...)` below, several sibling <tr>s with no
+                                                   wrapper element to hang an id on. The rows are absent from
+                                                   the DOM while collapsed, which is NOT itself the problem -
+                                                   a dangling reference under `aria-expanded="false"` is
+                                                   explicitly tolerated, axe-core carves out that exact case.
+                                                   It is omitted because only JAWS meaningfully consumes
+                                                   `aria-controls`, so the cost of a real wrapper outweighs
+                                                   it. `aria-expanded` is the well-supported half and carries
+                                                   the state on its own. If a <tbody> per match ever lands
+                                                   (it would also fix the fragment key warning below), add
+                                                   `aria-controls` then. */
                                                 <button
                                                     type="button"
                                                     className="secondary-button"
                                                     style={{ fontSize: "0.7rem", padding: "0.1rem 0.4rem" }}
+                                                    aria-expanded={isExpanded}
+                                                    aria-label={
+                                                        isExpanded
+                                                            ? t("playerResults_hideTeammates")
+                                                            : t("playerResults_showTeammates")
+                                                    }
                                                     onClick={() => setExpandedMatchId(isExpanded ? null : m.id)}
                                                 >
                                                     {isExpanded ? "▲" : "▼"}
