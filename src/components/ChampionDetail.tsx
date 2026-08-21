@@ -61,7 +61,7 @@ export function ChampionDetail({ stats, synergies, matchups, laneMatchups, onClo
     <div className="champion-detail">
       <div className="detail-header">
         <h3>{stats.championName}</h3>
-        <button onClick={onClose} className="btn-close" aria-label="Close">✕</button>
+        <button onClick={onClose} className="btn-close" aria-label={t("cd_close")}>✕</button>
       </div>
 
       <div className="detail-grid">

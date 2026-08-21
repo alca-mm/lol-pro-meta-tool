@@ -61,11 +61,3 @@ export function weightedPatchWindow(matches: Match[], patchWeights: number[]): P
         summaries,
     }
 }
-
-export function formatPatchWindowSummary(patchData: PatchWindowData): string {
-    if (patchData.summaries.length === 0) return "keine Patchdaten"
-
-    return patchData.summaries
-        .map((summary) => `${summary.patch} (${summary.weight}%, ${summary.rawMatches} Games)`)
-        .join(" · ")
-}

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useId } from "react"
+import { useTranslation } from "../../i18n/LanguageContext"
 
 export interface ChampionComboboxProps {
     champions: string[]
@@ -17,6 +18,7 @@ export function ChampionCombobox({
     disabled = false,
     id,
 }: ChampionComboboxProps) {
+    const { t } = useTranslation()
     const generatedId = useId()
     const inputId = id ?? generatedId
 
@@ -125,7 +127,7 @@ export function ChampionCombobox({
                         className="combobox-clear"
                         onClick={handleClear}
                         tabIndex={-1}
-                        aria-label="Clear"
+                        aria-label={t("common_clear")}
                     >
                         ×
                     </button>
@@ -153,7 +155,7 @@ export function ChampionCombobox({
             )}
 
             {open && filtered.length === 0 && (
-                <div className="combobox-empty">No match</div>
+                <div className="combobox-empty">{t("common_noMatch")}</div>
             )}
         </div>
     )

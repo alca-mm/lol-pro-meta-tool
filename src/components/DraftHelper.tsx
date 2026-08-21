@@ -21,7 +21,6 @@ import { ChampionNotesPanel } from "./draft/ChampionNotesPanel"
 import { TeamDraftLibraryPanel } from "./draft/TeamDraftLibraryPanel"
 import { findSimilarDrafts } from "../draft/similarDrafts"
 import { useTranslation } from "../i18n/LanguageContext"
-import { formatNumber } from "../i18n/format"
 import { useTeam } from "../teams/TeamContext"
 import type { SavedTeamDraft } from "../teams/teamDraftsService"
 
@@ -42,6 +41,7 @@ import type {
     TeamCompWarning,
     TeamCompMetric,
     TeamCompReport,
+    DamageProfileKind,
 } from "../draft/types"
 import {
     ROLES,
@@ -63,10 +63,12 @@ import {
     SCALING_CHAMPIONS,
     SPLITPUSH_CHAMPIONS,
 } from "../draft/constants"
+import { weightedPatchWindow } from "../draft/patchWindow"
 import {
-    weightedPatchWindow,
+    formatDraftGamesCount,
+    formatDraftPicksCount,
     formatPatchWindowSummary,
-} from "../draft/patchWindow"
+} from "./draft/draftUiHelpers"
 import {
     formatPercent,
     formatScore,
@@ -463,16 +465,32 @@ function createMetric(label: string, value: number, max: number, description: st
     }
 }
 
-function damageProfileLabel(profile: TeamCompReport["damageProfile"], t: (key: TranslationKey) => string): string {
+/**
+ * The damage-profile heuristic, as a CODE rather than as display text.
+ *
+ * It used to return the translated label, and three checks further down then ran
+ * control flow against that label by comparing it with `t("comp_damage_...")`
+ * again. That only held while both sides happened to be rendered in the same
+ * language, and it made the wording of a catalogue entry load-bearing. The code
+ * decides now, and `label` is derived from it purely for the screen.
+ */
+function damageProfileKind(profile: TeamCompReport["damageProfile"]): DamageProfileKind {
     const knownDamage = profile.ap + profile.ad + profile.mixed
 
-    if (knownDamage === 0) return t("comp_damage_unknown")
-    if (profile.ad >= knownDamage - 1 && profile.ap <= 1) return t("comp_damage_adHeavy")
-    if (profile.ap >= knownDamage - 1 && profile.ad <= 1) return t("comp_damage_apHeavy")
-    if (profile.mixed > 0 || (profile.ap >= 1 && profile.ad >= 1)) return t("comp_damage_mixed")
+    if (knownDamage === 0) return "unknown"
+    if (profile.ad >= knownDamage - 1 && profile.ap <= 1) return "adHeavy"
+    if (profile.ap >= knownDamage - 1 && profile.ad <= 1) return "apHeavy"
+    if (profile.mixed > 0 || (profile.ap >= 1 && profile.ad >= 1)) return "mixed"
 
-    return t("comp_damage_unknown")
+    return "unknown"
 }
+
+/**
+ * The kind, mapped to its catalogue key. The return type is `TranslationKey` and
+ * NOT `string` on purpose: it makes a `comp_damage_*` key that does not exist in
+ * de.ts a compile error, the same way the scout derives its keys (see P4).
+ */
+const damageProfileLabelKey = (kind: DamageProfileKind): TranslationKey => `comp_damage_${kind}`
 
 export function generateTeamCompReport(slots: PickSlot[], t: (key: TranslationKey) => string): TeamCompReport {
     const warnings: TeamCompWarning[] = []
@@ -509,9 +527,10 @@ export function generateTeamCompReport(slots: PickSlot[], t: (key: TranslationKe
 
             return profile
         },
-        { ap: 0, ad: 0, mixed: 0, unknown: 0, label: "Unklar" },
+        { ap: 0, ad: 0, mixed: 0, unknown: 0, kind: "unknown", label: "" },
     )
-    damageProfile.label = damageProfileLabel(damageProfile, t)
+    damageProfile.kind = damageProfileKind(damageProfile)
+    damageProfile.label = t(damageProfileLabelKey(damageProfile.kind))
 
     const identityScores = [
         { label: "Front-to-back", value: frontlineCount * 2 + peelCount + scalingCount },
@@ -569,7 +588,7 @@ export function generateTeamCompReport(slots: PickSlot[], t: (key: TranslationKe
         })
     }
 
-    if (pickedChampionCount >= 4 && damageProfile.label === t("comp_damage_adHeavy")) {
+    if (pickedChampionCount >= 4 && damageProfile.kind === "adHeavy") {
         warnings.push({
             severity: "info",
             title: t("comp_warnTitle_adHeavy"),
@@ -577,7 +596,7 @@ export function generateTeamCompReport(slots: PickSlot[], t: (key: TranslationKe
         })
     }
 
-    if (pickedChampionCount >= 4 && damageProfile.label === t("comp_damage_apHeavy")) {
+    if (pickedChampionCount >= 4 && damageProfile.kind === "apHeavy") {
         warnings.push({
             severity: "info",
             title: t("comp_warnTitle_apHeavy"),
@@ -613,7 +632,7 @@ export function generateTeamCompReport(slots: PickSlot[], t: (key: TranslationKe
         strengths.push(t("comp_strength_peel"))
     }
 
-    if (damageProfile.label === t("comp_damage_mixed")) {
+    if (damageProfile.kind === "mixed") {
         strengths.push(t("comp_strength_mixed"))
     }
 
@@ -775,8 +794,17 @@ function findNextAvailableFlowStepIndex(
     return -1
 }
 
-function flowLabelForSlot(slot: ActiveDraftSlot | null, flowStepIndex: number): string {
-    if (!slot) return "Draft abgeschlossen"
+/**
+ * `t` is a PARAMETER, not a hook: this is module scope, and the string it used
+ * to return for "no slot left" was a German literal that every English user of
+ * the Draft Cockpit got to read.
+ */
+function flowLabelForSlot(
+    slot: ActiveDraftSlot | null,
+    flowStepIndex: number,
+    t: (key: TranslationKey) => string,
+): string {
+    if (!slot) return t("dh_flowComplete")
 
     const step = DRAFT_FLOW[flowStepIndex]
     if (step) return step.label
@@ -1542,16 +1570,16 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         </span>
                     )}
                     <span className="muted" style={{ display: "block" }}>
-                        {ROLE_LABELS[entry.role]} · Score {formatScore(entry.totalScore)} · {entry.games} Picks
+                        {ROLE_LABELS[entry.role]} · {t("dh_recoTableTotal")} {formatScore(entry.totalScore)} · {formatDraftPicksCount(t, entry.games, lang)}
                         {entry.games < 50 ? ` · ${t(entry.sampleSizeLabel as TranslationKey)}` : ""}
                         {flexInfo?.isFlex ? ` · Flex ${flexRoleLabel(flexInfo)}` : ""}
                     </span>
                     <span className="muted" style={{ display: "block", fontSize: "0.68rem" }}>
                         {[
-                            entry.teamPoolScore !== null && `Pool ${formatScorePercent(entry.teamPoolScore)}`,
-                            `Role ${formatScorePercent(entry.roleStatsScore)}`,
-                            `Syn ${formatScorePercent(entry.synergyScore)}`,
-                            `Mtp ${formatScorePercent(entry.matchupScore)}`,
+                            entry.teamPoolScore !== null && `${t("dh_recoTablePool")} ${formatScorePercent(entry.teamPoolScore)}`,
+                            `${t("dh_recoTableRoleStrength")} ${formatScorePercent(entry.roleStatsScore)}`,
+                            `${t("dh_recoTableSynergy")} ${formatScorePercent(entry.synergyScore)}`,
+                            `${t("dh_recoTableMatchup")} ${formatScorePercent(entry.matchupScore)}`,
                         ].filter(Boolean).join(" · ")}
                     </span>
                 </span>
@@ -1588,10 +1616,10 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 <div>
                     <h2>{t("dh_title_draftCockpit")}</h2>
                     <p>
-                        {t("dh_patchInfo")} {formatPatchWindowSummary(recentPatchData)}
+                        {t("dh_patchInfo")} {formatPatchWindowSummary(recentPatchData, t, lang)}
                     </p>
                     <p className="muted">
-                        {t("dh_rawSample")} {formatNumber(recentPatchData.rawSample, lang)} {t("dh_games")} · {t("dh_weightedSample")} {formatNumber(recentPatchData.weightedSample, lang)} {t("dh_games")}
+                        {t("dh_rawSample")} {formatDraftGamesCount(t, recentPatchData.rawSample, lang)} · {t("dh_weightedSample")} {formatDraftGamesCount(t, recentPatchData.weightedSample, lang)}
                     </p>
                 </div>
 
@@ -1639,7 +1667,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
             <DraftFlowPanel
                 draftFlowEnabled={draftFlowEnabled}
                 historyLength={history.length}
-                flowSlotLabel={flowLabelForSlot(activeDraftSlot, flowStepIndex)}
+                flowSlotLabel={flowLabelForSlot(activeDraftSlot, flowStepIndex, t)}
                 onActivate={activateDraftFlow}
                 onDeactivate={deactivateDraftFlow}
                 onStepBack={restorePreviousStep}
@@ -1680,15 +1708,15 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                 <div className="dashboard-stats">
                     <div className="stat-card">
                         <span className="stat-value">{blueDraftEdge.score.toFixed(1)}</span>
-                        <span className="stat-label">Blue Draft Edge</span>
+                        <span className="stat-label">{t("dh_title_draftEdgeBlue")}</span>
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{redDraftEdge.score.toFixed(1)}</span>
-                        <span className="stat-label">Red Draft Edge</span>
+                        <span className="stat-label">{t("dh_title_draftEdgeRed")}</span>
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{Math.round(activeDraftEdge.averageConfidence * 100)}%</span>
-                        <span className="stat-label">Confidence</span>
+                        <span className="stat-label">{t("tbl_confidence")}</span>
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{activeDraftEdge.assignedRoles}/5</span>
@@ -1787,7 +1815,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                         <h3>{t("dh_nextDecision")}</h3>
                         <p>
                             {draftFlowEnabled
-                                ? `${t("dh_flowLabel")} ${flowLabelForSlot(activeDraftSlot, flowStepIndex)}`
+                                ? `${t("dh_flowLabel")} ${flowLabelForSlot(activeDraftSlot, flowStepIndex, t)}`
                                 : activeDraftSlot
                                     ? `${t("dh_activeSlot")} ${describeActiveSlot(activeDraftSlot)}`
                                     : `${sideLabel(recommendationSide)} ${t("dh_selectSlotHint")}`}
@@ -1818,7 +1846,7 @@ export function DraftHelper({ matches }: DraftHelperProps) {
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{allBans.length}/10</span>
-                        <span className="stat-label">Bans</span>
+                        <span className="stat-label">{t("dh_statBans")}</span>
                     </div>
                     <div className="stat-card">
                         <span className="stat-value">{recommendations.length}</span>

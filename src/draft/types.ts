@@ -105,6 +105,14 @@ export type TeamCompMetric = {
     description: string
 }
 
+/**
+ * The machine-readable outcome of the damage-profile heuristic.
+ *
+ * `label` next to it is DISPLAY TEXT and changes with the language switch, so it
+ * must never be compared against. Control flow reads `kind`.
+ */
+export type DamageProfileKind = "unknown" | "adHeavy" | "apHeavy" | "mixed"
+
 export type TeamCompReport = {
     identity: string
     primaryTags: string[]
@@ -116,6 +124,7 @@ export type TeamCompReport = {
         ad: number
         mixed: number
         unknown: number
+        kind: DamageProfileKind
         label: string
     }
 }

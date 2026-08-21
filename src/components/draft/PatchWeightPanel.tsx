@@ -1,6 +1,6 @@
 import { useTranslation } from "../../i18n/LanguageContext"
 import type { TranslationKey } from "../../i18n/types"
-import { formatNumber } from "../../i18n/format"
+import { formatDraftGamesCount } from "./draftUiHelpers"
 import type { PatchWindowSummary, PatchWeightPresetKey } from "../../draft/types"
 import { PATCH_WEIGHT_PRESETS, PATCH_WEIGHT_MAX_PATCHES } from "../../draft/constants"
 
@@ -47,7 +47,7 @@ export function PatchWeightPanel({
                 </button>
             </div>
 
-            <div className="role-filter-tabs" aria-label={t("dh_pPresetsAriaLabel")}>
+            <div className="role-filter-tabs" role="group" aria-label={t("dh_pPresetsAriaLabel")}>
                 {(Object.keys(PATCH_WEIGHT_PRESETS) as PatchWeightPresetKey[]).map((preset) => (
                     <button
                         key={preset}
@@ -72,7 +72,7 @@ export function PatchWeightPanel({
                                 <strong>{patchWeights[index] ?? 0}%</strong>
                             </span>
                             <span className="muted">
-                                {patch} · {formatNumber(rawMatches, lang)} {t("dh_games")}
+                                {patch} · {formatDraftGamesCount(t, rawMatches, lang)}
                             </span>
                             <input
                                 type="range"

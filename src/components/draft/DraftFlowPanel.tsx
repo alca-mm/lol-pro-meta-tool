@@ -20,7 +20,7 @@ export function DraftFlowPanel({
     const { t } = useTranslation()
 
     return (
-        <div className="role-filter-tabs" aria-label="Draft-Flow">
+        <div className="role-filter-tabs" role="group" aria-label={t("dh_flowControlsAriaLabel")}>
             <span className="muted" style={{ alignSelf: "center", marginRight: "0.35rem" }}>
                 {t("dh_draftFlow")}
             </span>

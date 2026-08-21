@@ -73,7 +73,7 @@ export function ChampionStatsTable({ stats, selectedChampion, onSelectChampion, 
             {colBtn("banRate", "Banrate")}
             {colBtn("presence", "Presence")}
             {colBtn("winRate", "Winrate")}
-            {colBtn("draftPriorityScore", "Draft Priority")}
+            {colBtn("draftPriorityScore", t("tbl_draftPriority"))}
             <th>{t("tbl_confidence")}</th>
           </tr>
         </thead>

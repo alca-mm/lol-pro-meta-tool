@@ -263,7 +263,7 @@ function AppContent() {
                         </button>
                     )}
 
-                    <nav className="tab-nav" aria-label="Ansichten">
+                    <nav className="tab-nav" aria-label={t("app_navAriaLabel")}>
                         {ALL_TABS.map((tab) => (
                             <button
                                 key={tab.id}

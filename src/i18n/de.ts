@@ -41,6 +41,7 @@ export const de = {
     dash_filtered: "Matches gefiltert",
     dash_total: "Matches gesamt",
 
+    app_navAriaLabel: "Ansichten",
     app_loading: "Lade Matchdaten…",
     app_noMatches: "Keine validen Matches in den Daten gefunden.",
 
@@ -57,10 +58,19 @@ export const de = {
     dh_title_draftEdge: "Draft-Edge",
     dh_title_teamIdentity: "Team-Identität",
     dh_title_compChecks: "Comp-Checks",
+    dh_title_draftEdgeBlue: "Blue Draft-Edge",
+    dh_title_draftEdgeRed: "Red Draft-Edge",
+    dh_statBans: "Bans gesamt",
+    dh_flowComplete: "Draft abgeschlossen",
+    dh_rolePlaceholder: "Rolle?",
+    dh_noPatchData: "keine Patchdaten",
     dh_patchInfo: "Empfehlungen nutzen eine gewichtete Patch-Auswahl:",
     dh_rawSample: "Roh-Sample:",
     dh_weightedSample: "gewichtetes Sample:",
-    dh_games: "Games",
+    dh_gamesCountOne: "{count} Game",
+    dh_gamesCountMany: "{count} Games",
+    dh_picksCountOne: "{count} Pick",
+    dh_picksCountMany: "{count} Picks",
     dh_resetDraft: "Draft zurücksetzen",
     dh_minPicksLabel: "Mindest-Picks pro Rolle",
     dh_excludeBans: "Gebannte Champions aus Empfehlungen ausschließen",
@@ -100,8 +110,26 @@ export const de = {
     dh_patchOld1: "Patch alt",
     dh_patchOldN: "Patches alt",
 
-    // Patch weight preset labels
+    // Accessible names for the control groups. Since 0.6.3 all four sit on a
+    // container with an explicit role, so all four are exposed: three name a
+    // role="group", and dh_recoSideAriaLabel names a role="radiogroup". Before
+    // that they sat on plain divs mapping to role generic, where naming is
+    // prohibited by ARIA 1.2, and every one of them was silently dropped.
     dh_pPresetsAriaLabel: "Patch-Gewichtungs-Presets",
+    dh_wPresetsAriaLabel: "Wichtungs-Presets",
+    dh_flowControlsAriaLabel: "Draft-Flow-Steuerung",
+    dh_recoSideAriaLabel: "Seite für Empfehlungen",
+
+    // Score weight preset labels. The panel rendered WEIGHT_PRESETS[...].label
+    // straight from src/draft/constants.ts, so these five stayed English in the
+    // German build. Mirrors the dh_pPreset_* map one file over.
+    dh_wPreset_balanced: "Ausgewogen",
+    dh_wPreset_counterpick: "Counterpick",
+    dh_wPreset_synergy: "Synergie",
+    dh_wPreset_meta: "Meta zuerst",
+    dh_wPreset_safe: "Sicher, hohe Aussagekraft",
+
+    // Patch weight preset labels
     dh_pPreset_balanced: "Balanced",
     dh_pPreset_currentFocused: "Aktueller Patch",
     dh_pPreset_stable: "Meta stabil",
@@ -118,8 +146,8 @@ export const de = {
     dh_wLabel_synergy: "Synergie",
     dh_wLabel_matchup: "Matchup / Counter",
     dh_wLabel_winRate: "Winrate",
-    dh_wLabel_sampleSize: "Sample Size",
-    dh_wLabel_teamPool: "Team Pool",
+    dh_wLabel_sampleSize: "Datenmenge",
+    dh_wLabel_teamPool: "Team-Pool",
 
     // Draft Edge section
     dh_edgeDesc: "Heuristische Draft-Bewertung auf Basis deiner Pro-Play-Daten. Nicht als echte Winrate kalibriert.",
@@ -265,6 +293,7 @@ export const de = {
     cn_selectChampion: "Champion",
     cn_note: "Notiz",
     cn_tags: "Tags (kommagetrennt)",
+    cn_tagsPlaceholder: "z. B. Top, Carry, Peel",
     cn_rating: "Einschätzung",
     cn_save: "Speichern",
     cn_saved: "Gespeichert",
@@ -413,6 +442,8 @@ export const de = {
     header_contact: "Kontakt",
 
     // Common
+    common_clear: "Eingabe leeren",
+    common_noMatch: "Keine Treffer",
     common_loading: "Lädt…",
 
     // Player Results
@@ -443,6 +474,8 @@ export const de = {
     playerResults_matchCountMany: "{count} Matches",
     playerResults_recentForm: "Aktuelle Form",
     playerResults_teammate: "Mitspieler",
+    playerResults_showTeammates: "Mitspieler anzeigen",
+    playerResults_hideTeammates: "Mitspieler ausblenden",
     playerResults_tipGames: "Spiele",
     playerResults_tipWins: "Siege",
     playerResults_tipLosses: "Niederlagen",
@@ -468,6 +501,7 @@ export const de = {
     dh_solidDraft: "Solider datenbasierter Draft-Stand.",
 
     // Champion Detail
+    cd_close: "Detailansicht schließen",
     cd_roleDistribution: "Rollenverteilung",
     cd_topSynergies: "Top Synergien",
     cd_topMatchupsFor: "Top Matchups (für",
@@ -479,6 +513,7 @@ export const de = {
     common_games: "Spiele",
 
     // Table headers and empty states
+    tbl_draftPriority: "Draft-Priorität",
     tbl_confidence: "Aussagekraft",
     tbl_games: "Spiele",
     tbl_wins: "Siege",

@@ -1,6 +1,25 @@
 import { useTranslation } from "../../i18n/LanguageContext"
+import type { TranslationKey } from "../../i18n/types"
 import type { WeightKey, WeightConfig, DraftAiPresetKey } from "../../draft/types"
 import { WEIGHT_PRESETS, DEFAULT_WEIGHTS } from "../../draft/constants"
+
+/**
+ * The preset buttons take their text from the catalogue, not from
+ * `WEIGHT_PRESETS[...].label`.
+ *
+ * Those labels live in src/draft/constants.ts, which is a domain module with no
+ * access to `t()`, so rendering them directly put five English words
+ * ("Balanced", "Counterpick", "Meta Priority", ...) into the German build. The
+ * sibling PatchWeightPanel already solved this the same way; the two panels
+ * stack on one screen, so they had to agree.
+ */
+const WEIGHT_PRESET_LABELS: Record<DraftAiPresetKey, TranslationKey> = {
+    balanced: "dh_wPreset_balanced",
+    counterpick: "dh_wPreset_counterpick",
+    synergy: "dh_wPreset_synergy",
+    meta: "dh_wPreset_meta",
+    safe: "dh_wPreset_safe",
+}
 
 interface ScoreWeightPanelProps {
     weights: WeightConfig
@@ -35,7 +54,7 @@ export function ScoreWeightPanel({ weights, onUpdateWeight, onApplyPreset, onRes
                 </button>
             </div>
 
-            <div className="role-filter-tabs" aria-label="Wichtungs-Presets">
+            <div className="role-filter-tabs" role="group" aria-label={t("dh_wPresetsAriaLabel")}>
                 {(Object.keys(WEIGHT_PRESETS) as DraftAiPresetKey[]).map((preset) => (
                     <button
                         key={preset}
@@ -43,7 +62,7 @@ export function ScoreWeightPanel({ weights, onUpdateWeight, onApplyPreset, onRes
                         className="role-tab"
                         onClick={() => onApplyPreset(preset)}
                     >
-                        {WEIGHT_PRESETS[preset].label}
+                        {t(WEIGHT_PRESET_LABELS[preset])}
                     </button>
                 ))}
             </div>

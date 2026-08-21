@@ -189,7 +189,7 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
                         value={editTags}
                         onChange={(e) => setEditTags(e.target.value)}
                         disabled={!selectedChampion || loadingNotes}
-                        placeholder="e.g. top, carry, peel"
+                        placeholder={t("cn_tagsPlaceholder")}
                     />
                 </label>
 

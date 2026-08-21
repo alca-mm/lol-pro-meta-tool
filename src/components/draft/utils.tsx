@@ -1,5 +1,6 @@
 import { ChampionIcon } from "../ChampionIcon"
 import type { FlexChampionInfo, PickSlot } from "../../draft/types"
+import type { TranslationKey } from "../../i18n/types"
 import { ROLE_LABELS } from "../../draft/constants"
 
 export function iconFor(championName?: string) {
@@ -22,7 +23,12 @@ export function flexRoleLabel(info: FlexChampionInfo | undefined): string {
         .join(" / ")
 }
 
-export function pickSlotRoleLabel(slot: PickSlot): string {
-    if (!slot.championName) return "Role?"
-    return slot.role ? ROLE_LABELS[slot.role] : "Role?"
+// `t` is threaded in as a parameter rather than read from a hook: this module
+// is plain functions, not a component, so it has no place to call one.
+export function pickSlotRoleLabel(
+    slot: PickSlot,
+    t: (key: TranslationKey) => string,
+): string {
+    if (!slot.championName) return t("dh_rolePlaceholder")
+    return slot.role ? ROLE_LABELS[slot.role] : t("dh_rolePlaceholder")
 }

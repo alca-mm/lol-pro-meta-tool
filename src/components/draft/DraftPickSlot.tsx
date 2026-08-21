@@ -53,7 +53,7 @@ export function DraftPickSlot({
                     {championName || t("dh_selectPickPlaceholder")}
                     {championName ? (
                         <span className="muted" style={{ display: "block", fontWeight: 600 }}>
-                            {pickSlotRoleLabel(slot)}
+                            {pickSlotRoleLabel(slot, t)}
                             {flexInfo?.isFlex ? ` · Flex ${flexRoleLabel(flexInfo)}` : ""}
                         </span>
                     ) : null}
@@ -78,7 +78,7 @@ export function DraftPickSlot({
                         fontSize: "0.75rem",
                     }}
                 >
-                    <option value="">Role?</option>
+                    <option value="">{t("dh_rolePlaceholder")}</option>
                     {ROLES.map((role) => (
                         <option key={role} value={role}>
                             {ROLE_LABELS[role]}

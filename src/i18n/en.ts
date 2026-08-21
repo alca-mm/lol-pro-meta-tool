@@ -43,6 +43,7 @@ export const en: Translations = {
     dash_filtered: "Filtered matches",
     dash_total: "Total matches",
 
+    app_navAriaLabel: "Views",
     app_loading: "Loading match data…",
     app_noMatches: "No valid matches found in the data.",
 
@@ -59,10 +60,19 @@ export const en: Translations = {
     dh_title_draftEdge: "Draft Edge",
     dh_title_teamIdentity: "Team Identity",
     dh_title_compChecks: "Comp Checks",
+    dh_title_draftEdgeBlue: "Blue Draft Edge",
+    dh_title_draftEdgeRed: "Red Draft Edge",
+    dh_statBans: "Bans total",
+    dh_flowComplete: "Draft complete",
+    dh_rolePlaceholder: "Role?",
+    dh_noPatchData: "no patch data",
     dh_patchInfo: "Recommendations use a weighted patch selection:",
     dh_rawSample: "Raw sample:",
     dh_weightedSample: "weighted sample:",
-    dh_games: "games",
+    dh_gamesCountOne: "{count} game",
+    dh_gamesCountMany: "{count} games",
+    dh_picksCountOne: "{count} pick",
+    dh_picksCountMany: "{count} picks",
     dh_resetDraft: "Reset draft",
     dh_minPicksLabel: "Minimum picks per role",
     dh_excludeBans: "Exclude banned champions from recommendations",
@@ -102,8 +112,24 @@ export const en: Translations = {
     dh_patchOld1: "patch old",
     dh_patchOldN: "patches old",
 
-    // Patch weight preset labels
+    // Accessible names for the control groups. Since 0.6.3 all four sit on a
+    // container with an explicit role, so all four are exposed: three name a
+    // role="group", and dh_recoSideAriaLabel names a role="radiogroup". Before
+    // that they sat on plain divs mapping to role generic, where naming is
+    // prohibited by ARIA 1.2, and every one of them was silently dropped.
     dh_pPresetsAriaLabel: "Patch weighting presets",
+    dh_wPresetsAriaLabel: "Weighting presets",
+    dh_flowControlsAriaLabel: "Draft flow controls",
+    dh_recoSideAriaLabel: "Recommendation side",
+
+    // Score weight preset labels. See the note in de.ts.
+    dh_wPreset_balanced: "Balanced",
+    dh_wPreset_counterpick: "Counterpick",
+    dh_wPreset_synergy: "Synergy",
+    dh_wPreset_meta: "Meta first",
+    dh_wPreset_safe: "Safe, high confidence",
+
+    // Patch weight preset labels
     dh_pPreset_balanced: "Balanced",
     dh_pPreset_currentFocused: "Current focus",
     dh_pPreset_stable: "Meta stable",
@@ -119,7 +145,7 @@ export const en: Translations = {
     dh_wLabel_roleStats: "Role Strength",
     dh_wLabel_synergy: "Synergy",
     dh_wLabel_matchup: "Matchup / Counter",
-    dh_wLabel_winRate: "Win Rate",
+    dh_wLabel_winRate: "Winrate",
     dh_wLabel_sampleSize: "Sample Size",
     dh_wLabel_teamPool: "Team Pool",
 
@@ -267,6 +293,7 @@ export const en: Translations = {
     cn_selectChampion: "Champion",
     cn_note: "Note",
     cn_tags: "Tags (comma-separated)",
+    cn_tagsPlaceholder: "e.g. top, carry, peel",
     cn_rating: "Rating",
     cn_save: "Save",
     cn_saved: "Saved",
@@ -415,6 +442,8 @@ export const en: Translations = {
     header_contact: "Contact",
 
     // Common
+    common_clear: "Clear input",
+    common_noMatch: "No matches",
     common_loading: "Loading…",
 
     // Player Results
@@ -445,6 +474,8 @@ export const en: Translations = {
     playerResults_matchCountMany: "{count} matches",
     playerResults_recentForm: "Recent Form",
     playerResults_teammate: "Teammate",
+    playerResults_showTeammates: "Show teammates",
+    playerResults_hideTeammates: "Hide teammates",
     playerResults_tipGames: "Games",
     playerResults_tipWins: "Wins",
     playerResults_tipLosses: "Losses",
@@ -470,6 +501,7 @@ export const en: Translations = {
     dh_solidDraft: "Solid data-based draft.",
 
     // Champion Detail
+    cd_close: "Close details",
     cd_roleDistribution: "Role distribution",
     cd_topSynergies: "Top Synergies",
     cd_topMatchupsFor: "Top Matchups (for",
@@ -481,6 +513,7 @@ export const en: Translations = {
     common_games: "games",
 
     // Table headers and empty states
+    tbl_draftPriority: "Draft Priority",
     tbl_confidence: "Confidence",
     tbl_games: "Games",
     tbl_wins: "Wins",
