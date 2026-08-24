@@ -542,13 +542,46 @@ describe("analyzeScout — flex picks", () => {
     expect(gragas.reasons.map((item) => item.code)).toContain("flex_across_roles")
   })
 
-  it("raises a flex warning naming the champion", () => {
+  it("raises ONE counted flex warning and names the champion on the candidate", () => {
     const result = analyzeScout(players, data)
-    const warning = result.warnings.find((item) => item.code === "flex_pick_warning")
+    const flexWarnings = result.warnings.filter((item) => item.code === "flex_pick_warning")
 
-    expect(warning).toBeDefined()
-    expect(warning?.championName).toBe("Gragas")
+    // ONE warning for the session, not one per flex champion. This used to be
+    // per candidate, which put the same sentence on screen 34 times in a real
+    // five-player session while the sentence itself said "at least one
+    // champion".
+    expect(flexWarnings).toHaveLength(1)
+    expect(flexWarnings[0]?.params).toEqual({ count: 1 })
     expect(result.banPlan.warnings.map((item) => item.code)).toContain("flex_pick_warning")
+
+    // The champion is not lost, it is stated where it belongs: on the candidate.
+    const gragas = candidateFor(result.banPlan.prioritizedBans, "Gragas")
+    expect(gragas?.isFlex).toBe(true)
+    expect(codesOf(gragas?.reasons ?? [])).toContain("flex_across_roles")
+  })
+
+  it("counts every flex champion in that single warning", () => {
+    const many = [player("p1", "top"), player("p2", "mid")]
+    const manyData = dataOf(
+      [
+        "p1",
+        [
+          entry("Gragas", 12, 60, { role: "top" }),
+          entry("Gragas", 10, 58, { role: "jungle" }),
+          entry("Sylas", 12, 60, { role: "top" }),
+          entry("Sylas", 10, 58, { role: "mid" }),
+        ],
+      ],
+      ["p2", [entry("Ahri", 20, 62, { role: "mid" })]],
+    )
+    const result = analyzeScout(many, manyData)
+    const flexWarnings = result.warnings.filter((item) => item.code === "flex_pick_warning")
+
+    // Two flex champions, still one warning, and the count says two. A test
+    // that only ever saw one flex champion could not tell a count from a
+    // hard-coded 1.
+    expect(flexWarnings).toHaveLength(1)
+    expect(flexWarnings[0]?.params).toEqual({ count: 2 })
   })
 
   it("detects flex across two different players as well", () => {
@@ -1064,7 +1097,7 @@ describe("analyzeScout — substitutes", () => {
 
   it("includes them weighted and clearly marked when asked to", () => {
     const result = analyzeScout(players, data, { lineup: benched, includeSubstitutes: true })
-    const kaisa = candidateFor(result.banPlan.prioritizedBans, "Kaisa")
+    const kaisa = candidateFor(result.banPlan.prioritizedBans, "Kai'Sa")
 
     expect(kaisa).toBeDefined()
     expect(kaisa?.substituteOnly).toBe(true)
@@ -1083,11 +1116,11 @@ describe("analyzeScout — substitutes", () => {
     const asSub = candidateFor(
       analyzeScout(players, data, { lineup: benched, includeSubstitutes: true }).banPlan
         .prioritizedBans,
-      "Kaisa",
+      "Kai'Sa",
     )
     const asStarter = candidateFor(
       analyzeScout(players, data, { lineup: promoted }).banPlan.prioritizedBans,
-      "Kaisa",
+      "Kai'Sa",
     )
 
     expect(asSub?.priority ?? 1).toBeLessThan(asStarter?.priority ?? 0)
@@ -1101,12 +1134,12 @@ describe("analyzeScout — substitutes", () => {
         includeSubstitutes: true,
         substituteWeight: 0.2,
       }).banPlan.prioritizedBans,
-      "Kaisa",
+      "Kai'Sa",
     )
     const standard = candidateFor(
       analyzeScout(players, data, { lineup: benched, includeSubstitutes: true }).banPlan
         .prioritizedBans,
-      "Kaisa",
+      "Kai'Sa",
     )
 
     expect(light?.priority ?? 1).toBeLessThan(standard?.priority ?? 0)
@@ -1114,7 +1147,7 @@ describe("analyzeScout — substitutes", () => {
 
   it("counts a promoted substitute in full, without any special case", () => {
     const result = analyzeScout(players, data, { lineup: promoted })
-    const kaisa = candidateFor(result.banPlan.prioritizedBans, "Kaisa")
+    const kaisa = candidateFor(result.banPlan.prioritizedBans, "Kai'Sa")
 
     expect(kaisa?.substituteOnly).toBe(false)
     expect(kaisa?.signals.every((signal) => signal.fromSubstitute)).toBe(false)
@@ -1122,7 +1155,7 @@ describe("analyzeScout — substitutes", () => {
     expect(kaisa?.targetRole).toBe("bot")
     expect(codesOf(result.warnings)).not.toContain("substitute_risk_active")
     // Full weight again: 80 % on 20 games now outranks the 60 % starter.
-    expect(names(result.banPlan.prioritizedBans)[0]).toBe("Kaisa")
+    expect(names(result.banPlan.prioritizedBans)[0]).toBe("Kai'Sa")
   })
 })
 
@@ -1566,10 +1599,72 @@ function statWeightedSessionResult(): ScoutAnalysisResult {
   )
 }
 
+/**
+ * A session that exercises the 0.7.0 emission sites: a ranked support main
+ * parked in the jungle, with champion role evidence supplied.
+ *
+ * It has to be its own scenario because both new reasons need inputs none of the
+ * three above provide: `champion_not_playable_in_role` needs
+ * `championRoleReference`, and `high_rank_player` needs a rank on the player.
+ * Adding them to an existing fixture would have changed what those fixtures
+ * prove.
+ */
+function roleGatedSessionResult(): ScoutAnalysisResult {
+  const scout: ScoutPlayer = { ...player("gated", "support"), rankTier: "challenger" }
+  return analyzeScout(
+    [scout],
+    dataOf([
+      "gated",
+      [
+        // Karma in the jungle: one pick in the whole reference dataset.
+        entry("Karma", 80, 72, { role: "jungle", recency: "current" }),
+        // Lee Sin really is a jungler, so the gate must let this one through.
+        entry("Lee Sin", 40, 61, { role: "jungle", recency: "current", kda: 4.2 }),
+      ],
+    ]),
+    {
+      lineup: lineupOf({ jungle: "gated" }),
+      championRoleReference: [
+        {
+          championName: "Karma",
+          games: 1000,
+          picks: 2254,
+          bans: 0,
+          wins: 1127,
+          losses: 1127,
+          pickRate: 0.1,
+          banRate: 0,
+          presence: 0.1,
+          winRate: 0.5,
+          roleDistribution: { top: 0.0346, jungle: 0.0004, mid: 0.2902, bot: 0.0013, support: 0.6735 },
+          sampleSizeLabel: "sample_good",
+          draftPriorityScore: 0.5,
+        },
+        {
+          championName: "Lee Sin",
+          games: 1000,
+          picks: 1889,
+          bans: 0,
+          wins: 944,
+          losses: 945,
+          pickRate: 0.1,
+          banRate: 0,
+          presence: 0.1,
+          winRate: 0.5,
+          roleDistribution: { top: 0.0143, jungle: 0.9719, mid: 0.0079, bot: 0.0026, support: 0.0032 },
+          sampleSizeLabel: "sample_good",
+          draftPriorityScore: 0.5,
+        },
+      ],
+    },
+  )
+}
+
 const SCENARIOS: readonly (readonly [string, () => ScoutAnalysisResult])[] = [
   ["messy session", messySessionResult],
   ["thin stale session", thinStaleSessionResult],
   ["stat weighted session", statWeightedSessionResult],
+  ["role gated session", roleGatedSessionResult],
 ]
 
 function collectAllCodedItems(): CodedItem[] {
@@ -1608,6 +1703,8 @@ const ALL_REASON_CODES: Readonly<Record<ScoutReasonCode, true>> = {
   player_without_lineup_role: true,
   many_games_on_champion: true,
   strong_kda: true,
+  champion_not_playable_in_role: true,
+  high_rank_player: true,
 }
 
 const ALL_WARNING_CODES: Readonly<Record<ScoutWarningCode, true>> = {
@@ -1624,6 +1721,7 @@ const ALL_WARNING_CODES: Readonly<Record<ScoutWarningCode, true>> = {
   offrole_data_present: true,
   substitute_risk_active: true,
   data_loss_on_reparse: true,
+  role_not_playable_filtered: true,
 }
 
 /**

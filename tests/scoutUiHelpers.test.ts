@@ -1371,6 +1371,10 @@ describe("banCandidateKda", () => {
       roleFit: "unknown",
       lineupRole: null,
       fromSubstitute: false,
+      // Added in 0.7.0. `"unknown"` is the honest default for a fixture that
+      // supplies no role reference: it means "no verdict possible", which is
+      // exactly what the engine reports without reference data.
+      roleViability: "unknown",
       ...overrides,
     }
   }

@@ -640,9 +640,10 @@ export function ScoutStatsImportPanel({
 
                 <div className="scout-import-block">
                     <h5 className="scout-import-block-title">{t("scout_import_openSourcesTitle")}</h5>
-                    {selectedPlayer === null ? (
-                        <p className="scout-nodata">{t("scout_import_playerNone")}</p>
-                    ) : (
+                    {/* Step 1 already says this a few lines above. Saying it twice on
+                        one screen is the documentation tone this tab is moving away
+                        from, so the block stays silent until a player is picked. */}
+                    {selectedPlayer === null ? null : (
                         <div className="scout-import-source-links">
                             {sourceLinks.map((ref) => {
                                 const label = getScoutSourceDescriptor(ref.kind).label
@@ -884,6 +885,15 @@ export function ScoutStatsImportPanel({
                                             // the note, not the raw paste line. Empty when the
                                             // paste carried none of these metrics.
                                             const note = buildImportNote(row)
+                                            // Hoisted and narrowed here rather than inline in the
+                                            // JSX: TypeScript 7 was seen failing to carry a
+                                            // `selectedRole !== null` narrowing across the JSX
+                                            // boundary on a cold run, and a local makes the
+                                            // narrowing local too.
+                                            const appliedRoleLabel =
+                                                selectedRole === null
+                                                    ? null
+                                                    : t(scoutRoleKey(selectedRole))
                                             return (
                                                 <tr
                                                     key={row.id}
@@ -918,21 +928,45 @@ export function ScoutStatsImportPanel({
                                                         )}
                                                     </td>
                                                     <td>
-                                                        <span className="scout-import-applied-role">
-                                                            {fillPlaceholders(
-                                                                t("scout_import_row_appliedRole"),
-                                                                {
-                                                                    role:
-                                                                        selectedRole === null
-                                                                            ? ""
-                                                                            : t(scoutRoleKey(selectedRole)),
-                                                                },
+                                                        {/*
+                                                          Only rendered when it
+                                                          says something new.
+                                                          Step 2 already states
+                                                          the role once, so
+                                                          repeating it on all 40
+                                                          rows was pure noise;
+                                                          next to a contradicting
+                                                          source it is the whole
+                                                          point.
+
+                                                          The `selectedRole !==
+                                                          null` guard is not
+                                                          defensive padding: the
+                                                          role can be cleared
+                                                          while a parsed preview
+                                                          is still on screen, and
+                                                          `fillPlaceholders`
+                                                          turns the missing param
+                                                          into "", so every row
+                                                          used to read
+                                                          "Wird uebernommen als:"
+                                                          with a dangling colon.
+                                                        */}
+                                                        {appliedRoleLabel !== null &&
+                                                            row.detectedRole !== "unknown" &&
+                                                            row.detectedRole !== selectedRole && (
+                                                                <span className="scout-import-applied-role">
+                                                                    {fillPlaceholders(
+                                                                        t("scout_import_row_appliedRole"),
+                                                                        { role: appliedRoleLabel },
+                                                                    )}
+                                                                </span>
                                                             )}
-                                                        </span>
                                                         {/* The selection wins; the source is
                                                             contradicted out loud, not behind the
                                                             user's back. */}
-                                                        {row.roleMismatch && (
+                                                        {row.detectedRole !== "unknown" &&
+                                                            row.detectedRole !== selectedRole && (
                                                             <div className="scout-import-rolemismatch">
                                                                 {fillPlaceholders(
                                                                     t("scout_import_row_detectedRole"),

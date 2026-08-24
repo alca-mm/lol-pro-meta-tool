@@ -3062,6 +3062,14 @@ body::-webkit-scrollbar {
 
 /* Collapsed explanation blocks: same look as the skipped-lines details above.
    Justification, never instruction, so it starts closed and stays quiet. */
+/* The collapsed diagnosis blocks stack their lines. Without this the spans
+   inside are plain inline boxes on one line, and JSX emits no whitespace text
+   node between them, so three sentences render glued together. */
+.scout-source-details > span,
+.scout-source-details > .muted {
+    display: block;
+}
+
 .scout-details > summary {
   cursor: pointer;
   font-size: 11.5px;

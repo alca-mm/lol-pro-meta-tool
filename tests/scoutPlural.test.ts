@@ -541,7 +541,7 @@ describe("the untouched counted keys stayed single", () => {
  * 7. i18n hygiene of the new keys
  *
  * tests/i18nScoutCopy.test.ts already enforces catalogue-wide parity and the
- * copy rules. This section re-states them for the eight new pairs so a failure
+ * copy rules. This section re-states them for the ten new pairs so a failure
  * names the pair that broke, and adds the one rule the generic tests cannot
  * express: a singular and its plural must carry the SAME placeholders.
  * ========================================================================== */
@@ -556,10 +556,15 @@ const MECHANICAL_PLURAL_BASES = [
   "scout_reason_high_winrate_small_sample",
   "scout_warning_substitute_risk_active",
   "scout_warning_data_loss_on_reparse",
+  // Added in 0.7.0. Both warnings became count-bearing because the engine now
+  // states each of them ONCE per session with a number instead of once per
+  // champion, so both can legitimately render a 1.
+  "scout_warning_flex_pick_warning",
+  "scout_warning_role_not_playable_filtered",
 ] as const
 
 /**
- * The eight pairs. The four import pairs are read off the exported constants
+ * The ten pairs. The four import pairs are read off the exported constants
  * rather than spelled out, so this file cannot drift from the names the UI
  * actually uses.
  */
@@ -574,9 +579,56 @@ const NEW_KEY_PAIRS: ReadonlyArray<readonly [one: string, many: string]> = [
 const placeholdersOf = (value: string): string[] =>
   [...new Set(value.match(/\{\w+\}/g) ?? [])].sort()
 
+describe("the warnings that became count-bearing in 0.7.0 render both forms", () => {
+  // Registering a base in MECHANICAL_PLURAL_BASES only satisfies key hygiene.
+  // A review showed that deleting both COUNT_SENSITIVE_WARNINGS entries broke
+  // nothing at all, because nothing rendered these two through the real
+  // translator. Noun AND verb are asserted together: "1 Champion" is a prefix
+  // of "1 Champions", so checking the noun alone is vacuous.
+  const CASES = [
+    {
+      code: "flex_pick_warning" as const,
+      one: { de: /\b1 Champion taucht\b/, en: /\b1 champion shows up\b/ },
+      many: { de: /\b2 Champions tauchen\b/, en: /\b2 champions show up\b/ },
+    },
+    {
+      code: "role_not_playable_filtered" as const,
+      one: { de: /\b1 Champion wurde\b/, en: /\b1 champion is not\b/ },
+      many: { de: /\b2 Champions wurden\b/, en: /\b2 champions are not\b/ },
+    },
+  ]
+
+  for (const testCase of CASES) {
+    it(`${testCase.code} agrees in number in both languages`, () => {
+      for (const [lang, t] of [
+        ["de", tDe],
+        ["en", tEn],
+      ] as const) {
+        const singular = translateScoutWarning(t, {
+          code: testCase.code,
+          severity: "warning",
+          params: { count: 1 },
+        })
+        const plural = translateScoutWarning(t, {
+          code: testCase.code,
+          severity: "warning",
+          params: { count: 2 },
+        })
+
+        expect(singular, `${lang} singular: ${singular}`).toMatch(testCase.one[lang])
+        expect(plural, `${lang} plural: ${plural}`).toMatch(testCase.many[lang])
+        expect(singular).not.toBe(plural)
+        for (const text of [singular, plural]) {
+          expect(text).not.toContain("{count}")
+        }
+      }
+    })
+  }
+})
+
 describe("the new plural keys are well formed", () => {
-  it("are eight distinct pairs, and no pair points at one key twice", () => {
-    expect(NEW_KEY_PAIRS.length).toBe(8)
+  it("are ten distinct pairs, and no pair points at one key twice", () => {
+    expect(NEW_KEY_PAIRS.length).toBe(10)
     // A pair whose halves are the same key would silently disable the whole
     // feature: every count would render the same sentence and every assertion
     // about the singular above would fail with a confusing message instead of
@@ -584,7 +636,7 @@ describe("the new plural keys are well formed", () => {
     for (const [one, many] of NEW_KEY_PAIRS) {
       expect(one, `pair ${one}/${many} names the same key twice`).not.toBe(many)
     }
-    expect(new Set(NEW_KEY_PAIRS.flatMap(([one, many]) => [one, many])).size).toBe(16)
+    expect(new Set(NEW_KEY_PAIRS.flatMap(([one, many]) => [one, many])).size).toBe(20)
   })
 
   it("exist in both languages and are not empty", () => {
@@ -635,7 +687,7 @@ describe("the new plural keys are well formed", () => {
     }
   })
 
-  it("added no One key beyond the eight", () => {
+  it("added no One key beyond the ten", () => {
     // The ballast guard from section 6, generalised: nobody may quietly grow a
     // ninth singular for a string that never counts to one.
     const expected = new Set(NEW_KEY_PAIRS.map(([one]) => one))
@@ -647,7 +699,7 @@ describe("the new plural keys are well formed", () => {
       for (const key of found) {
         expect(
           expected.has(key),
-          `${lang}.${key} is a singular sibling nobody asked for. Only these eight keys count ` +
+          `${lang}.${key} is a singular sibling nobody asked for. Only these ten keys count ` +
             `to one: ${[...expected].join(", ")}`,
         ).toBe(true)
       }

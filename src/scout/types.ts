@@ -105,6 +105,102 @@ export type ScoutRecency = "current" | "recent" | "old"
 export type ScoutConfidence = "high" | "medium" | "low" | "none"
 
 /**
+ * Solo-queue rank tier of a scouted player, as the user states it.
+ *
+ * NEVER FETCHED, ALWAYS TYPED IN. There is no Riot lookup behind this field and
+ * there must not be one: the same honesty rule that governs every other number
+ * in this feature applies here too (rule (A) at the top of this file). The user
+ * reads the rank off the source link they already opened and picks it.
+ *
+ * `"unranked"` is a STATEMENT ("this player has no rank"), while an absent
+ * field is the ABSENCE of one ("nobody said"). Both weigh exactly neutral, so
+ * the distinction does not change a score today, but they must not be collapsed
+ * in the type: an unranked smurf is a different fact from an unscouted player,
+ * and a later feature may want to tell them apart. Same `0` vs `null`
+ * discipline {@link ManualChampionEntry.kda} documents.
+ *
+ * Divisions (I to IV) are deliberately NOT modelled. The weighting moves a
+ * score by a few percent per tier; a division would split that into steps far
+ * below the noise floor of a hand-typed sample, at four times the UI cost.
+ */
+export type ScoutRankTier =
+  | "unranked"
+  | "iron"
+  | "bronze"
+  | "silver"
+  | "gold"
+  | "platinum"
+  | "emerald"
+  | "diamond"
+  | "master"
+  | "grandmaster"
+  | "challenger"
+
+/**
+ * Every {@link ScoutRankTier}: `"unranked"` first, then the ten ranked tiers
+ * from weakest to strongest. This order IS the contract:
+ *
+ * - the `select` in the UI renders it in exactly this sequence, and users pick
+ *   by position (same rule as `SCOUT_ROLE_VALUES`);
+ * - `rankImpactMultiplier()` in src/scout/analysis.ts is asserted to be
+ *   monotonically non-decreasing across the ten RANKED tiers. `"unranked"` is
+ *   deliberately outside that run: it weighs exactly 1.0, i.e. more than iron,
+ *   because it is a statement about a missing rank and not a low one.
+ *
+ * The paired `Assert` below turns "tuple forgot a union member" into a compile
+ * error rather than a value that silently never reaches the dropdown, and
+ * src/scout/storage.ts derives its accept-set from this tuple instead of
+ * retyping the members (a member missing from that set is dropped on load).
+ */
+export const SCOUT_RANK_TIERS = [
+  "unranked",
+  "iron",
+  "bronze",
+  "silver",
+  "gold",
+  "platinum",
+  "emerald",
+  "diamond",
+  "master",
+  "grandmaster",
+  "challenger",
+] as const satisfies readonly ScoutRankTier[]
+
+/** Compile-time guard: {@link SCOUT_RANK_TIERS} lists every rank tier. */
+export type ScoutRankTiersAreComplete = Assert<
+  [ScoutRankTier] extends [(typeof SCOUT_RANK_TIERS)[number]] ? true : false
+>
+
+/**
+ * Whether a champion is plausibly playable in a given role at all.
+ *
+ * This answers a question the scout could not ask before 0.7.0: the user picks
+ * the role an import is filed under, so a support main's champion pool arrives
+ * stamped `role: "jungle"` and looks perfectly `onrole` to
+ * {@link ScoutRoleFit}. Role FIT compares two labels; role VIABILITY asks
+ * whether the champion is played in that lane by anyone at all.
+ *
+ * - `viable`      the reference data shows this champion in this role.
+ * - `implausible` the reference data covers this champion and does NOT show it
+ *                 in this role. The signal keeps its data but stops being a ban
+ *                 candidate for that lane.
+ * - `unknown`     no verdict is possible: no reference data was supplied, the
+ *                 champion is absent from it, the player holds no lineup slot,
+ *                 or no lane can be derived for them. Treated exactly like the
+ *                 pre-0.7.0 behaviour, never as a licence to invent a viability
+ *                 either way.
+ *
+ * The lane judged against is the player's LINEUP lane, never the role the rows
+ * were filed under. That is the entire point: an import stamps every row with
+ * the role the user picked, so the row's own role cannot answer the question.
+ *
+ * The asymmetry is deliberate and is the whole point: telling a user "Karma
+ * jungle is a fine ban" is far worse than staying quiet about a rare pick, so
+ * the rule behind this verdict is tuned for zero false `implausible` verdicts.
+ */
+export type ScoutRoleViability = "viable" | "implausible" | "unknown"
+
+/**
  * Canonical, upper-case region code, e.g. `"EUW"`, `"KR"`, `"NA"`.
  *
  * Deliberately a `string` alias and not a closed union: region slugs differ per
@@ -264,6 +360,18 @@ export interface ScoutPlayer extends ScoutPlayerIdentity {
   /** `"Name#TAG"`, or just `"Name"` when the tagline is unknown. */
   displayName: string
   role: ScoutRole
+  /**
+   * Solo-queue rank the user typed in, or absent when nobody said.
+   *
+   * Optional and default-safe on purpose, which is why
+   * {@link SCOUT_SCHEMA_VERSION} stays at 2: a build that predates this field
+   * drops it while keeping every other player field (`normalizePlayer()` in
+   * src/scout/storage.ts rebuilds field by field and never spreads), so the
+   * worst case is one lost rank, never a lost player. Bumping the version
+   * instead would make older still-open tabs discard the WHOLE scout state,
+   * because the version gate rejects anything higher than it understands.
+   */
+  rankTier?: ScoutRankTier | null
   /** One entry per known/derivable source, deduped by `kind`. */
   sources: ScoutSourceRef[]
 }
@@ -733,6 +841,15 @@ export type ScoutReasonCode =
   | "many_games_on_champion"
   /** above-average KDA on a sample solid enough to carry the claim */
   | "strong_kda"
+  /* ---- role viability + rank weighting (added with 0.7.0) --------------
+   * ADDITIVE ONLY, same rule as every group above. */
+  /** the champion is not plausibly played in the role this signal is judged
+   *  against, so it is not offered as a ban for that lane. The data itself is
+   *  kept and stays visible. `params: { champion, role }` */
+  | "champion_not_playable_in_role"
+  /** the player's stated rank is high enough to weigh their data up.
+   *  `params: { rank }`, the localised tier label and never a raw code. */
+  | "high_rank_player"
 
 /** Parameters substituted into the translated reason text. */
 export type ScoutReasonParams = Readonly<Record<string, string | number>>
@@ -776,6 +893,12 @@ export type ScoutWarningCode =
    *  data; the data was archived instead of deleted.
    *  `params: { count: number }` — see {@link ScoutRemovedPlayer} */
   | "data_loss_on_reparse"
+  /* ---- role viability (added with 0.7.0) ------------------------------- */
+  /** one or more champion signals were not offered as bans because the champion
+   *  is not plausibly played in the lane it was filed under. Aggregated on
+   *  purpose: one summary line, never one message per champion.
+   *  `params: { count: number }` */
+  | "role_not_playable_filtered"
 
 /** A translated-by-the-UI warning. Severity mirrors `TeamCompWarning`. */
 export interface ScoutWarning {
@@ -894,6 +1017,19 @@ export interface ChampionSignal {
    * `roleFit`; a signal can be offrole *and* from a substitute.
    */
   fromSubstitute: boolean
+  /**
+   * Whether this champion is plausibly playable in the role this signal is
+   * judged against, see {@link ScoutRoleViability}.
+   *
+   * Orthogonal to `roleFit`, and that orthogonality is why the field exists: an
+   * imported row carries the role the USER chose, so it can read `onrole` and
+   * still be a champion nobody plays in that lane.
+   *
+   * `"unknown"` whenever no reference data was supplied, which is also the
+   * value every pre-0.7.0 caller gets. Never omitted, so the UI never has to
+   * guess a default.
+   */
+  roleViability: ScoutRoleViability
 }
 
 /** Where in the ban phase a candidate belongs. */
@@ -1072,6 +1208,25 @@ export interface ScoutAnalysisOptions {
    * while every scout winrate is a percent — see {@link WinratePercent}.
    */
   proMeta?: readonly ChampionStats[]
+  /**
+   * Reference data for {@link ScoutRoleViability}: which champions are actually
+   * played in which role. Same element type as `proMeta`, and normally the same
+   * `calculateChampionStats()` output, but a SEPARATE field on purpose.
+   *
+   * Two reasons it is not folded into `proMeta`. First, `proMeta` switches on
+   * meta enrichment (`meta_priority`, `meta_shift_possible`), and a caller that
+   * only wants the role gate must not have to accept extra reasons on its
+   * recommendations. Second, the two want different inputs: enrichment should
+   * follow the user's filters, while the role gate wants the WIDEST base
+   * available, because filtering down to one patch shrinks the evidence and
+   * would start calling real champions implausible.
+   *
+   * Only two members are read: `picks` (absolute) and `roleDistribution` (the
+   * per-role SHARE of those picks, 0 to 1), so `picksInRole = picks * share`.
+   * Omitted means every verdict is `"unknown"` and the engine behaves exactly
+   * as it did before 0.7.0.
+   */
+  championRoleReference?: readonly ChampionStats[]
   /** Champion names the user manually raised in priority (case-insensitive). */
   priorityChampions?: readonly string[]
   /** `ScoutParseResult.duplicatesMerged`, so the analysis can surface it. */

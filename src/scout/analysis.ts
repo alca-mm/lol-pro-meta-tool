@@ -155,7 +155,8 @@
  */
 
 import { sampleConfidence } from "../analysis/draftHelper"
-import type { ChampionStats } from "../domain/types"
+import { championIdentity, championIdentityKey } from "./championIdentity"
+import type { ChampionStats, Role } from "../domain/types"
 import { SCOUT_LINEUP_SLOTS, SCOUT_SUBSTITUTE_SLOTS, SCOUT_SUBSTITUTE_WEIGHT } from "./types"
 import type {
   BanCandidate,
@@ -181,8 +182,10 @@ import type {
   ScoutPlayerId,
   ScoutReason,
   ScoutRecency,
+  ScoutRankTier,
   ScoutRole,
   ScoutRoleFit,
+  ScoutRoleViability,
   ScoutWarning,
   TeamBanPlan,
   WinratePercent,
@@ -446,7 +449,89 @@ const PHASE_TARGET_MIN_PRIORITY = 0.35
  * the primary reason to ban for the lineup role".
  */
 const OFFROLE_SCORE_WEIGHT = 0.4
+/**
+ * Weight for a champion that is not plausibly played in the lane it was filed
+ * under. Harder than {@link OFFROLE_SCORE_WEIGHT} because the statement is
+ * stronger: off-role says "this player plays it elsewhere", not playable says
+ * "essentially nobody plays it here". The row is damped, never deleted, and the
+ * real protection is that it is withheld from ban candidacy entirely.
+ */
+const ROLE_NOT_PLAYABLE_SCORE_WEIGHT = 0.15
 const ROLE_UNCERTAIN_SCORE_WEIGHT = 0.8
+
+/**
+ * Rank weights, keyed by tier. A total `Record`, so a new
+ * {@link ScoutRankTier} member without a weight is a COMPILE error rather than
+ * a tier that silently scores neutral.
+ *
+ * Platinum and `unranked` both sit at exactly 1.0: platinum is the pivot the
+ * spread is built around, and `unranked` must not move a score at all.
+ */
+const RANK_IMPACT_WEIGHTS: Readonly<Record<ScoutRankTier, number>> = {
+  unranked: 1,
+  iron: 0.8,
+  bronze: 0.85,
+  silver: 0.9,
+  gold: 0.95,
+  platinum: 1,
+  emerald: 1.05,
+  diamond: 1.1,
+  master: 1.16,
+  grandmaster: 1.21,
+  challenger: 1.25,
+}
+
+/** Above this rank multiplier the score change is worth a reason on screen. */
+const RANK_REASON_MIN_IMPACT = 1.05
+
+/**
+ * Minimum absolute picks in a role before the reference data is allowed to call
+ * that role playable.
+ *
+ * MEASURED, not guessed. Over this repo's dataset (24,978 matches / 249,780
+ * picks) every (champion, role) pair with 15 or more picks is spread across at
+ * least 5 players, 3 regions and 3 patches, while no pair with 4 or fewer picks
+ * is. 15 is that cliff edge. Below it the check starts admitting single-player
+ * pocket picks, e.g. Heimerdinger bot: 11 picks, 19 % share, ONE player.
+ */
+const ROLE_VIABILITY_MIN_PICKS = 15
+
+/**
+ * Minimum share of a champion's picks in a role before that role counts.
+ *
+ * Also measured, and it exists for a failure mode the pick floor cannot catch:
+ * a very popular champion accumulates a thin spray of wrong-role picks across
+ * many players, so it clears any absolute floor. At 1.25 % the split is clean.
+ * Below it sit Nautilus jungle (0.21 %), Corki top (0.24 %), Taliyah bot
+ * (0.32 %), K'Sante mid (0.57 %) and Sylas support (1.03 %), all wrong; just
+ * above it sit Renekton mid (1.20 %), Kai'Sa mid (1.28 %), Trundle top
+ * (1.34 %), Lee Sin top (1.43 %) and Wukong top (1.49 %), all real.
+ */
+const ROLE_VIABILITY_MIN_SHARE = 0.0125
+
+/**
+ * A champion needs at least this many picks IN TOTAL before the reference is
+ * allowed to call any of its roles implausible.
+ *
+ * Derived, not picked: a role only counts as viable at
+ * {@link ROLE_VIABILITY_MIN_PICKS} picks, and a legitimate secondary role sits
+ * at roughly a fifth of a champion's games, so below `15 / 0.2 = 75` total picks
+ * a real secondary role CANNOT clear the bar however normal it is. An
+ * `implausible` verdict there is an artefact of the champion being rare in the
+ * reference, not evidence about the role.
+ *
+ * The reference is PRO play while the scouted numbers come from solo queue, and
+ * that gap is exactly where this bites. Measured on the shipped dataset, without
+ * this floor: Warwick jungle (39 picks total, 18 % share), Talon mid (34, 21 %),
+ * Kayle mid (44, 16 %) and Master Yi top (9, 22 %) all came out `implausible` —
+ * every one of them a standard solo-queue role, and each verdict silently
+ * removed that champion from the ban plan. 29 of 172 champions are below the
+ * floor and are now simply not judged.
+ *
+ * It costs the gate nothing where it matters: every champion the gate exists to
+ * catch is a popular one. Karma has 2254 picks, Lulu 1705, Nautilus 7024.
+ */
+const ROLE_VIABILITY_MIN_TOTAL_PICKS = 75
 
 /** Winrate range accepted from user input; anything else is "no usable value". */
 const MIN_WINRATE_PERCENT = 0
@@ -609,8 +694,28 @@ function round3(value: number): number {
   return Math.round(value * 1000) / 1000
 }
 
+/**
+ * Champion grouping key, shared with the stats import via
+ * src/scout/championIdentity.ts.
+ *
+ * It used to be `trim().toLowerCase()` plus whitespace collapsing, which KEPT
+ * punctuation and never consulted the champion catalog. `Kai'Sa` and `KaiSa`
+ * were therefore two different champions to this engine, which split one ban
+ * candidate in two and, far worse than the cosmetics, destroyed the overlap:
+ * `isOverlap` went false, `overlapBans` came back empty, and the overlap
+ * priority bonus plus the `hits_multiple_players` reason were forfeited. A
+ * champion two opponents both play was ranked as two weaker single threats.
+ *
+ * `championIdentityKey`, not the bare `championLookupKey`: the latter strips
+ * every character outside `a-z0-9` and therefore returns the EMPTY STRING for a
+ * name written in a non-Latin script or in pure punctuation. Every such name
+ * then compares equal to every other. The signal keys already went through
+ * `championIdentity()` and were safe; this is the reference/meta side, and
+ * having two definitions of champion identity in one module is exactly the trap
+ * the `ScoutManualSource` triplication left behind.
+ */
 function normalizeChampionKey(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, " ")
+  return championIdentityKey(name)
 }
 
 function normalizeRecency(value: unknown): ScoutRecency {
@@ -775,6 +880,69 @@ export function winrateImpactMultiplier(
  * That `0` vs. "not stated" distinction is the reason this function tests for
  * `null`/`undefined` explicitly and never for falsiness.
  */
+/**
+ * How much a player's stated rank weighs their data up or down.
+ *
+ * NEUTRAL IS THE IMPORTANT CASE. An absent field (`undefined`), an explicit
+ * `null` and an unrecognised value all return EXACTLY 1.0, so every player
+ * scouted before 0.7.0 and every player nobody typed a rank for scores exactly
+ * as before. `"unranked"` is also 1.0, but it arrives here as a different
+ * value on purpose: it is the user SAYING there is no rank, while absence is
+ * nobody saying anything. They must not be collapsed in code, the same way
+ * `kda: 0` and `kda: null` must not be (see {@link normalizeKda}).
+ *
+ * The spread is deliberately narrow, 0.80 to 1.25. Rank MODULATES the evidence;
+ * it never replaces it. A Challenger with two games still loses to a Gold
+ * player with forty, because `sampleConfidence` runs first and this factor
+ * cannot undo it. And rank can never rescue a champion the role gate has
+ * withheld, because such a signal never becomes a ban candidate at all.
+ */
+export function rankImpactMultiplier(rankTier: ScoutRankTier | null | undefined): number {
+  // Explicit two-way check. `!rankTier` would fold "" into the same branch and,
+  // worse, invites the next reader to treat absence and `"unranked"` as one.
+  if (rankTier === null || rankTier === undefined) return 1
+  const weight = RANK_IMPACT_WEIGHTS[rankTier]
+  return typeof weight === "number" ? weight : 1
+}
+
+/**
+ * Apply a rank strength to an already normalised 0-1 score.
+ *
+ * NOT a plain multiplication, and that is the whole point. `baseScore` for any
+ * solid signal already sits at 0.85 to 0.99, so multiplying by up to 1.25 ran
+ * straight into `clamp01`: measured over a 245-point grid, a Challenger team
+ * had 87 % of its signals pinned at exactly 1.000 and a Diamond team 53 %,
+ * against 0 % without a rank. Pinned scores tie, and `compareCandidates` then
+ * falls through to its alphabetical tie-break, so the ban plan of a strong team
+ * came out sorted by champion NAME: the clearly strongest pick (120 games,
+ * 71 %, KDA 4.6) dropped from first to fourth behind three weaker ones. The
+ * feature broke exactly the case it exists for.
+ *
+ * The saturating form has the four properties the plain product lacks:
+ *
+ *  - `strength === 1` is the EXACT identity, so an unranked or unstated player
+ *    scores bit-for-bit as before 0.7.0. Neutrality is arithmetic, not a
+ *    special case.
+ *  - strictly increasing in `value`, so it can never create a tie that the
+ *    input did not have. The ban order stays the score's order.
+ *  - the result is always inside 0-1, so the outer `clamp01` never binds and
+ *    the off-role quotient stays exactly `roleAdjustment.weight`.
+ *  - increasing in `strength`, so a higher rank still ranks higher.
+ *
+ * It moves a score toward 1 rather than past it: the head room a signal has
+ * left is what gets compressed, which is also the honest reading of what a rank
+ * says. It sharpens a judgement, it does not add evidence.
+ */
+export function applyRankStrength(value: number, strength: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(strength)) return clamp01(value)
+  if (strength === 1) return clamp01(value)
+
+  const bounded = clamp01(value)
+  // `1 - (1 - x) ** s`. Both endpoints are fixed points, so 0 stays 0 and 1
+  // stays 1 for every strength.
+  return clamp01(1 - Math.pow(1 - bounded, strength))
+}
+
 export function kdaImpactMultiplier(kda: number | null | undefined, games: number): number {
   if (kda === null || kda === undefined) return 1
   if (typeof kda !== "number" || !Number.isFinite(kda)) return 1
@@ -801,6 +969,131 @@ export function kdaImpactMultiplier(kda: number | null | undefined, games: numbe
  * {@link SCOUT_STAT_MULTIPLIER_MAX} documents exactly where that starts and why
  * it is accepted.
  */
+/**
+ * One champion's role evidence, distilled from a {@link ChampionStats} row.
+ * `picksByRole` is absolute; `shareByRole` is that role's share of the
+ * champion's picks (0 to 1).
+ */
+interface ChampionRoleEvidence {
+  picks: number
+  picksByRole: Readonly<Record<Role, number>>
+  shareByRole: Readonly<Record<Role, number>>
+  /** The champion's most-played role, or `null` when it has no picks at all. */
+  primaryRole: Role | null
+}
+
+/** Champion-key-indexed role evidence. Built once per `analyzeScout()` call. */
+export type ChampionRoleIndex = ReadonlyMap<string, ChampionRoleEvidence>
+
+/**
+ * Index `ScoutAnalysisOptions.championRoleReference` for lookup by champion key.
+ *
+ * Exported so a test can build one directly instead of going through the whole
+ * engine. Rows without a usable champion name or without picks are skipped: a
+ * champion nobody has played says nothing about which roles it can be played in,
+ * and pretending otherwise would let the gate fire on no evidence.
+ */
+export function buildChampionRoleIndex(
+  reference: readonly ChampionStats[] | undefined,
+): ChampionRoleIndex {
+  const index = new Map<string, ChampionRoleEvidence>()
+  if (!Array.isArray(reference)) return index
+
+  for (const stats of reference) {
+    if (!stats || typeof stats.championName !== "string") continue
+    const key = normalizeChampionKey(stats.championName)
+    if (key.length === 0 || index.has(key)) continue
+
+    const picks = typeof stats.picks === "number" && Number.isFinite(stats.picks) ? stats.picks : 0
+    if (picks <= 0) continue
+
+    const distribution = stats.roleDistribution
+    if (!distribution || typeof distribution !== "object") continue
+
+    const picksByRole = {} as Record<Role, number>
+    const shareByRole = {} as Record<Role, number>
+    let primaryRole: Role | null = null
+    let bestShare = -1
+
+    for (const role of SCOUT_LINEUP_SLOTS) {
+      const rawShare = distribution[role]
+      const share = typeof rawShare === "number" && Number.isFinite(rawShare) ? rawShare : 0
+      shareByRole[role] = share
+      // ROUNDED, because this is a lossy inverse: `roleDistribution` is itself
+      // `roleCount / picks`, so `share * picks` can land a whisker below the
+      // integer it came from. Measured: a real count of exactly 15 undershoots
+      // to 14.999999999999998 for 11 % of pick totals, which flips the verdict
+      // at exactly the documented 15-pick boundary. The shares are exact
+      // integer quotients, so rounding recovers the original count.
+      picksByRole[role] = Math.round(share * picks)
+      if (share > bestShare) {
+        bestShare = share
+        primaryRole = role
+      }
+    }
+
+    // A row whose shares are all zero carries no evidence about any role. With
+    // `bestShare` starting below zero the first slot would otherwise win by
+    // default and the gate would assert "top is viable" out of nothing.
+    if (bestShare <= 0) {
+      primaryRole = null
+    }
+
+    index.set(key, { picks, picksByRole, shareByRole, primaryRole })
+  }
+
+  return index
+}
+
+/**
+ * Is this champion plausibly played in this role?
+ *
+ * The rule, and every part of it is load-bearing:
+ *
+ *   viable = (picksInRole >= 15 && roleShare >= 1.25 %) || role === primaryRole
+ *
+ * The primary-role fallback is NOT a nicety. Without it six champions in this
+ * repo's dataset come out with ZERO viable roles despite unambiguous data,
+ * because their total sample is tiny: Evelynn (12 picks, 100 % jungle), Master
+ * Yi (7 of 9 jungle), Rammus (11 of 14 jungle), Shaco (12 of 18 jungle), Teemo
+ * (7 of 9 top), Fizz (4 of 5 mid). Declaring Evelynn unplayable everywhere is a
+ * far worse product error than allowing one marginal extra role.
+ *
+ * THE ERRORS ARE ASYMMETRIC AND THE THRESHOLDS ARE TUNED FOR THAT. Telling a
+ * user "Karma jungle is a fine ban" is much worse than staying quiet about a
+ * rare pick, so the rule is set for zero false `implausible` verdicts: measured
+ * against a 107-pair hand-labelled set it produced 0 false positives and 4 false
+ * negatives, and all four remaining misses are genuinely marginal in pro play.
+ *
+ * `"unknown"` is returned whenever no verdict is possible, and it means exactly
+ * what the engine did before 0.7.0: no gate, no damping, no claim either way.
+ */
+export function championRoleViability(
+  index: ChampionRoleIndex,
+  championKey: string,
+  role: ScoutRole,
+): ScoutRoleViability {
+  // No reference data, or a role we cannot judge against.
+  if (index.size === 0) return "unknown"
+  if (role === "unknown") return "unknown"
+
+  const evidence = index.get(championKey)
+  // A champion the reference does not cover is not a champion we may judge.
+  if (evidence === undefined) return "unknown"
+  // Nor is one the reference barely covers: see
+  // {@link ROLE_VIABILITY_MIN_TOTAL_PICKS}. Errors here are asymmetric, and a
+  // false "not playable" silently deletes a real ban candidate.
+  if (evidence.picks < ROLE_VIABILITY_MIN_TOTAL_PICKS) return "unknown"
+
+  if (evidence.primaryRole === role) return "viable"
+
+  const picksInRole = evidence.picksByRole[role] ?? 0
+  const share = evidence.shareByRole[role] ?? 0
+  return picksInRole >= ROLE_VIABILITY_MIN_PICKS && share >= ROLE_VIABILITY_MIN_SHARE
+    ? "viable"
+    : "implausible"
+}
+
 export function championStatStrengthMultiplier(input: {
   games: number
   winrate?: WinratePercent | null
@@ -830,9 +1123,15 @@ function normalizeEntries(entries: readonly ManualChampionEntry[] | undefined): 
     // dropped rather than turned into an empty-named candidate.
     if (rawName.length === 0) continue
 
+    // The catalog decides both the grouping key and the spelling on screen,
+    // so two users typing `kaisa` and `Kai'Sa` produce ONE champion here and
+    // one row in the ban plan. An unresolved name keeps its own spelling and
+    // is never bent onto a catalog neighbour.
+    const identity = championIdentity(rawName)
+
     result.push({
-      championKey: normalizeChampionKey(rawName),
-      championName: rawName,
+      championKey: identity.key,
+      championName: identity.displayName,
       games: normalizeGames(entry.games),
       winratePercent: normalizeWinratePercent(entry.winrate),
       kda: normalizeKda(entry.kda),
@@ -1169,6 +1468,12 @@ interface PlayerRoleContext {
    * built from the starting five.
    */
   scored: boolean
+  /**
+   * The rank the user stated for this player, or `null`/`undefined` when nobody
+   * did. Passed through untouched so {@link rankImpactMultiplier} can keep
+   * absence and `"unranked"` apart.
+   */
+  rankTier: ScoutRankTier | null | undefined
 }
 
 function buildRoleContext(
@@ -1186,6 +1491,7 @@ function buildRoleContext(
       fromSubstitute: false,
       substituteWeight: 1,
       scored: true,
+      rankTier: player.rankTier,
     }
   }
 
@@ -1211,6 +1517,7 @@ function buildRoleContext(
     fromSubstitute,
     substituteWeight: fromSubstitute ? substituteWeight : 1,
     scored: !fromSubstitute || includeSubstitutes,
+    rankTier: player.rankTier,
   }
 }
 
@@ -1270,6 +1577,8 @@ function resolveRoleAdjustment(
   roleFit: ScoutRoleFit,
   signalRole: ScoutRole,
   context: PlayerRoleContext,
+  viability: ScoutRoleViability,
+  championName: string,
 ): RoleAdjustment {
   if (!context.lineupAware) return NEUTRAL_ROLE_ADJUSTMENT
 
@@ -1310,6 +1619,29 @@ function resolveRoleAdjustment(
       downgrade = true
       reasons.push(reason("role_unknown_or_flex", { signalRole, lineupRole }))
       break
+  }
+
+  // The role GATE, applied after the role-FIT switch above because it answers a
+  // different question. Fit compares two labels and can read `onrole` for a
+  // champion nobody plays in that lane, because an import stamps every row with
+  // the role the USER chose ("die gewaehlte Rolle gewinnt immer"). That is
+  // exactly how a support main moved to the jungle got his support pool offered
+  // as jungle bans. Viability asks whether the champion is played there at all.
+  if (viability === "implausible") {
+    weight = Math.min(weight, ROLE_NOT_PLAYABLE_SCORE_WEIGHT)
+    maxConfidence = "low"
+    // "The rows say this lane and the lineup agrees" is worthless next to "and
+    // nobody plays this champion there", and its text ("Ein Ban trifft genau
+    // diese Lane.") flatly contradicts the verdict. `offrole_signal` and
+    // `role_unknown_or_flex` stay: they point the same way as the gate.
+    const onroleIndex = reasons.findIndex((item) => item.code === "onrole_signal")
+    if (onroleIndex !== -1) reasons.splice(onroleIndex, 1)
+    reasons.push(
+      reason("champion_not_playable_in_role", {
+        champion: championName,
+        role: lineupRole,
+      }),
+    )
   }
 
   if (context.fromSubstitute) {
@@ -1353,6 +1685,7 @@ function buildSignalContext(
   playerTotalGames: number,
   playerEntryCount: number,
   roleContext: PlayerRoleContext,
+  roleIndex: ChampionRoleIndex,
 ): SignalContext {
   const entries = group.entries
   const games = entries.reduce((sum, entry) => sum + entry.games, 0)
@@ -1395,7 +1728,31 @@ function buildSignalContext(
   // are bit-for-bit the ones this engine produced before the lineup existed.
   const signalRole = primarySignalRole(entries)
   const roleFit = resolveRoleFit(signalRole, roles, roleContext)
-  const roleAdjustment = resolveRoleAdjustment(roleFit, signalRole, roleContext)
+  // Judged against the lane this player will actually be in, not against the
+  // role the rows happen to carry. Without a lineup role there is nothing to
+  // judge and the verdict is `"unknown"`.
+  // A PLAYER IN NO SLOT IS NEVER JUDGED, and that check runs first, exactly as
+  // in `resolveRoleFit`. For anyone who is not a starter `referenceRole` falls
+  // back to `ScoutPlayer.role`, which is nothing but the link parser's guess
+  // (CLAUDE.md P4 documents how lossy that guess is). Gating on a guess dropped
+  // the top-scoring champion out of the ban plan silently: `resolveRoleAdjustment`
+  // returns early for an unassigned player, so the explaining reason was never
+  // even attached.
+  const roleViability =
+    roleContext.membership === "unassigned"
+      ? "unknown"
+      : championRoleViability(
+          roleIndex,
+          group.championKey,
+          roleContext.referenceRole ?? "unknown",
+        )
+  const roleAdjustment = resolveRoleAdjustment(
+    roleFit,
+    signalRole,
+    roleContext,
+    roleViability,
+    group.championName,
+  )
 
   // --- champion stat strength -------------------------------------------
   // The factor multiplies the BASE score, and the result is clamped BEFORE the
@@ -1421,7 +1778,16 @@ function buildSignalContext(
   // `safe`/`target` phases regardless.
   const statStrength = championStatStrengthMultiplier({ games, winrate: winratePercent, kda })
 
-  const statAdjustedBase = clamp01(baseScore * statStrength)
+  const rankStrength = rankImpactMultiplier(roleContext.rankTier)
+
+  // BOTH new factors sit INSIDE the inner clamp, strictly before the role
+  // weight. That bracketing is the rollen guarantee, not cosmetics: the onrole
+  // and the offrole reading are built from one and the same `statAdjustedBase`,
+  // so their quotient stays exactly `roleAdjustment.weight`. Multiply the role
+  // weight by a factor that can exceed 1 and the OUTER clamp starts binding on
+  // the onrole side alone; that is how the documented 0.4 drifted to 0.477 once
+  // before, and `rankStrength` reaches 1.25.
+  const statAdjustedBase = applyRankStrength(clamp01(baseScore * statStrength), rankStrength)
   const score = round3(clamp01(statAdjustedBase * roleAdjustment.weight))
 
   // --- weakness classification -----------------------------------------
@@ -1521,6 +1887,18 @@ function buildSignalContext(
     reasons.push(reason("role_specific_threat", { role: roles[0] }))
   }
 
+  // One line, and only when the rank actually moved the score. `{rank}`
+  // travels as the tier CODE and is localised by the UI
+  // (`localizeScoutParams`), the same way a role does. A raw code must never
+  // reach the screen.
+  if (
+    rankStrength >= RANK_REASON_MIN_IMPACT &&
+    roleContext.rankTier !== null &&
+    roleContext.rankTier !== undefined
+  ) {
+    reasons.push(reason("high_rank_player", { rank: roleContext.rankTier }))
+  }
+
   if (hasCurrent) reasons.push(reason("played_recently", { games }))
   else if (allOld) reasons.push(reason("stale_data", { games }))
 
@@ -1544,9 +1922,15 @@ function buildSignalContext(
     reasons.push(reason("manual_entry_only", { entries: entries.length }))
   }
 
-  // Appended *after* the guarantee above, so role awareness can only ever add
+  // Evaluated *after* the guarantee above, so role awareness can only ever add
   // to the explanation, never take the last data reason away from a signal.
-  reasons.push(...roleAdjustment.reasons)
+  //
+  // But it goes to the FRONT of the list, because the role verdict is the
+  // headline and the data reasons are its support. The UI shows the leading
+  // reasons and collapses the tail, so appending put the one line that says
+  // "this champion is not a ban for this lane" behind a fold, under two lines
+  // praising its winrate and KDA. A withheld champion has to say so first.
+  reasons.unshift(...roleAdjustment.reasons)
 
   let confidence = signalConfidence({ games, hasCurrent, allOld, conflicting })
   // The `> 0` guard keeps `none` at `none`: `downgradeConfidence(_, 1)` has a
@@ -1578,6 +1962,7 @@ function buildSignalContext(
     roleFit,
     lineupRole: roleContext.starterSlot,
     fromSubstitute: roleContext.fromSubstitute,
+    roleViability,
   }
 
   return { signal, championKey: group.championKey, roles, conflicting, isWeakness }
@@ -1586,7 +1971,14 @@ function buildSignalContext(
 function compareSignals(a: ChampionSignal, b: ChampionSignal): number {
   if (b.score !== a.score) return b.score - a.score
   if (b.games !== a.games) return b.games - a.games
-  return compareStrings(a.championName.toLowerCase(), b.championName.toLowerCase())
+  const byName = compareStrings(a.championName.toLowerCase(), b.championName.toLowerCase())
+  if (byName !== 0) return byName
+  // Final, always-decisive tie-break, and on this list the name above is NOT
+  // one: every signal of a merged ban candidate carries the same champion name
+  // by construction. Without the player id the sort fell through to input
+  // order, and `targetPlayerId` (= `signals[0].playerId` when no lineup is
+  // known) then changed whenever the roster was listed in a different order.
+  return compareStrings(a.playerId, b.playerId)
 }
 
 /* ==========================================================================
@@ -1906,6 +2298,10 @@ export function analyzeScout(
     if (row.playerId !== null) starterSlotByPlayerId.set(row.playerId, row.slot)
   }
 
+  // Role evidence for the viability gate. Built once; empty when the caller
+  // supplied no reference, which switches the gate off completely.
+  const championRoleIndex = buildChampionRoleIndex(options?.championRoleReference)
+
   const metaByChampion = new Map<string, ChampionStats>()
   for (const stats of options?.proMeta ?? []) {
     if (!stats || typeof stats.championName !== "string") continue
@@ -1923,6 +2319,15 @@ export function analyzeScout(
 
   const warnings: ScoutWarning[] = []
   const planWarnings: ScoutWarning[] = []
+  /**
+   * Distinct champions dropped from ban candidacy because they are not
+   * plausibly played in the lane they were filed under. Also ONE warning: the
+   * user wants to know that something was held back, not to read a line per
+   * champion.
+   */
+  const notPlayableChampionKeys = new Set<string>()
+  /** Champions that DID reach the plan, so the filter can stay honest. */
+  const playableChampionKeys = new Set<string>()
 
   const playerAnalyses: ScoutPlayerAnalysis[] = []
   /** The subset that actually feeds the plan — see `PlayerRoleContext.scored`. */
@@ -1955,7 +2360,14 @@ export function analyzeScout(
     const groups = groupByChampion(entries)
 
     const contexts = groups.map((group) =>
-      buildSignalContext(player.id, group, totalGames, entries.length, roleContext),
+      buildSignalContext(
+        player.id,
+        group,
+        totalGames,
+        entries.length,
+        roleContext,
+        championRoleIndex,
+      ),
     )
 
     // Data quality describes the *rows the user typed*, so it is computed for
@@ -1986,9 +2398,28 @@ export function analyzeScout(
       for (const context of contexts) {
         if (context.isWeakness) continue
         if (context.signal.roleFit === "offrole") offroleSignalCount += 1
+
         // A zero-score signal is real data but no recommendation — it never
-        // becomes a ban candidate.
+        // becomes a ban candidate. Checked BEFORE the role gate on purpose: such
+        // a signal would not have been a candidate under any configuration, so
+        // counting it as "held back by the gate" told the user the gate had
+        // removed something when it had removed nothing.
         if (context.signal.score <= 0) continue
+
+        // THE ROLE GATE. A champion that is not plausibly played in this
+        // player's lane stays fully visible in `players[].signals`, with its
+        // games, winrate, KDA and an explaining reason, but it is withheld
+        // from ban candidacy, exactly the way a weakness is. This is what
+        // stops a support main moved to the jungle from producing
+        // support-champion jungle bans, and it is deliberately structural:
+        // because the signal never reaches `threatContextsByChampion`, no
+        // rank multiplier and no stat line can lift it back into the plan.
+        if (context.signal.roleViability === "implausible") {
+          notPlayableChampionKeys.add(context.championKey)
+          continue
+        }
+
+        playableChampionKeys.add(context.championKey)
 
         const list = threatContextsByChampion.get(context.championKey)
         if (list) list.push(context)
@@ -2054,6 +2485,11 @@ export function analyzeScout(
 
     for (const context of contexts) {
       if (!context.conflicting) continue
+      // DELIBERATELY one per champion, unlike `flex_pick_warning`. "Check games
+      // and winrate" is only actionable next to the champion it is about, and
+      // nothing else in the result names it: `buildDataQuality` only downgrades
+      // the player's confidence. Aggregating this one would trade an actionable
+      // message for a count.
       const conflictWarning: ScoutWarning = {
         code: "conflicting_entries",
         severity: "warning",
@@ -2104,13 +2540,35 @@ export function analyzeScout(
   }
 
   // --- warnings ---------------------------------------------------------
+  // Only champions that ended up with NO ban candidate at all are reported.
+  // A champion held back for one player but still suggested because another
+  // plays it on-role was not "not suggested", so counting it would be a
+  // false claim.
+  const filteredChampionCount = [...notPlayableChampionKeys].filter(
+    (key) => !playableChampionKeys.has(key),
+  ).length
+  if (filteredChampionCount > 0) {
+    const notPlayableWarning: ScoutWarning = {
+      code: "role_not_playable_filtered",
+      severity: "info",
+      params: { count: filteredChampionCount },
+    }
+    warnings.push(notPlayableWarning)
+    planWarnings.push(notPlayableWarning)
+  }
+
   const flexCandidates = prioritizedBans.filter((candidate) => candidate.isFlex)
-  for (const candidate of flexCandidates) {
+  if (flexCandidates.length > 0) {
+    // ONE warning for the whole session. This used to be one warning per flex
+    // candidate: a real five-player session produced 34 warnings with two
+    // distinct sentences, and the sentence itself said "at least one champion"
+    // while being printed 34 times. Which champion is flex stays visible where
+    // it belongs, on the candidate: `flex_across_roles` in its reason list and
+    // the flex badge on its row.
     const flexWarning: ScoutWarning = {
       code: "flex_pick_warning",
       severity: "warning",
-      championName: candidate.championName,
-      params: { roles: candidate.roles.join(",") },
+      params: { count: flexCandidates.length },
     }
     warnings.push(flexWarning)
     planWarnings.push(flexWarning)

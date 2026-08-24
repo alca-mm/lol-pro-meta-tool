@@ -157,6 +157,36 @@ function AppContent() {
             })
     }, [filteredMatches, filters.minPicks, filters.role])
 
+    /**
+     * Champion role evidence for the Tournament Scout's role-viability gate.
+     *
+     * Built from `allMatches`, NOT from `filteredMatches`, and that is the whole
+     * point of computing it separately from `championStats` above. The gate asks
+     * "is this champion played in this lane at all", so it needs the widest
+     * evidence available: with a patch or league filter applied, a champion
+     * would start looking unplayable in a lane merely because the current filter
+     * hides the games that prove otherwise, and a false "not playable" verdict
+     * silently removes a real ban candidate.
+     *
+     * Only `picks` and `roleDistribution` are read downstream. Deliberately not
+     * passed as `proMeta`: that field switches on meta enrichment
+     * (`meta_priority`, `meta_shift_possible`), which is a separate feature.
+     */
+    // Sticky: computed the first time the scout tab is opened and kept from
+    // then on. This is a second full pass over ~250k picks (App already does one
+    // over the filtered set), so paying it on the initial load for every visitor
+    // who never opens the scout is waste. The prop is optional and the engine
+    // degrades to "unknown", so the tab is correct on its very first frame too.
+    const [scoutOpened, setScoutOpened] = useState(false)
+    useEffect(() => {
+        if (activeTab === "tournament-scout") setScoutOpened(true)
+    }, [activeTab])
+
+    const scoutChampionRoleReference = useMemo(
+        () => (scoutOpened ? calculateChampionStats(allMatches) : undefined),
+        [allMatches, scoutOpened],
+    )
+
     const synergyStats = useMemo(() => calculateSynergyStats(filteredMatches), [filteredMatches])
     const matchupStats = useMemo(() => calculateMatchupStats(filteredMatches), [filteredMatches])
     const laneMatchupStats = useMemo(() => calculateLaneMatchupStats(filteredMatches), [filteredMatches])
@@ -291,7 +321,9 @@ function AppContent() {
                         // numbers only, so it must stay usable when the pro-meta
                         // dataset is empty or failed to load.
                         <section className="section">
-                            <TournamentScout />
+                            <TournamentScout
+                                championRoleReference={scoutChampionRoleReference}
+                            />
                         </section>
                     ) : allMatches.length === 0 ? (
                         <p className="empty-state error">{t("app_noMatches")}</p>

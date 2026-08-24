@@ -38,6 +38,7 @@ import type {
 
 const JUNGLE: ScoutStatsImportOptions = { role: "jungle" }
 const SUPPORT: ScoutStatsImportOptions = { role: "support" }
+const MID: ScoutStatsImportOptions = { role: "mid" }
 
 const APPLY_JUNGLE: ScoutImportApplyOptions = {
   role: "jungle",
@@ -49,6 +50,9 @@ const APPLY_JUNGLE: ScoutImportApplyOptions = {
 /** Codes of every warning on the result, in result order. */
 const codes = (warnings: readonly { code: string }[]): string[] =>
   warnings.map((warning) => warning.code)
+
+const championsOf = (items: readonly { championName: string }[]): string[] =>
+  items.map((item) => item.championName)
 
 /** A fully specified row, so a test only states the field it is about. */
 const makeRow = (overrides: Partial<ScoutImportRow>): ScoutImportRow => ({
@@ -81,6 +85,164 @@ const makeEntry = (overrides: Partial<ManualChampionEntry>): ManualChampionEntry
   recency: "current",
   role: "jungle",
   ...overrides,
+})
+
+/* ==========================================================================
+ * 0b. Champion identity: names without a-z0-9 must not collapse
+ *
+ * A pre-existing defect, reproduced by the independent 0.7.0 review and fixed
+ * here. `normalizeKey` strips everything outside `a-z0-9`, so a champion name
+ * written in a non-Latin script, in fullwidth Latin or in pure punctuation
+ * normalised to the EMPTY STRING. Every such name therefore compared equal to
+ * every other, and the import used that comparison in three places: the
+ * duplicate warning, the append-mode overwrite match, and the OP.GG
+ * doubled-name pairing.
+ * ========================================================================== */
+
+describe("import champion identity — names without a-z0-9", () => {
+  const KOREAN = ["아리", "야스오", "제드"] as const
+
+  it("does not report three different champions as duplicates", () => {
+    const rows = KOREAN.map((name, index) =>
+      makeRow({ id: `row-${index}`, championName: name, championResolved: false }),
+    )
+    const result = applyImportRows([], rows, { role: "mid", mode: "append", source: "manual", recency: "current" })
+
+    expect(result.addedRows).toBe(3)
+    expect(championsOf(result.entries)).toEqual([...KOREAN])
+  })
+
+  it("keeps every non-Latin champion as its own entry", () => {
+    // The destructive half: `applyImportRows` matched on the same empty key, so
+    // the second row overwrote the first and the third overwrote that. Three
+    // imported champions collapsed into one stored entry.
+    const rows = KOREAN.map((name, index) =>
+      makeRow({ id: `row-${index}`, championName: name, championResolved: false, games: 10 + index }),
+    )
+    const result = applyImportRows([], rows, { role: "mid", mode: "append", source: "manual", recency: "current" })
+
+    expect(result.entries).toHaveLength(3)
+    expect(result.overwrittenRows).toBe(0)
+    // And the numbers stayed on the right champion.
+    expect(result.entries.map((entry) => [entry.championName, entry.games])).toEqual([
+      ["아리", 10],
+      ["야스오", 11],
+      ["제드", 12],
+    ])
+  })
+
+  it("does not overwrite an existing entry with a different champion", () => {
+    const existing = [makeEntry({ championName: "제드", games: 40, role: "mid" })]
+    const result = applyImportRows(
+      existing,
+      [makeRow({ championName: "아리", championResolved: false, games: 12 })],
+      { role: "mid", mode: "append", source: "manual", recency: "current" },
+    )
+
+    expect(result.overwrittenRows).toBe(0)
+    expect(result.addedRows).toBe(1)
+    expect(result.entries.map((entry) => [entry.championName, entry.games])).toEqual([
+      ["제드", 40],
+      ["아리", 12],
+    ])
+  })
+
+  it("keeps fullwidth Latin apart from a non-Latin name", () => {
+    const rows = [
+      makeRow({ id: "a", championName: "Ａｈｒｉ", championResolved: false }),
+      makeRow({ id: "b", championName: "아리", championResolved: false }),
+    ]
+    const result = applyImportRows([], rows, { role: "mid", mode: "append", source: "manual", recency: "current" })
+
+    expect(result.entries).toHaveLength(2)
+    expect(result.addedRows).toBe(2)
+  })
+
+  it("keeps two punctuation-only names apart", () => {
+    // Unknown champion names are ALLOWED by this feature (stored verbatim with
+    // an `unknown_champion` warning), so the fix is a stable key, not a new
+    // rejection. Two different unusable names must still be two entries.
+    const rows = [
+      makeRow({ id: "a", championName: "---", championResolved: false }),
+      makeRow({ id: "b", championName: "???", championResolved: false }),
+    ]
+    const result = applyImportRows([], rows, { role: "mid", mode: "append", source: "manual", recency: "current" })
+
+    expect(result.entries).toHaveLength(2)
+  })
+
+  it("does not raise duplicate_champion for three different non-Latin names", () => {
+    // The warning half of the defect, and the one the task names first. This
+    // goes through `parseScoutStats` so `duplicateWarnings()` really runs;
+    // asserting only on `applyImportRows` left that function untested.
+    const paste = ["Champion\tGames\tWin Rate", "아리\t24\t62%", "야스오\t18\t55%", "제드\t12\t48%"].join(
+      "\n",
+    )
+    const result = parseScoutStats(paste, MID)
+
+    expect(result.rows).toHaveLength(3)
+    expect(championsOf(result.rows)).toEqual(["아리", "야스오", "제드"])
+    expect(codes(result.warnings)).not.toContain("duplicate_champion")
+  })
+
+  it("still raises duplicate_champion when a non-Latin name really repeats", () => {
+    // Gegenprobe: the fix must not simply switch duplicate detection off for
+    // these names.
+    const paste = ["Champion\tGames\tWin Rate", "아리\t24\t62%", "아리\t18\t55%"].join("\n")
+    const result = parseScoutStats(paste, MID)
+
+    expect(codes(result.warnings)).toContain("duplicate_champion")
+  })
+
+  it("overwrites the SAME non-Latin champion instead of storing it twice", () => {
+    // This is what catches a one-sided revert of the apply match: comparing a
+    // bare lookup key against an identity key never matches, so a genuine
+    // duplicate would be appended instead of replaced.
+    const result = applyImportRows(
+      [makeEntry({ championName: "아리", games: 40, role: "mid" })],
+      [makeRow({ championName: "아리", championResolved: false, games: 12 })],
+      { role: "mid", mode: "append", source: "manual", recency: "current" },
+    )
+
+    expect(result.entries).toHaveLength(1)
+    expect(result.overwrittenRows).toBe(1)
+    expect(result.addedRows).toBe(0)
+    expect(result.entries[0].games).toBe(12)
+  })
+
+  it("still reports a real duplicate, and still overwrites it", () => {
+    // Gegenprobe. Fixing the collapse must not disable duplicate detection.
+    const rows = [
+      makeRow({ id: "a", championName: "Kai'Sa" }),
+      makeRow({ id: "b", championName: "KaiSa" }),
+    ]
+    const parsedDuplicate = applyImportRows([], rows, {
+      role: "bot",
+      mode: "append",
+      source: "manual",
+      recency: "current",
+    })
+
+    // One champion, so the second row overwrites the first.
+    expect(parsedDuplicate.entries).toHaveLength(1)
+    expect(parsedDuplicate.overwrittenRows).toBe(1)
+  })
+
+  it("still canonicalises the ASCII spellings 0.7.0 merged", () => {
+    for (const [a, b] of [
+      ["Kai'Sa", "KaiSa"],
+      ["Lee Sin", "LeeSin"],
+      ["kaisa", "KAI SA"],
+    ] as const) {
+      const result = applyImportRows(
+        [makeEntry({ championName: a, games: 40, role: "mid" })],
+        [makeRow({ championName: b, games: 12 })],
+        { role: "mid", mode: "append", source: "manual", recency: "current" },
+      )
+      expect(result.entries, `${a} / ${b}`).toHaveLength(1)
+      expect(result.overwrittenRows, `${a} / ${b}`).toBe(1)
+    }
+  })
 })
 
 /* ==========================================================================

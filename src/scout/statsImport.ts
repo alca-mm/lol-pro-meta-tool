@@ -54,7 +54,11 @@
  * this file adds no types of its own that leave the module.
  */
 
-import { ALL_CHAMPIONS } from "../analysis/championCatalog"
+import {
+    championIdentityKey,
+    championLookupKey,
+    resolveCatalogChampion,
+} from "./championIdentity"
 import { normalizeScoutRole } from "./linkParser"
 import { SCOUT_IMPORT_COLUMNS } from "./types"
 import type {
@@ -88,12 +92,10 @@ import type {
  * in the other.
  */
 function normalizeKey(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "")
-}
-
-/** Trim and collapse inner whitespace runs to single spaces. */
-function collapseWhitespace(value: string): string {
-  return value.trim().replace(/\s+/g, " ")
+  // Delegates to src/scout/championIdentity.ts so champion names, column
+  // headers and value labels keep going through ONE normaliser, and so that
+  // normaliser is the very one the analysis engine groups ban candidates by.
+  return championLookupKey(value)
 }
 
 /**
@@ -290,39 +292,23 @@ const GAMES_SUFFIXES: ReadonlySet<string> = new Set([
  * ========================================================================== */
 
 /**
- * Catalog lookup by normalised key. Built once from `ALL_CHAMPIONS`; the first
- * spelling wins, so the exported value stays the catalog's own casing.
- */
-const CHAMPION_INDEX: ReadonlyMap<string, string> = (() => {
-  const index = new Map<string, string>()
-  for (const champion of ALL_CHAMPIONS) {
-    const key = normalizeKey(champion)
-    if (key.length > 0 && !index.has(key)) index.set(key, champion)
-  }
-  return index
-})()
-
-/**
  * Resolve a pasted champion spelling against src/analysis/championCatalog.ts.
  *
- * Candidate and catalog entry are normalised **identically** (lower-case, every
- * non `a-z0-9` character removed), so `kaisa`, `Kai'sa` and `KAI SA` all reach
- * `"Kai'Sa"`, and `nunu willump` reaches `"Nunu & Willump"`.
+ * A thin re-export of `resolveCatalogChampion()` from
+ * src/scout/championIdentity.ts, kept under this name because the whole parser
+ * calls it. The catalog index and the normalisation live in that module now, so
+ * the ban-plan grouping in src/scout/analysis.ts resolves champion names through
+ * exactly the same code path as the import. Before 0.7.0 it did not, and
+ * `Kai'Sa` / `KaiSa` became two ban candidates for one champion.
  *
- * NO FUZZY MATCHING, EVER — no edit distance, no prefix match, no "nearest
- * catalog entry". A catalog lags behind new releases, and silently rewriting
- * `Ahrii` to `Ahri` would attach one champion's numbers to another. An
- * unresolved name is returned verbatim with `resolved: false`; the row stays
- * visible, carries `unknown_champion`, and the user decides.
+ * NO FUZZY MATCHING, EVER, and the reason is unchanged: a catalog lags behind
+ * new releases, and silently rewriting `Ahrii` to `Ahri` would attach one
+ * champion's numbers to another. An unresolved name is returned verbatim with
+ * `resolved: false`; the row stays visible, carries `unknown_champion`, and the
+ * user decides.
  */
 export function resolveChampionName(raw: string): { name: string; resolved: boolean } {
-  const trimmed = collapseWhitespace(raw)
-  if (trimmed.length === 0) return { name: "", resolved: false }
-
-  const canonical = CHAMPION_INDEX.get(normalizeKey(trimmed))
-  return canonical === undefined
-    ? { name: trimmed, resolved: false }
-    : { name: canonical, resolved: true }
+  return resolveCatalogChampion(raw)
 }
 
 /**
@@ -1177,7 +1163,18 @@ function readOpggChampionBlock(lines: readonly string[], start: number): OpggBlo
   // two DIFFERENT champions separated by a dash still stay two blocks.
   let repeated = index
   while (repeated < lines.length && isPageNoiseLine(lines[repeated])) repeated += 1
-  if (repeated < lines.length && normalizeKey(lines[repeated]) === normalizeKey(raw)) {
+  // `championIdentityKey`, not `normalizeKey`, for consistency with the other
+  // two champion comparisons in this module.
+  //
+  // NOT reachable today, and the honest note is worth more than a fix claim: a
+  // block only STARTS at a catalog-resolved name (see `isOpggChampionBlockStart`),
+  // so `raw` is never one of the names that reduce to the empty key, and the
+  // comparison cannot collapse. It is written this way so it stays correct if
+  // that precondition is ever relaxed.
+  if (
+    repeated < lines.length &&
+    championIdentityKey(lines[repeated]) === championIdentityKey(raw)
+  ) {
     index = repeated + 1
   }
 
@@ -1726,7 +1723,10 @@ export function parseScoutStats(
 function duplicateWarnings(rows: readonly ScoutImportRow[]): ScoutImportWarning[] {
   const counts = new Map<string, { count: number; row: ScoutImportRow }>()
   for (const row of rows) {
-    const key = normalizeKey(row.championName)
+    // Champion identity, not the bare lookup key: three different non-Latin
+    // names used to share the empty key and were reported as one champion
+    // appearing three times.
+    const key = championIdentityKey(row.championName)
     const seen = counts.get(key)
     if (seen === undefined) counts.set(key, { count: 1, row })
     else seen.count += 1
@@ -1973,9 +1973,14 @@ export function applyImportRows(
     const entry = importRowToManualEntry(row, options)
     if (entry === null) continue
 
-    const key = normalizeKey(entry.championName)
+    // Champion identity, not the bare lookup key. This is the destructive one:
+    // on the empty key every non-Latin import row matched every stored entry of
+    // the same role, so each row overwrote the previous champion and a paste of
+    // three champions ended up as one entry.
+    const key = championIdentityKey(entry.championName)
     const index = entries.findIndex(
-      (candidate) => candidate.role === options.role && normalizeKey(candidate.championName) === key,
+      (candidate) =>
+        candidate.role === options.role && championIdentityKey(candidate.championName) === key,
     )
     if (index >= 0) {
       entries[index] = entry

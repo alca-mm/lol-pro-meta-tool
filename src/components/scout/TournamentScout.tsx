@@ -52,6 +52,7 @@ import {
     saveScoutState,
 } from "../../scout/storage"
 import { SCOUT_SCHEMA_VERSION } from "../../scout/types"
+import type { ChampionStats } from "../../domain/types"
 import type {
     ManualChampionEntry,
     ScoutLineup,
@@ -59,6 +60,7 @@ import type {
     ScoutPlayer,
     ScoutPlayerData,
     ScoutPlayerId,
+    ScoutRankTier,
     ScoutRemovedPlayer,
     ScoutRole,
     UnparsedLine,
@@ -91,6 +93,7 @@ import {
     withEntryIds,
     type ScoutLineupAssignError,
     type ScoutLineupTarget,
+    carryOverPlayerHandiwork,
 } from "./scoutUiHelpers"
 
 type CopyState = "idle" | "copied" | "failed"
@@ -129,7 +132,27 @@ function omitKey<T>(map: Readonly<Record<string, T>>, key: string): Record<strin
     return out
 }
 
-export function TournamentScout() {
+interface TournamentScoutProps {
+    /**
+     * Champion role evidence for the viability gate, normally
+     * `calculateChampionStats(allMatches)`.
+     *
+     * OPTIONAL AND IT MUST STAY OPTIONAL. This tab is deliberately rendered
+     * above the "no matches" guard in src/App.tsx, because it works on pasted
+     * links and hand-typed numbers alone. With no reference the engine simply
+     * returns `"unknown"` for every viability question and behaves exactly as
+     * it did before 0.7.0, so a missing or failed pro-meta dataset degrades the
+     * ban plan's precision and nothing else.
+     *
+     * Built from the UNFILTERED match set on purpose: the user's patch and
+     * league filters must not shrink the evidence base, or a champion would
+     * start looking unplayable in a lane simply because the current filter hides
+     * the games that prove otherwise.
+     */
+    championRoleReference?: readonly ChampionStats[]
+}
+
+export function TournamentScout({ championRoleReference }: TournamentScoutProps = {}) {
     const { t } = useTranslation()
 
     const [initialState] = useState(loadScoutState)
@@ -194,8 +217,16 @@ export function TournamentScout() {
                 duplicatesMerged,
                 lineup: isLineupEmpty(lineup) ? undefined : lineup,
                 includeSubstitutes,
+                championRoleReference,
             }),
-        [players, playerData, duplicatesMerged, lineup, includeSubstitutes],
+        [
+            players,
+            playerData,
+            duplicatesMerged,
+            lineup,
+            includeSubstitutes,
+            championRoleReference,
+        ],
     )
 
     /** The builder's own view — available before and without any analysis. */
@@ -209,18 +240,12 @@ export function TournamentScout() {
     /* ---------------------------------------------------------------- input */
 
     /**
-     * Keep a role the user corrected by hand when the re-parse did not detect
-     * one. The input is the source of truth for the roster, not for handiwork.
+     * Keep the handiwork a re-parse cannot reproduce. The rule itself lives in
+     * `carryOverPlayerHandiwork` so it can be tested: Vitest runs in Node with
+     * no jsdom, and a rule inside this component body would be untestable.
      */
     function carryOverRoles(parsed: readonly ScoutPlayer[]): ScoutPlayer[] {
-        const previousRoles = new Map(players.map((player) => [player.id, player.role]))
-        return parsed.map((player) => {
-            const previous = previousRoles.get(player.id)
-            if (player.role === "unknown" && previous && previous !== "unknown") {
-                return { ...player, role: previous }
-            }
-            return player
-        })
+        return carryOverPlayerHandiwork(parsed, players)
     }
 
     /**
@@ -419,6 +444,24 @@ export function TournamentScout() {
         )
     }
 
+    /**
+     * `undefined` clears the field back to "nobody said". It is written as a key
+     * removal rather than `rankTier: undefined` so a cleared rank round-trips
+     * through storage identically to a rank that was never set.
+     */
+    function handleRankChange(playerId: ScoutPlayerId, rankTier: ScoutRankTier | undefined) {
+        setPlayers((current) =>
+            current.map((player) => {
+                if (player.id !== playerId) return player
+                if (rankTier === undefined) {
+                    const { rankTier: _dropped, ...rest } = player
+                    return rest
+                }
+                return { ...player, rankTier }
+            }),
+        )
+    }
+
     function handleEntriesChange(playerId: ScoutPlayerId, entries: ManualChampionEntry[]) {
         updatePlayerData(playerId, { entries })
     }
@@ -584,6 +627,9 @@ export function TournamentScout() {
                                 lineupRole={lineupStarterSlot(lineup, player.id) ?? undefined}
                                 membership={lineupSummary.byPlayerId[player.id]?.membership}
                                 onRoleChange={(role) => handleRoleChange(player.id, role)}
+                                onRankChange={(rankTier) =>
+                                    handleRankChange(player.id, rankTier)
+                                }
                                 onEntriesChange={(entries) => handleEntriesChange(player.id, entries)}
                                 onNoteChange={(note) => handleNoteChange(player.id, note)}
                                 onRemove={() => handleRemovePlayer(player)}

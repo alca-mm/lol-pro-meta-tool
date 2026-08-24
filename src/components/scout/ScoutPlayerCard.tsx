@@ -13,16 +13,19 @@ import type {
     ScoutLineupMembership,
     ScoutLineupSlot,
     ScoutPlayer,
+    ScoutRankTier,
     ScoutRole,
     ScoutSourceRef,
 } from "../../scout/types"
 import { ScoutDataEditor } from "./ScoutDataEditor"
 import {
+    SCOUT_RANK_VALUES,
     SCOUT_ROLE_VALUES,
     fillPlaceholders,
     scoutBlockedKey,
     scoutMembershipKey,
     scoutNoteKey,
+    scoutRankKey,
     scoutRoleKey,
     scoutSourceKey,
     scoutStatusKey,
@@ -51,6 +54,13 @@ interface Props {
     /** Where this player stands — drives the badge next to their name only. */
     membership?: ScoutLineupMembership
     onRoleChange: (role: ScoutRole) => void
+    /**
+     * `undefined` means "nobody stated a rank", which is NOT the same statement
+     * as `"unranked"`. The analysis weighs both exactly neutral, but they must
+     * stay distinguishable: one is the absence of information, the other is
+     * information.
+     */
+    onRankChange: (rankTier: ScoutRankTier | undefined) => void
     onEntriesChange: (entries: ManualChampionEntry[]) => void
     onNoteChange: (note: string) => void
     onRemove: () => void
@@ -64,6 +74,7 @@ export function ScoutPlayerCard({
     lineupRole,
     membership,
     onRoleChange,
+    onRankChange,
     onEntriesChange,
     onNoteChange,
     onRemove,
@@ -98,6 +109,35 @@ export function ScoutPlayerCard({
                         {SCOUT_ROLE_VALUES.map((role) => (
                             <option key={role} value={role}>
                                 {t(scoutRoleKey(role))}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div className="scout-player-identity">
+                    <label className="scout-entry-label" htmlFor={`scout-rank-${player.id}`}>
+                        {t("scout_player_rank")}
+                    </label>
+                    {/*
+                      Same shape as the role select above: a real `label htmlFor`
+                      bound to a per-player id, so no `aria-label` is needed or
+                      wanted. The empty option is the "nobody said" case and maps
+                      back to `undefined`, never to `"unranked"`.
+                    */}
+                    <select
+                        id={`scout-rank-${player.id}`}
+                        value={player.rankTier ?? ""}
+                        onChange={(event) =>
+                            onRankChange(
+                                event.target.value === ""
+                                    ? undefined
+                                    : (event.target.value as ScoutRankTier),
+                            )
+                        }
+                    >
+                        <option value="">{t("scout_player_rankUnknown")}</option>
+                        {SCOUT_RANK_VALUES.map((tier) => (
+                            <option key={tier} value={tier}>
+                                {t(scoutRankKey(tier))}
                             </option>
                         ))}
                     </select>
@@ -155,13 +195,20 @@ function ScoutSourceItem({ source }: { source: ScoutSourceRef }) {
             >
                 {label}
             </a>
-            <span className="scout-source-status">{t(scoutStatusKey(source.status))}</span>
-            {source.noteCode && (
-                <span className="muted scout-source-note">{t(scoutNoteKey(source.noteCode))}</span>
-            )}
-            {!canFetchInBrowser(source.kind) && (
-                <span className="muted scout-source-note">{t(scoutBlockedKey(fetchInfo.reason))}</span>
-            )}
+            <details className="scout-details scout-source-details">
+                <summary>{t("scout_player_sourceDetails")}</summary>
+                <span className="scout-source-status">{t(scoutStatusKey(source.status))}</span>
+                {source.noteCode && (
+                    <span className="muted scout-source-note">
+                        {t(scoutNoteKey(source.noteCode))}
+                    </span>
+                )}
+                {!canFetchInBrowser(source.kind) && (
+                    <span className="muted scout-source-note">
+                        {t(scoutBlockedKey(fetchInfo.reason))}
+                    </span>
+                )}
+            </details>
         </li>
     )
 }

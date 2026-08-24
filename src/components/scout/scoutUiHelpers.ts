@@ -40,6 +40,7 @@ import type { TranslationKey } from "../../i18n/types"
 import { SCOUT_KDA_MAX_PLAUSIBLE } from "../../scout/analysis"
 import {
   SCOUT_LINEUP_SLOTS,
+  SCOUT_RANK_TIERS,
   SCOUT_REMOVED_PLAYERS_MAX,
   SCOUT_SUBSTITUTE_SLOTS,
 } from "../../scout/types"
@@ -59,6 +60,7 @@ import type {
   ScoutPlayer,
   ScoutPlayerData,
   ScoutPlayerId,
+  ScoutRankTier,
   ScoutReason,
   ScoutReasonCode,
   ScoutReasonParams,
@@ -98,6 +100,7 @@ export const scoutNoteKey = (code: ScoutSourceNoteCode): TranslationKey => `scou
 export const scoutBlockedKey = (code: ScoutFetchBlockedCode): TranslationKey =>
   `scout_blocked_${code}`
 export const scoutRoleFitKey = (fit: ScoutRoleFit): TranslationKey => `scout_rolefit_${fit}`
+export const scoutRankKey = (tier: ScoutRankTier): TranslationKey => `scout_rank_${tier}`
 export const scoutMembershipKey = (membership: ScoutLineupMembership): TranslationKey =>
   `scout_membership_${membership}`
 
@@ -111,6 +114,16 @@ export const scoutMembershipKey = (membership: ScoutLineupMembership): Translati
  */
 export const scoutSubstituteSlotKey = (slot: ScoutSubstituteSlot): TranslationKey =>
   `scout_lineup_${slot}`
+
+/**
+ * Rank tiers in display order, weakest first.
+ *
+ * A straight alias of `SCOUT_RANK_TIERS` rather than a second hand-written list.
+ * The contract tuple already documents that its order IS the contract, because
+ * users pick a rank by position in the dropdown; keeping one array means the
+ * dropdown and the monotonicity guarantee can never drift apart.
+ */
+export const SCOUT_RANK_VALUES: readonly ScoutRankTier[] = SCOUT_RANK_TIERS
 
 /** Role values in display order — also the runtime guard for `{role}` params. */
 export const SCOUT_ROLE_VALUES: readonly ScoutRole[] = [
@@ -272,6 +285,83 @@ function isRoleBearingParam(key: string): boolean {
  * Everything else passes through, so this stays a rule, not a per-code
  * mapping table.
  */
+/**
+ * Carry the handiwork a re-parse cannot reproduce from the old roster onto the
+ * freshly parsed one.
+ *
+ * `parseScoutInput()` rebuilds every player from the pasted text, so anything
+ * the user set by hand is lost unless it is carried over here. Two DIFFERENT
+ * rules, and the difference is the point:
+ *
+ *  - ROLE is carried over only when the fresh parse found none. A role the
+ *    parser did detect is real information from the input and must win, or a
+ *    corrected input would never be able to fix a wrong role.
+ *  - RANK is carried over ALWAYS, because the parser can never produce one.
+ *    There is no competing value it could lose to, so the only alternative is
+ *    losing it. `"unranked"` is carried like any other tier: it is a statement
+ *    the user made.
+ *
+ * Players absent from the previous roster pass through untouched, and nothing
+ * is ever invented for them.
+ */
+export function carryOverPlayerHandiwork(
+  parsed: readonly ScoutPlayer[],
+  previous: readonly ScoutPlayer[],
+): ScoutPlayer[] {
+  const earlierById = new Map(previous.map((player) => [player.id, player]))
+
+  return parsed.map((player) => {
+    const earlier = earlierById.get(player.id)
+    if (earlier === undefined) return player
+
+    let carried = player
+    if (player.role === "unknown" && earlier.role !== "unknown") {
+      carried = { ...carried, role: earlier.role }
+    }
+    // Explicit two-way check rather than a truthiness test: the field is
+    // optional AND nullable, and both mean "nobody said".
+    if (earlier.rankTier !== undefined && earlier.rankTier !== null) {
+      carried = { ...carried, rankTier: earlier.rankTier }
+    }
+    return carried
+  })
+}
+
+/**
+ * How many reasons a recommendation shows before the rest is one click away.
+ *
+ * Two, and the number is a judgement about what a reason list is FOR. The
+ * leading reasons are the justification the recommendation exists for; past the
+ * second one, on a row the user has already accepted, they are diagnosis. A real
+ * five-player session rendered 275 reason lines across 40 rows, which is the
+ * wall of text this release set out to remove.
+ */
+export const SCOUT_REASON_PREVIEW_COUNT = 2
+
+/**
+ * Split a reason list into the part that is always visible and the diagnostic
+ * tail that goes behind a collapsed block.
+ *
+ * Nothing is ever dropped: `visible.concat(collapsed)` is the input, in order.
+ * A list that fits entirely in the preview produces an EMPTY tail, so the caller
+ * renders no empty container. Pure, so the rule can be tested; Vitest runs in
+ * Node with no jsdom and this would be untestable as an inline slice in JSX.
+ */
+export function splitScoutReasons(reasons: readonly ScoutReason[]): {
+  visible: ScoutReason[]
+  collapsed: ScoutReason[]
+} {
+  return {
+    visible: reasons.slice(0, SCOUT_REASON_PREVIEW_COUNT),
+    collapsed: reasons.slice(SCOUT_REASON_PREVIEW_COUNT),
+  }
+}
+
+/** Runtime guard for a `{rank}` param, mirroring `isScoutRole`. */
+function isScoutRankTier(value: string): value is ScoutRankTier {
+  return (SCOUT_RANK_VALUES as readonly string[]).includes(value)
+}
+
 export function localizeScoutParams(
   t: ScoutTranslate,
   params?: ScoutReasonParams,
@@ -280,6 +370,13 @@ export function localizeScoutParams(
   const out: Record<string, string | number> = {}
   for (const key of Object.keys(params)) {
     const value = params[key]
+    // A rank travels as its tier CODE and is turned into words here, exactly
+    // like a role. Rendering `grandmaster` raw would break rule (B) of the
+    // scout contract: no type carries user-facing prose, the UI does.
+    if (typeof value === "string" && key === "rank" && isScoutRankTier(value)) {
+      out[key] = t(scoutRankKey(value))
+      continue
+    }
     if (typeof value === "string" && isRoleBearingParam(key)) {
       out[key] = value
         .split(",")
@@ -353,6 +450,13 @@ const COUNT_SENSITIVE_REASONS: Partial<Record<ScoutReasonCode, CountSensitiveTex
 const COUNT_SENSITIVE_WARNINGS: Partial<Record<ScoutWarningCode, CountSensitiveText>> = {
   substitute_risk_active: { param: "count", one: "scout_warning_substitute_risk_activeOne" },
   data_loss_on_reparse: { param: "count", one: "scout_warning_data_loss_on_reparseOne" },
+  // Both became count-bearing in 0.7.0: the engine now says each of them ONCE
+  // per session with a number, instead of once per champion.
+  flex_pick_warning: { param: "count", one: "scout_warning_flex_pick_warningOne" },
+  role_not_playable_filtered: {
+    param: "count",
+    one: "scout_warning_role_not_playable_filteredOne",
+  },
 }
 
 /**

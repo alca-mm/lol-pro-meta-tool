@@ -61,6 +61,7 @@ import { isRecord } from "../lib/isRecord"
 import { SCOUT_REGION_UNKNOWN, SCOUT_SOURCE_KINDS } from "./sources"
 import {
   SCOUT_LINEUP_SLOTS,
+  SCOUT_RANK_TIERS,
   SCOUT_REMOVED_PLAYERS_MAX,
   SCOUT_SCHEMA_VERSION,
   SCOUT_SUBSTITUTE_SLOTS,
@@ -73,6 +74,7 @@ import type {
   ScoutPlayer,
   ScoutPlayerData,
   ScoutPlayerId,
+  ScoutRankTier,
   ScoutRecency,
   ScoutRemovedPlayer,
   ScoutRole,
@@ -152,6 +154,15 @@ const SCOUT_ROLES: ReadonlySet<string> = new Set<string>([
 ])
 
 const SCOUT_RECENCIES: ReadonlySet<string> = new Set<string>(["current", "recent", "old"])
+
+/**
+ * Every legal {@link ScoutRankTier}, as a runtime set.
+ *
+ * DERIVED from `SCOUT_RANK_TIERS` rather than retyped, for the reason this
+ * section's own header gives: a union member missing from its guard set is
+ * dropped silently on load. Spreading the tuple makes that impossible.
+ */
+const SCOUT_RANK_TIER_VALUES: ReadonlySet<string> = new Set<string>(SCOUT_RANK_TIERS)
 
 /**
  * Every legal {@link ScoutManualSource}, as a runtime set.
@@ -256,6 +267,20 @@ function readBooleanOrFalse(value: unknown): boolean {
 /** Role from a closed set; anything else becomes the explicit `"unknown"`. */
 function readRole(value: unknown): ScoutRole {
   return typeof value === "string" && SCOUT_ROLES.has(value) ? (value as ScoutRole) : "unknown"
+}
+
+/**
+ * Rank tier from a closed set, or `null` for "nobody stated one".
+ *
+ * There is no fallback tier on purpose. `"unranked"` would be a CLAIM the user
+ * never made, and every other tier would silently reweigh their data. An
+ * unreadable rank must neutralise, never guess: the analysis engine treats an
+ * absent rank as exactly 1.0.
+ */
+function readRankTier(value: unknown): ScoutRankTier | null {
+  return typeof value === "string" && SCOUT_RANK_TIER_VALUES.has(value)
+    ? (value as ScoutRankTier)
+    : null
 }
 
 /**
@@ -422,7 +447,7 @@ function normalizePlayer(raw: unknown): ScoutPlayer | null {
   const displayName =
     readNonEmptyString(raw.displayName) ?? (tagline === "" ? riotName : `${riotName}#${tagline}`)
 
-  return {
+  const player: ScoutPlayer = {
     id,
     riotName,
     tagline,
@@ -431,6 +456,20 @@ function normalizePlayer(raw: unknown): ScoutPlayer | null {
     role: readRole(raw.role),
     sources: normalizeSourceRefs(raw.sources),
   }
+
+  // Written ONLY when a valid tier is present, exactly like `entry.kda` below.
+  // Two reasons this matters more than it looks:
+  //
+  //  - `saveScoutState()` normalises BEFORE writing, so a field this function
+  //    does not read is stripped on every save. It would appear to work for a
+  //    whole session and then vanish on reload.
+  //  - Omitting rather than writing `null` keeps an untouched player
+  //    byte-identical through a load/save round trip, so no test that deep-
+  //    equals a stored state has to learn about a key nobody set.
+  const rankTier = readRankTier(raw.rankTier)
+  if (rankTier !== null) player.rankTier = rankTier
+
+  return player
 }
 
 /** Player list; broken entries are skipped, duplicate ids keep the first entry. */

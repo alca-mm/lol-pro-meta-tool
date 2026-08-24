@@ -119,16 +119,27 @@ export function ScoutInputPanel({
 
             {unparsedLines.length > 0 && (
                 <div className="scout-unparsed">
-                    <h4>{t("scout_unparsedLines")}</h4>
+                    {/*
+                      The hint stays in the open because it is the actionable
+                      half. The lines themselves are evidence: useful when
+                      something really is missing, noise otherwise, and
+                      previously rendered one uncapped bullet each.
+                    */}
                     <p className="muted">{t("scout_unparsedHint")}</p>
-                    <ul className="scout-unparsed-list">
-                        {unparsedLines.map((line, index) => (
-                            <li key={`${line.reason}-${index}`}>
-                                <code>{line.raw}</code>
-                                <span className="muted"> · {t(scoutUnparsedKey(line.reason))}</span>
-                            </li>
-                        ))}
-                    </ul>
+                    <details className="scout-details scout-unparsed-details">
+                        <summary>{t("scout_unparsedLines")}</summary>
+                        <ul className="scout-unparsed-list">
+                            {unparsedLines.map((line, index) => (
+                                <li key={`${line.reason}-${index}`}>
+                                    <code>{line.raw}</code>
+                                    <span className="muted">
+                                        {" · "}
+                                        {t(scoutUnparsedKey(line.reason))}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
                 </div>
             )}
         </div>

@@ -13,6 +13,7 @@ import {
     scoutConfidenceKey,
     scoutKdaLabel,
     scoutRoleFitKey,
+    splitScoutReasons,
     translateScoutReason,
     translateScoutWarning,
 } from "./scoutUiHelpers"
@@ -40,16 +41,41 @@ export function ScoutConfidenceBadge({ confidence }: { confidence: ScoutConfiden
     )
 }
 
-/** Every justification of a recommendation — not just the first one. */
+/**
+ * The justifications behind a recommendation.
+ *
+ * The leading ones stay in the open, the rest sit behind a collapsed block.
+ * NOTHING IS DROPPED — see `splitScoutReasons`, whose two halves are the input
+ * list in order. The split exists because a real session rendered 275 reason
+ * lines across 40 rows, and a reason past the second on an already-accepted row
+ * is diagnosis rather than justification.
+ */
 export function ScoutReasonList({ reasons }: { reasons: readonly ScoutReason[] }) {
     const { t } = useTranslation()
     if (reasons.length === 0) return null
+
+    const { visible, collapsed } = splitScoutReasons(reasons)
+
     return (
-        <ul className="scout-reason-list">
-            {reasons.map((reason, index) => (
-                <li key={`${reason.code}-${index}`}>{translateScoutReason(t, reason)}</li>
-            ))}
-        </ul>
+        <>
+            <ul className="scout-reason-list">
+                {visible.map((reason, index) => (
+                    <li key={`${reason.code}-${index}`}>{translateScoutReason(t, reason)}</li>
+                ))}
+            </ul>
+            {collapsed.length > 0 && (
+                <details className="scout-details scout-reason-details">
+                    <summary>{t("scout_moreReasons")}</summary>
+                    <ul className="scout-reason-list">
+                        {collapsed.map((reason, index) => (
+                            <li key={`${reason.code}-${index}`}>
+                                {translateScoutReason(t, reason)}
+                            </li>
+                        ))}
+                    </ul>
+                </details>
+            )}
+        </>
     )
 }
 
