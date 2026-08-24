@@ -4,16 +4,20 @@
  */
 
 import { useTranslation } from "../../i18n/LanguageContext"
-import type { BanCandidate, ChampionSignal, ScoutConfidence, ScoutPlayerId, ScoutReason, ScoutRoleFit, ScoutWarning } from "../../scout/types"
+import type { BanCandidate, ChampionSignal, ScoutConfidence, ScoutPlayerId, ScoutReason, ScoutRoleFit, ScoutRoleViabilityEvidence, ScoutWarning } from "../../scout/types"
 import {
     banCandidateKda,
     banRoleLabels,
+    describeRoleViabilityEvidence,
+    fillPlaceholders,
     formatScoutNumber,
+    scoutBanPhaseKey,
     scoutBanPriorityLabel,
     scoutConfidenceKey,
     scoutKdaLabel,
     scoutRoleFitKey,
     splitScoutReasons,
+    summarizeBanCandidate,
     translateScoutReason,
     translateScoutWarning,
 } from "./scoutUiHelpers"
@@ -50,11 +54,25 @@ export function ScoutConfidenceBadge({ confidence }: { confidence: ScoutConfiden
  * lines across 40 rows, and a reason past the second on an already-accepted row
  * is diagnosis rather than justification.
  */
-export function ScoutReasonList({ reasons }: { reasons: readonly ScoutReason[] }) {
+export function ScoutReasonList({
+    reasons,
+    evidence,
+}: {
+    reasons: readonly ScoutReason[]
+    /**
+     * Role-gate numbers for this row, if any. They go into the SAME collapsed
+     * block as the reason tail: the verdict itself is already an open reason,
+     * and a second `details` per row would be exactly the clutter this panel
+     * spent 0.7.0 removing.
+     */
+    evidence?: ScoutRoleViabilityEvidence
+}) {
     const { t } = useTranslation()
     if (reasons.length === 0) return null
 
     const { visible, collapsed } = splitScoutReasons(reasons)
+    const evidenceLines = describeRoleViabilityEvidence(t, evidence)
+    const hasDetails = collapsed.length > 0 || evidenceLines.length > 0
 
     return (
         <>
@@ -63,13 +81,18 @@ export function ScoutReasonList({ reasons }: { reasons: readonly ScoutReason[] }
                     <li key={`${reason.code}-${index}`}>{translateScoutReason(t, reason)}</li>
                 ))}
             </ul>
-            {collapsed.length > 0 && (
+            {hasDetails && (
                 <details className="scout-details scout-reason-details">
                     <summary>{t("scout_moreReasons")}</summary>
                     <ul className="scout-reason-list">
                         {collapsed.map((reason, index) => (
                             <li key={`${reason.code}-${index}`}>
                                 {translateScoutReason(t, reason)}
+                            </li>
+                        ))}
+                        {evidenceLines.map((line, index) => (
+                            <li key={`evidence-${index}`} className="muted">
+                                {line}
                             </li>
                         ))}
                     </ul>
@@ -135,7 +158,10 @@ export function ScoutSignalRow({ signal }: { signal: ChampionSignal }) {
             {signal.fromSubstitute && (
                 <p className="scout-substitute-note">{t("scout_onlyIfPlayerStarts")}</p>
             )}
-            <ScoutReasonList reasons={signal.reasons} />
+            <ScoutReasonList
+                reasons={signal.reasons}
+                evidence={signal.roleViabilityEvidence}
+            />
         </li>
     )
 }
@@ -159,15 +185,27 @@ export function ScoutBanRow({
     candidate,
     rank,
     forPlayerId,
+    displayNameById,
 }: {
     candidate: BanCandidate
     rank: number
     forPlayerId?: ScoutPlayerId
+    /**
+     * Player names, so the row can say WHO a ban hits.
+     *
+     * Optional because only the team plan needs it: a per-player card already
+     * names its player in the heading above the row. Without it the affected
+     * line simply does not render, rather than printing raw ids.
+     */
+    displayNameById?: Readonly<Record<ScoutPlayerId, string>>
 }) {
     const { t } = useTranslation()
     const roleLabels = banRoleLabels(t, candidate)
     const priorityLabel = scoutBanPriorityLabel(t, candidate)
     const kdaLabel = scoutKdaLabel(t, banCandidateKda(candidate, forPlayerId))
+    // The facts the ban panel used to express by repeating this candidate under
+    // its phase, under "hits several players" and under every player it hits.
+    const context = summarizeBanCandidate(candidate, displayNameById)
 
     return (
         <li className="scout-ban">
@@ -193,16 +231,59 @@ export function ScoutBanRow({
                     {priorityLabel}
                     {kdaLabel !== null ? ` · ${kdaLabel}` : ""}
                 </span>
+                {context.phase !== undefined && (
+                    <span className={`scout-chip scout-ban-phase-${context.phase}`}>
+                        {t(scoutBanPhaseKey(context.phase))}
+                    </span>
+                )}
+                {/*
+                  THAT the ban hits several players, at a glance. This replaces
+                  the separate "overlap bans" list, which said the same thing by
+                  printing every one of these candidates a second time. Driven by
+                  the engine's own `isOverlap`, not by how many names resolved,
+                  so it stays truthful on a per-player card that passes no name
+                  lookup at all. WHO it hits is the line below.
+                */}
+                {context.isOverlap && (
+                    <span className="scout-chip scout-chip-overlap">
+                        {fillPlaceholders(t("scout_banOverlapBadge"), {
+                            count: context.affectedPlayerCount,
+                        })}
+                    </span>
+                )}
                 <ScoutRoleFitBadge roleFit={candidate.roleFit} />
                 <span className={`scout-chip scout-chip-${candidate.confidence}`}>
                     {t(scoutConfidenceKey(candidate.confidence))}
                 </span>
             </div>
+            {/*
+              WHO the ban hits, by name. This is the one thing a `BanCandidate`
+              cannot say for itself, and it is what the per-player ban groups
+              used to convey by rendering the whole candidate again under each
+              player. Only shown when it adds something: a single affected
+              player is already named by `banRoleLabels` and the target line.
+            */}
+            {context.affectedPlayerNames.length > 1 && (
+                <p className="muted scout-ban-affected">
+                    {fillPlaceholders(t("scout_banAffectedPlayers"), {
+                        players: context.affectedPlayerNames.join(", "),
+                    })}
+                </p>
+            )}
             {candidate.isFlex && <p className="scout-flex-warning">{t("scout_flexWarning")}</p>}
             {candidate.substituteOnly && (
                 <p className="scout-substitute-note">{t("scout_banSubstituteOnly")}</p>
             )}
-            <ScoutReasonList reasons={candidate.reasons} />
+            {/* The candidate's numbers come from the signal the ban is aimed at,
+                so the row explains the champion the user is actually reading. */}
+            <ScoutReasonList
+                reasons={candidate.reasons}
+                evidence={
+                    candidate.signals.find(
+                        (signal) => signal.playerId === candidate.targetPlayerId,
+                    )?.roleViabilityEvidence ?? candidate.signals[0]?.roleViabilityEvidence
+                }
+            />
         </li>
     )
 }

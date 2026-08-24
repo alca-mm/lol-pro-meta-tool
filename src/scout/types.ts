@@ -201,6 +201,86 @@ export type ScoutRankTiersAreComplete = Assert<
 export type ScoutRoleViability = "viable" | "implausible" | "unknown"
 
 /**
+ * WHY a {@link ScoutRoleViability} verdict came out the way it did.
+ *
+ * Machine-readable, like every other explanation in this feature (rule (B) at
+ * the top of this file): the UI turns it into words, the type carries no prose.
+ *
+ * - `reference_missing`     no reference data was supplied at all.
+ * - `champion_missing`      the reference does not cover this champion.
+ * - `role_unknown`          no lane to judge against (no slot, no lineup).
+ * - `sample_too_small`      the champion's TOTAL sample is under the floor, so
+ *                           no verdict about any of its roles is warranted.
+ * - `primary_role_fallback` this is the champion's most-played role, which is
+ *                           always viable regardless of the thresholds.
+ * - `viable`                the role cleared both thresholds.
+ * - `below_threshold`       the role missed at least one threshold. THE ONLY
+ *                           reason that withholds a ban candidate.
+ */
+export type ScoutRoleViabilityReason =
+  | "reference_missing"
+  | "champion_missing"
+  | "role_unknown"
+  | "sample_too_small"
+  | "primary_role_fallback"
+  | "viable"
+  | "below_threshold"
+
+/**
+ * The numbers behind one role-viability verdict.
+ *
+ * DIAGNOSIS, NOT A DECISION SOURCE. Nothing scores off this; it exists so the
+ * user can check the engine's homework instead of being told a champion is
+ * "not playable" and having to take that on faith. It is never persisted and
+ * never leaves the analysis result, so {@link SCOUT_SCHEMA_VERSION} is
+ * unaffected.
+ *
+ * The measurement fields are optional because the early verdicts genuinely have
+ * no numbers to report: with no reference data there is nothing to count. An
+ * absent field means "not measured", never "measured as zero" — the same
+ * discipline {@link ManualChampionEntry.kda} documents.
+ */
+export interface ScoutRoleViabilityEvidence {
+  status: ScoutRoleViability
+  reason: ScoutRoleViabilityReason
+  /** The lane the champion was judged against. */
+  evaluatedRole: ScoutRole
+  /** Reference picks of this champion in `evaluatedRole`. */
+  picksInRole?: number
+  /** That role's share of the champion's picks, 0 to 1. */
+  roleShare?: number
+  /** The champion's total picks in the reference. */
+  totalPicks?: number
+  /** The champion's most-played role in the reference. */
+  primaryRole?: ScoutRole
+  /** Minimum picks in a role the rule requires. */
+  minPicksInRole?: number
+  /** Minimum role share the rule requires, 0 to 1. */
+  minRoleShare?: number
+}
+
+/**
+ * Whether the role gate could do its job for this session.
+ *
+ * - `unavailable` no reference data reached the engine. The gate is OFF, and
+ *                 the ban plan can contain the off-role suggestions 0.7.0 set
+ *                 out to remove. The user has to be told, because silence here
+ *                 looks exactly like a working gate.
+ * - `partial`     the gate ran, but some champions could not be judged.
+ * - `active`      the gate ran and judged everything it was asked about.
+ */
+export type ScoutRoleGateStatus = "active" | "partial" | "unavailable"
+
+/** Session-level summary of the role gate, for one short line in the UI. */
+export interface ScoutRoleGateSummary {
+  status: ScoutRoleGateStatus
+  /** Distinct champions the reference could not judge. */
+  unjudgedChampions: number
+  /** Distinct champions withheld from the ban plan by the gate. */
+  filteredChampions: number
+}
+
+/**
  * Canonical, upper-case region code, e.g. `"EUW"`, `"KR"`, `"NA"`.
  *
  * Deliberately a `string` alias and not a closed union: region slugs differ per
@@ -1030,6 +1110,15 @@ export interface ChampionSignal {
    * guess a default.
    */
   roleViability: ScoutRoleViability
+  /**
+   * The numbers behind `roleViability` — see
+   * {@link ScoutRoleViabilityEvidence}.
+   *
+   * Optional because it is pure diagnosis: a caller that only wants the verdict
+   * reads `roleViability`, and a fixture that does not care may omit it.
+   * `analyzeScout()` always fills it in.
+   */
+  roleViabilityEvidence?: ScoutRoleViabilityEvidence
 }
 
 /** Where in the ban phase a candidate belongs. */
@@ -1178,6 +1267,14 @@ export interface ScoutAnalysis {
    * lineup warning is raised (nothing was claimed, so nothing can be wrong).
    */
   lineup: ScoutLineupSummary | null
+  /**
+   * Whether the role gate could run — see {@link ScoutRoleGateSummary}.
+   *
+   * Not optional: "the gate was off" is a statement the UI must be able to make
+   * on every analysis, and an absent field would be indistinguishable from an
+   * active gate.
+   */
+  roleGate: ScoutRoleGateSummary
   /**
    * Optional ISO-8601 stamp. Optional on purpose: the pure engine must stay
    * clock-free so its tests are deterministic; only the UI may fill this in.

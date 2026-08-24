@@ -185,7 +185,9 @@ import type {
   ScoutRankTier,
   ScoutRole,
   ScoutRoleFit,
+  ScoutRoleGateSummary,
   ScoutRoleViability,
+  ScoutRoleViabilityEvidence,
   ScoutWarning,
   TeamBanPlan,
   WinratePercent,
@@ -1073,25 +1075,66 @@ export function championRoleViability(
   championKey: string,
   role: ScoutRole,
 ): ScoutRoleViability {
-  // No reference data, or a role we cannot judge against.
-  if (index.size === 0) return "unknown"
-  if (role === "unknown") return "unknown"
+  return evaluateChampionRoleViability(index, championKey, role).status
+}
+
+/**
+ * The same verdict, plus the numbers it was made from.
+ *
+ * `championRoleViability()` above is a projection of this, so there is one rule
+ * and not two that can drift. Every early return here already had its evidence
+ * in hand and used to throw it away, which is why the UI could only say "not
+ * playable" without ever showing what that judgement rested on.
+ *
+ * PURE DIAGNOSIS: nothing scores off the returned numbers. A measurement field
+ * is omitted rather than zeroed when it was never measured, because "no
+ * reference data" and "zero picks" are different statements.
+ */
+export function evaluateChampionRoleViability(
+  index: ChampionRoleIndex,
+  championKey: string,
+  role: ScoutRole,
+): ScoutRoleViabilityEvidence {
+  const base = { status: "unknown", evaluatedRole: role } as const
+
+  // No reference data at all: the gate is off, not permissive.
+  if (index.size === 0) return { ...base, reason: "reference_missing" }
+  // No lane to judge against.
+  if (role === "unknown") return { ...base, reason: "role_unknown" }
 
   const evidence = index.get(championKey)
   // A champion the reference does not cover is not a champion we may judge.
-  if (evidence === undefined) return "unknown"
+  if (evidence === undefined) return { ...base, reason: "champion_missing" }
+
+  const thresholds = {
+    totalPicks: evidence.picks,
+    minPicksInRole: ROLE_VIABILITY_MIN_PICKS,
+    minRoleShare: ROLE_VIABILITY_MIN_SHARE,
+    ...(evidence.primaryRole === null ? {} : { primaryRole: evidence.primaryRole }),
+  }
+
   // Nor is one the reference barely covers: see
   // {@link ROLE_VIABILITY_MIN_TOTAL_PICKS}. Errors here are asymmetric, and a
   // false "not playable" silently deletes a real ban candidate.
-  if (evidence.picks < ROLE_VIABILITY_MIN_TOTAL_PICKS) return "unknown"
-
-  if (evidence.primaryRole === role) return "viable"
+  if (evidence.picks < ROLE_VIABILITY_MIN_TOTAL_PICKS) {
+    return { ...base, ...thresholds, reason: "sample_too_small" }
+  }
 
   const picksInRole = evidence.picksByRole[role] ?? 0
   const share = evidence.shareByRole[role] ?? 0
-  return picksInRole >= ROLE_VIABILITY_MIN_PICKS && share >= ROLE_VIABILITY_MIN_SHARE
-    ? "viable"
-    : "implausible"
+  const measured = { ...thresholds, picksInRole, roleShare: share }
+
+  if (evidence.primaryRole === role) {
+    return { status: "viable", evaluatedRole: role, ...measured, reason: "primary_role_fallback" }
+  }
+
+  const clears = picksInRole >= ROLE_VIABILITY_MIN_PICKS && share >= ROLE_VIABILITY_MIN_SHARE
+  return {
+    status: clears ? "viable" : "implausible",
+    evaluatedRole: role,
+    ...measured,
+    reason: clears ? "viable" : "below_threshold",
+  }
 }
 
 export function championStatStrengthMultiplier(input: {
@@ -1738,14 +1781,15 @@ function buildSignalContext(
   // the top-scoring champion out of the ban plan silently: `resolveRoleAdjustment`
   // returns early for an unassigned player, so the explaining reason was never
   // even attached.
-  const roleViability =
+  const roleViabilityEvidence: ScoutRoleViabilityEvidence =
     roleContext.membership === "unassigned"
-      ? "unknown"
-      : championRoleViability(
+      ? { status: "unknown", reason: "role_unknown", evaluatedRole: "unknown" }
+      : evaluateChampionRoleViability(
           roleIndex,
           group.championKey,
           roleContext.referenceRole ?? "unknown",
         )
+  const roleViability = roleViabilityEvidence.status
   const roleAdjustment = resolveRoleAdjustment(
     roleFit,
     signalRole,
@@ -1963,6 +2007,7 @@ function buildSignalContext(
     lineupRole: roleContext.starterSlot,
     fromSubstitute: roleContext.fromSubstitute,
     roleViability,
+    roleViabilityEvidence,
   }
 
   return { signal, championKey: group.championKey, roles, conflicting, isWeakness }
@@ -2328,6 +2373,13 @@ export function analyzeScout(
   const notPlayableChampionKeys = new Set<string>()
   /** Champions that DID reach the plan, so the filter can stay honest. */
   const playableChampionKeys = new Set<string>()
+  /**
+   * Champions the reference could not judge: absent from it, or covered by too
+   * thin a sample. `role_unknown` is deliberately NOT counted — that is a
+   * missing lineup slot, not a gap in the reference, and reporting it as one
+   * would blame the data for the user's unfinished lineup.
+   */
+  const unjudgedChampionKeys = new Set<string>()
 
   const playerAnalyses: ScoutPlayerAnalysis[] = []
   /** The subset that actually feeds the plan — see `PlayerRoleContext.scored`. */
@@ -2397,6 +2449,12 @@ export function analyzeScout(
     if (scored) {
       for (const context of contexts) {
         if (context.isWeakness) continue
+
+        const evidenceReason = context.signal.roleViabilityEvidence?.reason
+        if (evidenceReason === "champion_missing" || evidenceReason === "sample_too_small") {
+          unjudgedChampionKeys.add(context.championKey)
+        }
+
         if (context.signal.roleFit === "offrole") offroleSignalCount += 1
 
         // A zero-score signal is real data but no recommendation — it never
@@ -2557,6 +2615,21 @@ export function analyzeScout(
     planWarnings.push(notPlayableWarning)
   }
 
+  // `unavailable` is decided by the INPUT, not by the outcome: with no
+  // reference the gate never ran, however few champions happened to be
+  // affected. Deriving it from the counters instead would report a healthy gate
+  // for a session that simply had nothing to filter.
+  const roleGate: ScoutRoleGateSummary = {
+    status:
+      championRoleIndex.size === 0
+        ? "unavailable"
+        : unjudgedChampionKeys.size > 0
+          ? "partial"
+          : "active",
+    unjudgedChampions: unjudgedChampionKeys.size,
+    filteredChampions: filteredChampionCount,
+  }
+
   const flexCandidates = prioritizedBans.filter((candidate) => candidate.isFlex)
   if (flexCandidates.length > 0) {
     // ONE warning for the whole session. This used to be one warning per flex
@@ -2696,6 +2769,7 @@ export function analyzeScout(
     warnings,
     weaknesses: [...teamWeaknesses].sort(compareSignals),
     lineup: lineupSummary,
+    roleGate,
   }
 
   // Only ever set from the outside — this module never reads a clock.

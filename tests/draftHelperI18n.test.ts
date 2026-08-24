@@ -324,6 +324,51 @@ const PATCH_WEIGHT_PANEL = "draft/PatchWeightPanel.tsx"
 /** `src/App.tsx`, relative to `src/`: the file the old scope missed. */
 const APP_ENTRY = "App.tsx"
 
+/**
+ * Files every `src/` scan must have seen, relative to `src/`.
+ *
+ * A count threshold is a weak anti-vacuity proof. `src/` holds 121 `.ts`/`.tsx`
+ * files today, so a walk could drop twenty of them — including every file the
+ * rules below are actually about — and still clear `> 100`. Worse, when it did
+ * fail, the message said only "found almost no TypeScript files", which sends
+ * the reader looking for a broken walk instead of a missing file.
+ *
+ * These four carry the keys and the call sites the draft-i18n rules police, so
+ * a scan that cannot see them cannot judge anything.
+ */
+const REQUIRED_SRC_FILES: readonly string[] = [
+    APP_ENTRY,
+    "components/DraftHelper.tsx",
+    "components/draft/draftUiHelpers.ts",
+    "i18n/de.ts",
+    "i18n/en.ts",
+]
+
+/**
+ * Assert that a `src/` scan really saw the files the rule depends on.
+ *
+ * Named rather than counted, and it reports the missing paths, so a partial
+ * walk is diagnosed as a partial walk instead of being mistaken for a clean
+ * tree or for a reintroduced key.
+ */
+function expectCompleteSrcScan(scanned: readonly string[], rule: string): void {
+    const missing = REQUIRED_SRC_FILES.filter((file) => !scanned.includes(file))
+
+    expect(
+        missing,
+        `${rule}: the src/ walk did not return ${missing.join(", ")}. The scan is incomplete, ` +
+            "so whatever it reports about these rules is meaningless. This is a scanner " +
+            "problem, not a violation of the rule.",
+    ).toEqual([])
+
+    // Kept as a second, weaker signal: it catches a walk that lost files this
+    // list does not name.
+    expect(
+        scanned.length,
+        `${rule}: the src/ walk returned ${scanned.length} files, far fewer than this tree has.`,
+    ).toBeGreaterThan(100)
+}
+
 /* ==========================================================================
  * The predicates
  *
@@ -959,8 +1004,11 @@ const COMPLETION_PACK_KEYS: ReadonlyArray<readonly [key: string, dePrompt: strin
  * bans". It is now "Bans gesamt" / "Bans total", a genuine translation, and the
  * DE/EN difference check covers it. The noun "Bans" itself stays, which is what
  * kept faith with `dh_bestBansTitle` ("Best Bans gegen"),
- * `similarDrafts_matchedBans` ("Gemeinsame Bans") and `scout_safeBans`
- * ("Sichere Bans") - "Sperren" would have desynced this card from four screens.
+ * `similarDrafts_matchedBans` ("Gemeinsame Bans") and `scout_bansByPlayer`
+ * ("Bans nach Spieler") - "Sperren" would have desynced this card from four
+ * screens. That last citation used to be `scout_safeBans` ("Sichere Bans"),
+ * which the 0.7.4 ban-plan de-duplication deleted along with its heading; the
+ * point it made is unchanged, only the surviving example moved.
  *
  * `dh_wPreset_counterpick` is the one that qualifies now: "Counterpick" is the
  * German word in this domain, and the catalogue's own `dh_wLabel_matchup`
@@ -3270,11 +3318,7 @@ describe("the draft area counts games and picks through the helpers", () => {
         // `{n} {t("dh_games")}` again - which is precisely what its four call
         // sites did.
         const scanned = srcFiles()
-
-        expect(
-            scanned.length,
-            "the src/ walk found almost no TypeScript files, so this rule checks nothing.",
-        ).toBeGreaterThan(100)
+        expectCompleteSrcScan(scanned, DELETED_GAMES_KEY)
 
         const offenders = scanned
             .map((rel) => [rel, mentionsOfKey(srcCode(rel), DELETED_GAMES_KEY)] as const)
@@ -3310,6 +3354,39 @@ describe("the draft area counts games and picks through the helpers", () => {
             `${DELETED_GAMES_KEY} is back in a catalogue. Deleting it from src/ and leaving it ` +
                 "in de.ts is the half-fix that puts the trap back within reach.",
         ).toBeUndefined()
+    })
+
+    it("only passes because the comment stripper works, and that is checked", () => {
+        // THE FRAGILITY BEHIND THE RULE ABOVE, made explicit.
+        //
+        // `dh_games` is not absent from src/. It appears four times in the JSDoc
+        // of draftUiHelpers.ts, explaining why the key was deleted. The rule
+        // above is green only because `srcCode()` strips comments first, and
+        // nothing tested that. If the stripper ever mishandles that file — a
+        // `*/` inside a string, a reformatted block — the rule goes red saying
+        // "dh_games is back in src/", and the next reader hunts a reintroduction
+        // that never happened.
+        //
+        // Asserting BOTH directions is the point: raw must contain it, stripped
+        // must not. Either half alone would pass on a stripper that deletes
+        // everything, or on a file that lost its explanation.
+        const documented = "components/draft/draftUiHelpers.ts"
+        expect(srcFiles()).toContain(documented)
+
+        const raw = readSrc(documented)
+        expect(
+            mentionsOfKey(raw, DELETED_GAMES_KEY).length,
+            `${documented} no longer explains why ${DELETED_GAMES_KEY} was deleted. If that ` +
+                "prose moved on purpose, this guard can go; if it vanished by accident, the " +
+                "reason the key must not come back went with it.",
+        ).toBeGreaterThan(0)
+
+        expect(
+            mentionsOfKey(srcCode(documented), DELETED_GAMES_KEY),
+            `stripComments() no longer removes the ${DELETED_GAMES_KEY} mentions from the JSDoc ` +
+                `of ${documented}. The rule above will now report a reintroduced key that is ` +
+                "only a comment. Fix the stripper, not the comment.",
+        ).toEqual([])
     })
 
     it("writes no `{n} {t(noun)}` shape anywhere in src/components/", () => {

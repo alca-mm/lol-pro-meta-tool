@@ -8,7 +8,7 @@
 
 import { useTranslation } from "../../i18n/LanguageContext"
 import type { ScoutAnalysisResult, ScoutPlayerAnalysis } from "../../scout/analysis"
-import type { ChampionSignal } from "../../scout/types"
+import type { BanCandidate, ChampionSignal } from "../../scout/types"
 import {
     ScoutBanRow,
     ScoutConfidenceBadge,
@@ -16,7 +16,19 @@ import {
     ScoutReasonList,
     ScoutSignalRow,
 } from "./ScoutShared"
-import { compareChampionNames, scoutMembershipKey, scoutRoleLabel } from "./scoutUiHelpers"
+import {
+    SCOUT_LIST_PREVIEW_COUNT,
+    SCOUT_MORE_BANS_KEYS,
+    SCOUT_MORE_COMFORT_KEYS,
+    SCOUT_MORE_THREATS_KEYS,
+    SCOUT_MORE_WEAKNESSES_KEYS,
+    compareChampionNames,
+    scoutMembershipKey,
+    scoutPluralMessage,
+    scoutRoleLabel,
+    splitScoutList,
+} from "./scoutUiHelpers"
+import type { PluralKeys } from "../../i18n/plural"
 
 const MAX_THREATS = 5
 const MAX_BANS = 3
@@ -31,10 +43,57 @@ const MAX_COMFORT = 3
  * engine avoids `localeCompare` for the same reason.
  */
 function comfortPicks(signals: readonly ChampionSignal[]): ChampionSignal[] {
+    // Returns the FULL ordered list. It used to end on `.slice(0, MAX_COMFORT)`
+    // and the tail was gone; the cap now lives in the rendering, where the
+    // hidden part can still be opened.
     return [...signals]
         .filter((signal) => signal.games > 0)
         .sort((a, b) => b.games - a.games || compareChampionNames(a.championName, b.championName))
-        .slice(0, MAX_COMFORT)
+}
+
+/**
+ * A signal list whose tail collapses.
+ *
+ * The head stays open, the rest sits behind a counted summary. NOTHING IS
+ * DROPPED — `splitScoutList` hands back the input in order, unlike the
+ * `slice()` calls above it, which cut a ranked list where the tail really is
+ * the least relevant part.
+ *
+ * One `ScoutSignalRow` call site, used for both halves: two would be two places
+ * to forget a prop, which is exactly the shape of defect the KDA guards in
+ * tests/scoutKdaVisibility.test.ts exist to catch.
+ */
+function ScoutSignalList({
+    signals,
+    moreKeys,
+    previewCount = SCOUT_LIST_PREVIEW_COUNT,
+}: {
+    signals: readonly ChampionSignal[]
+    moreKeys: PluralKeys
+    /** How many rows stay open. Each list keeps the size it always had. */
+    previewCount?: number
+}) {
+    const { t } = useTranslation()
+    const { visible, collapsed, collapsedCount } = splitScoutList(signals, previewCount)
+    const rows = (items: readonly ChampionSignal[]) => (
+        <ul className="scout-signal-list">
+            {items.map((signal) => (
+                <ScoutSignalRow key={signal.championName} signal={signal} />
+            ))}
+        </ul>
+    )
+
+    return (
+        <>
+            {rows(visible)}
+            {collapsedCount > 0 && (
+                <details className="scout-details scout-list-details">
+                    <summary>{scoutPluralMessage(t, collapsedCount, moreKeys)}</summary>
+                    {rows(collapsed)}
+                </details>
+            )}
+        </>
+    )
 }
 
 export function ScoutAnalysisPanel({ analysis }: { analysis: ScoutAnalysisResult }) {
@@ -71,6 +130,24 @@ function ScoutPlayerAnalysisCard({ player }: { player: ScoutPlayerAnalysis }) {
     // player without a seat no membership chip follows to hint at it. The guess
     // now says that it is one, and is greyed out on top.
     const role = scoutRoleLabel(t, player.lineup.starterSlot, player.role)
+    const bans = splitScoutList(player.targetBans, MAX_BANS)
+    // ONE ScoutBanRow call site for both halves, and `startRank` keeps the
+    // numbering running across the fold. `forPlayerId` is why this lives here
+    // rather than in a shared component: this card IS one player, and an
+    // overlap ban lands in several cards, so without it every card would print
+    // the candidate's global target KDA.
+    const banRows = (items: readonly BanCandidate[], startRank: number) => (
+        <ol className="scout-ban-list">
+            {items.map((candidate, index) => (
+                <ScoutBanRow
+                    key={candidate.championName}
+                    candidate={candidate}
+                    rank={startRank + index + 1}
+                    forPlayerId={player.playerId}
+                />
+            ))}
+        </ol>
+    )
 
     return (
         <section className="scout-analysis-card">
@@ -99,53 +176,53 @@ function ScoutPlayerAnalysisCard({ player }: { player: ScoutPlayerAnalysis }) {
                     {player.signals.length === 0 ? (
                         <ScoutNoDataNote variant="none" />
                     ) : (
-                        <ul className="scout-signal-list">
-                            {player.signals.slice(0, MAX_THREATS).map((signal) => (
-                                <ScoutSignalRow key={signal.championName} signal={signal} />
-                            ))}
-                        </ul>
+                        <ScoutSignalList
+                            signals={player.signals}
+                            previewCount={MAX_THREATS}
+                            moreKeys={SCOUT_MORE_THREATS_KEYS}
+                        />
                     )}
 
                     <h5 className="scout-group-heading">{t("scout_banCandidates")}</h5>
                     {player.targetBans.length === 0 ? (
                         <ScoutNoDataNote variant="none" />
                     ) : (
-                        <ol className="scout-ban-list">
-                            {player.targetBans.slice(0, MAX_BANS).map((candidate, index) => (
-                                <ScoutBanRow
-                                    key={candidate.championName}
-                                    candidate={candidate}
-                                    rank={index + 1}
-                                    // This card IS one player, and an overlap
-                                    // ban lands in several cards. Without this
-                                    // the row would print the candidate's
-                                    // global target KDA under everyone.
-                                    forPlayerId={player.playerId}
-                                />
-                            ))}
-                        </ol>
+                        <>
+                            {banRows(bans.visible, 0)}
+                            {bans.collapsedCount > 0 && (
+                                <details className="scout-details scout-list-details">
+                                    <summary>
+                                        {scoutPluralMessage(
+                                            t,
+                                            bans.collapsedCount,
+                                            SCOUT_MORE_BANS_KEYS,
+                                        )}
+                                    </summary>
+                                    {banRows(bans.collapsed, bans.visible.length)}
+                                </details>
+                            )}
+                        </>
                     )}
 
                     <h5 className="scout-group-heading">{t("scout_comfortPicks")}</h5>
                     {comfort.length === 0 ? (
                         <ScoutNoDataNote variant="none" />
                     ) : (
-                        <ul className="scout-signal-list">
-                            {comfort.map((signal) => (
-                                <ScoutSignalRow key={signal.championName} signal={signal} />
-                            ))}
-                        </ul>
+                        <ScoutSignalList
+                            signals={comfort}
+                            previewCount={MAX_COMFORT}
+                            moreKeys={SCOUT_MORE_COMFORT_KEYS}
+                        />
                     )}
 
                     <h5 className="scout-group-heading">{t("scout_weaknesses")}</h5>
                     {player.weaknesses.length === 0 ? (
                         <ScoutNoDataNote variant="none" />
                     ) : (
-                        <ul className="scout-signal-list">
-                            {player.weaknesses.map((signal) => (
-                                <ScoutSignalRow key={signal.championName} signal={signal} />
-                            ))}
-                        </ul>
+                        <ScoutSignalList
+                            signals={player.weaknesses}
+                            moreKeys={SCOUT_MORE_WEAKNESSES_KEYS}
+                        />
                     )}
                 </>
             )}

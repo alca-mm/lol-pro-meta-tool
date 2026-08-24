@@ -48,6 +48,10 @@ import {
   SCOUT_IMPORT_OPGG_CHAMPIONS_KEYS,
   SCOUT_IMPORT_SKIPPED_MATCHUPS_KEYS,
   SCOUT_IMPORT_SKIPPED_RECOMMENDED_KEYS,
+  SCOUT_MORE_BANS_KEYS,
+  SCOUT_MORE_COMFORT_KEYS,
+  SCOUT_MORE_THREATS_KEYS,
+  SCOUT_MORE_WEAKNESSES_KEYS,
   fillPlaceholders,
   scoutPluralMessage,
   translateCount,
@@ -466,11 +470,20 @@ const UNTOUCHED_COUNT_KEYS: ReadonlyArray<readonly [key: string, why: string]> =
     "only raised from 44 games up, so a singular is unreachable",
   ],
   ["scout_reason_hits_multiple_players", "by construction at least 2 players"],
+  // The overlap badge, added 2026-08-24 with the ban-plan de-duplication. It
+  // renders only when `isOverlap` is true, and the engine sets that from
+  // `affectedPlayerIds.length > 1` - so a count of 1 is unreachable for exactly
+  // the same reason as the reason code above it.
+  ["scout_banOverlapBadge", "only rendered when isOverlap, which means at least 2 players"],
   ["scout_removedPlayersCapped", "{max} is the constant SCOUT_REMOVED_PLAYERS_MAX, never a count"],
   ["scout_countPlayers", 'the "Label: {count}" shape reads correctly at any number'],
   ["scout_countUnparsed", 'the "Label: {count}" shape reads correctly at any number'],
   ["scout_countDuplicates", 'the "Label: {count}" shape reads correctly at any number'],
   ["scout_import_rowsDetected", 'the "Label: {count}" shape reads correctly at any number'],
+  // Der Phasenfilter-Chip, 0.7.5. Buchstaeblich die "Label: {count}"-Form, und
+  // das Label kommt aus einem eigenen Key. "Sicher: 1" ist in beiden Sprachen
+  // richtig, es gibt nichts zu deklinieren.
+  ["scout_banPhaseFilterCount", 'the "Label: {count}" shape reads correctly at any number'],
 ]
 
 describe("the untouched counted keys stayed single", () => {
@@ -541,7 +554,7 @@ describe("the untouched counted keys stayed single", () => {
  * 7. i18n hygiene of the new keys
  *
  * tests/i18nScoutCopy.test.ts already enforces catalogue-wide parity and the
- * copy rules. This section re-states them for the ten new pairs so a failure
+ * copy rules. This section re-states them for the fourteen new pairs so a failure
  * names the pair that broke, and adds the one rule the generic tests cannot
  * express: a singular and its plural must carry the SAME placeholders.
  * ========================================================================== */
@@ -564,7 +577,7 @@ const MECHANICAL_PLURAL_BASES = [
 ] as const
 
 /**
- * The ten pairs. The four import pairs are read off the exported constants
+ * The fourteen pairs. The eight constant-backed pairs are read off the exported constants
  * rather than spelled out, so this file cannot drift from the names the UI
  * actually uses.
  */
@@ -573,6 +586,10 @@ const NEW_KEY_PAIRS: ReadonlyArray<readonly [one: string, many: string]> = [
   [SCOUT_IMPORT_OPGG_CHAMPIONS_KEYS.one, SCOUT_IMPORT_OPGG_CHAMPIONS_KEYS.many],
   [SCOUT_IMPORT_SKIPPED_MATCHUPS_KEYS.one, SCOUT_IMPORT_SKIPPED_MATCHUPS_KEYS.many],
   [SCOUT_IMPORT_SKIPPED_RECOMMENDED_KEYS.one, SCOUT_IMPORT_SKIPPED_RECOMMENDED_KEYS.many],
+  [SCOUT_MORE_WEAKNESSES_KEYS.one, SCOUT_MORE_WEAKNESSES_KEYS.many],
+  [SCOUT_MORE_BANS_KEYS.one, SCOUT_MORE_BANS_KEYS.many],
+  [SCOUT_MORE_THREATS_KEYS.one, SCOUT_MORE_THREATS_KEYS.many],
+  [SCOUT_MORE_COMFORT_KEYS.one, SCOUT_MORE_COMFORT_KEYS.many],
   ...MECHANICAL_PLURAL_BASES.map((base) => [`${base}One`, base] as const),
 ]
 
@@ -626,9 +643,64 @@ describe("the warnings that became count-bearing in 0.7.0 render both forms", ()
   }
 })
 
+describe("the collapse summaries agree in number", () => {
+  // Registering a pair in NEW_KEY_PAIRS only satisfies key hygiene: it proves
+  // the keys exist and match placeholders, not that either sentence reads.
+  // These render them through the real helper. Noun AND the word in front of it
+  // are asserted together, because "1 weitere Schwäche" is a prefix of nothing
+  // useful on its own and the German article/adjective is what actually
+  // declines.
+  const CASES = [
+    {
+      name: "weaknesses",
+      keys: SCOUT_MORE_WEAKNESSES_KEYS,
+      one: { de: /\b1 weitere Schwäche\b/, en: /\bShow 1 more weakness\b/ },
+      many: { de: /\b4 weitere Schwächen\b/, en: /\bShow 4 more weaknesses\b/ },
+    },
+    {
+      name: "bans",
+      keys: SCOUT_MORE_BANS_KEYS,
+      one: { de: /\b1 weiteren Ban\b/, en: /\bShow 1 more ban\b/ },
+      many: { de: /\b4 weitere Bans\b/, en: /\bShow 4 more bans\b/ },
+    },
+    {
+      name: "threats",
+      keys: SCOUT_MORE_THREATS_KEYS,
+      one: { de: /\b1 weitere Bedrohung\b/, en: /\bShow 1 more threat\b/ },
+      many: { de: /\b4 weitere Bedrohungen\b/, en: /\bShow 4 more threats\b/ },
+    },
+    {
+      name: "comfort picks",
+      keys: SCOUT_MORE_COMFORT_KEYS,
+      one: { de: /\b1 weiteren Comfort Pick\b/, en: /\bShow 1 more comfort pick\b/ },
+      many: { de: /\b4 weitere Comfort Picks\b/, en: /\bShow 4 more comfort picks\b/ },
+    },
+  ]
+
+  for (const testCase of CASES) {
+    it(`${testCase.name} reads correctly at 1 and at 4`, () => {
+      for (const [lang, t] of [
+        ["de", tDe],
+        ["en", tEn],
+      ] as const) {
+        const singular = scoutPluralMessage(t, 1, testCase.keys)
+        const plural = scoutPluralMessage(t, 4, testCase.keys)
+
+        expect(singular, `${lang} singular: ${singular}`).toMatch(testCase.one[lang])
+        expect(plural, `${lang} plural: ${plural}`).toMatch(testCase.many[lang])
+        expect(singular).not.toBe(plural)
+        for (const text of [singular, plural]) {
+          expect(text).not.toContain("{count}")
+          expect(text).not.toContain("undefined")
+        }
+      }
+    })
+  }
+})
+
 describe("the new plural keys are well formed", () => {
-  it("are ten distinct pairs, and no pair points at one key twice", () => {
-    expect(NEW_KEY_PAIRS.length).toBe(10)
+  it("are fourteen distinct pairs, and no pair points at one key twice", () => {
+    expect(NEW_KEY_PAIRS.length).toBe(14)
     // A pair whose halves are the same key would silently disable the whole
     // feature: every count would render the same sentence and every assertion
     // about the singular above would fail with a confusing message instead of
@@ -636,7 +708,7 @@ describe("the new plural keys are well formed", () => {
     for (const [one, many] of NEW_KEY_PAIRS) {
       expect(one, `pair ${one}/${many} names the same key twice`).not.toBe(many)
     }
-    expect(new Set(NEW_KEY_PAIRS.flatMap(([one, many]) => [one, many])).size).toBe(20)
+    expect(new Set(NEW_KEY_PAIRS.flatMap(([one, many]) => [one, many])).size).toBe(28)
   })
 
   it("exist in both languages and are not empty", () => {
@@ -687,7 +759,7 @@ describe("the new plural keys are well formed", () => {
     }
   })
 
-  it("added no One key beyond the ten", () => {
+  it("added no One key beyond the fourteen", () => {
     // The ballast guard from section 6, generalised: nobody may quietly grow a
     // ninth singular for a string that never counts to one.
     const expected = new Set(NEW_KEY_PAIRS.map(([one]) => one))
@@ -699,7 +771,7 @@ describe("the new plural keys are well formed", () => {
       for (const key of found) {
         expect(
           expected.has(key),
-          `${lang}.${key} is a singular sibling nobody asked for. Only these ten keys count ` +
+          `${lang}.${key} is a singular sibling nobody asked for. Only these fourteen keys count ` +
             `to one: ${[...expected].join(", ")}`,
         ).toBe(true)
       }

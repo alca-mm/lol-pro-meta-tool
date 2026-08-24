@@ -67,7 +67,10 @@ import type {
   ScoutRecency,
   ScoutRemovedPlayer,
   ScoutRole,
+  ScoutBanPhase,
   ScoutRoleFit,
+  ScoutRoleGateStatus,
+  ScoutRoleViabilityEvidence,
   ScoutSourceNoteCode,
   ScoutSourceStatus,
   ScoutSubstituteSlot,
@@ -101,6 +104,10 @@ export const scoutBlockedKey = (code: ScoutFetchBlockedCode): TranslationKey =>
   `scout_blocked_${code}`
 export const scoutRoleFitKey = (fit: ScoutRoleFit): TranslationKey => `scout_rolefit_${fit}`
 export const scoutRankKey = (tier: ScoutRankTier): TranslationKey => `scout_rank_${tier}`
+export const scoutRoleGateStatusKey = (status: ScoutRoleGateStatus): TranslationKey =>
+  `scout_roleGate_${status}`
+export const scoutBanPhaseKey = (phase: ScoutBanPhase): TranslationKey =>
+  `scout_banPhase_${phase}`
 export const scoutMembershipKey = (membership: ScoutLineupMembership): TranslationKey =>
   `scout_membership_${membership}`
 
@@ -347,15 +354,338 @@ export const SCOUT_REASON_PREVIEW_COUNT = 2
  * renders no empty container. Pure, so the rule can be tested; Vitest runs in
  * Node with no jsdom and this would be untestable as an inline slice in JSX.
  */
+export interface ScoutListSplit<T> {
+  /** The head that stays open. */
+  visible: T[]
+  /** The tail that goes behind a summary. Empty when everything fits. */
+  collapsed: T[]
+  /** `collapsed.length`, so a caller can label the summary without recounting. */
+  collapsedCount: number
+}
+
+/**
+ * Split a list into the part that stays open and the tail that collapses.
+ *
+ * NOTHING IS EVER LOST: `visible.concat(collapsed)` is the input, in order.
+ * That is the whole difference between this and a `slice()`, which silently
+ * drops the tail and leaves the reader believing the list was short.
+ *
+ * A `previewCount` at or above the length produces an EMPTY tail, so the caller
+ * renders no summary and no empty container. A negative or non-finite count is
+ * treated as zero rather than throwing: a broken caller should show everything
+ * collapsed, never crash the panel.
+ *
+ * Pure and non-mutating. Vitest runs in Node with no jsdom, so a rule written
+ * inline in JSX could not be tested at all; that is why this lives here.
+ */
+export function splitScoutList<T>(items: readonly T[], previewCount: number): ScoutListSplit<T> {
+  const safeCount = Number.isFinite(previewCount) ? Math.max(0, Math.floor(previewCount)) : 0
+  const collapsed = items.slice(safeCount)
+
+  return {
+    visible: items.slice(0, safeCount),
+    collapsed,
+    collapsedCount: collapsed.length,
+  }
+}
+
 export function splitScoutReasons(reasons: readonly ScoutReason[]): {
   visible: ScoutReason[]
   collapsed: ScoutReason[]
 } {
+  const { visible, collapsed } = splitScoutList(reasons, SCOUT_REASON_PREVIEW_COUNT)
+  return { visible, collapsed }
+}
+
+/**
+ * How many signal rows a long list shows before the rest collapses.
+ *
+ * Three, which is one more than a reason preview gets: a champion row carries a
+ * name and numbers a reader scans, while a reason is a sentence they read.
+ */
+export const SCOUT_LIST_PREVIEW_COUNT = 3
+
+/** "1 weitere Schwäche anzeigen" / "4 weitere Schwächen anzeigen". */
+export const SCOUT_MORE_WEAKNESSES_KEYS: PluralKeys = {
+  one: "scout_moreWeaknessesOne",
+  many: "scout_moreWeaknessesMany",
+}
+
+/** "1 weiteren Ban anzeigen" / "4 weitere Bans anzeigen". */
+export const SCOUT_MORE_BANS_KEYS: PluralKeys = {
+  one: "scout_moreBansOne",
+  many: "scout_moreBansMany",
+}
+
+/** "1 weitere Bedrohung anzeigen" / "4 weitere Bedrohungen anzeigen". */
+export const SCOUT_MORE_THREATS_KEYS: PluralKeys = {
+  one: "scout_moreThreatsOne",
+  many: "scout_moreThreatsMany",
+}
+
+/** "1 weiteren Comfort Pick anzeigen" / "4 weitere Comfort Picks anzeigen". */
+export const SCOUT_MORE_COMFORT_KEYS: PluralKeys = {
+  one: "scout_moreComfortOne",
+  many: "scout_moreComfortMany",
+}
+
+/**
+ * A 0-to-1 share as a percent string.
+ *
+ * NOT `formatScoutNumber`: that rounds to one decimal, so the very numbers this
+ * display exists for vanish. Karma's jungle share is 0.04 %, which
+ * `formatScoutNumber` renders as "0" — the user would be shown a zero and asked
+ * to trust it. Two decimals keep the small shares readable, and trailing zeros
+ * are dropped so a clean 25 % does not read "25.00".
+ *
+ * Locale-neutral with a decimal POINT, like every other number in this feature
+ * (see `formatScoutNumber` and the KDA placeholder rule in CLAUDE.md P4d). A
+ * comma here would be the only comma the scout ever prints.
+ */
+export function formatScoutPercent(fraction: number): string {
+  if (!Number.isFinite(fraction)) return ""
+  return String(Math.round(fraction * 100 * 100) / 100)
+}
+
+/**
+ * The role-gate verdict, turned into lines a person can check.
+ *
+ * Returns an ORDERED list, most important first, and returns an EMPTY list when
+ * there is nothing worth saying. The caller renders nothing for an empty list
+ * rather than an empty container.
+ *
+ * Every line is a finished sentence or a labelled number; no raw codes, and a
+ * measurement that was never taken is omitted rather than printed as zero.
+ */
+export function describeRoleViabilityEvidence(
+  t: ScoutTranslate,
+  evidence: ScoutRoleViabilityEvidence | undefined,
+): string[] {
+  if (evidence === undefined) return []
+
+  const lines: string[] = []
+  const push = (key: TranslationKey, params?: ScoutReasonParams): void => {
+    lines.push(fillPlaceholders(t(key), params))
+  }
+
+  switch (evidence.reason) {
+    case "reference_missing":
+      push("scout_roleGate_notEvaluated_referenceMissing")
+      return lines
+    case "role_unknown":
+      push("scout_roleGate_notEvaluated_roleUnknown")
+      return lines
+    case "champion_missing":
+      push("scout_roleGate_notEvaluated_championMissing")
+      return lines
+    case "sample_too_small":
+      push("scout_roleGate_notEvaluated_sampleTooSmall")
+      break
+    case "primary_role_fallback":
+      push("scout_roleGate_evaluatedRole", { role: t(scoutRoleKey(evidence.evaluatedRole)) })
+      push("scout_roleGate_primaryFallback")
+      break
+    case "viable":
+    case "below_threshold":
+      push("scout_roleGate_evaluatedRole", { role: t(scoutRoleKey(evidence.evaluatedRole)) })
+      break
+  }
+
+  if (evidence.picksInRole !== undefined) {
+    push("scout_roleGate_picksInRole", { picks: formatScoutNumber(evidence.picksInRole) })
+  }
+  if (evidence.roleShare !== undefined) {
+    push("scout_roleGate_roleShare", { share: formatScoutPercent(evidence.roleShare) })
+  }
+  if (evidence.totalPicks !== undefined) {
+    push("scout_roleGate_totalPicks", { picks: formatScoutNumber(evidence.totalPicks) })
+  }
+  // The thresholds only mean something next to a measurement that missed them.
+  if (
+    evidence.reason === "below_threshold" &&
+    evidence.minPicksInRole !== undefined &&
+    evidence.minRoleShare !== undefined
+  ) {
+    push("scout_roleGate_thresholds", {
+      picks: formatScoutNumber(evidence.minPicksInRole),
+      share: formatScoutPercent(evidence.minRoleShare),
+    })
+  }
+
+  return lines
+}
+
+/** What a ban candidate is, beyond its own row: phase, reach, and who it hits. */
+export interface ScoutBanCandidateContext {
+  /** `undefined` only when the engine supplied no phase at all. */
+  phase?: ScoutBanPhase
+  /** `true` when the ban takes something from more than one opponent. */
+  isOverlap: boolean
+  affectedPlayerCount: number
+  /**
+   * Display names of the affected players, in the candidate's own order (the
+   * engine sorts them by descending signal strength). An id with no known name
+   * is dropped rather than rendered as a raw id.
+   */
+  affectedPlayerNames: string[]
+  /** The player the ban is aimed at, when the engine named one. */
+  targetPlayerName?: string
+}
+
+/**
+ * Everything a ban row needs to say about a candidate's CONTEXT.
+ *
+ * This exists because the ban panel used to express all of it by REPEATING the
+ * candidate: once in the prioritised list, once under its phase, once under
+ * "hits several players", once under each player it hits. The same champion
+ * could occupy four full rows, each with its own reasons and numbers. The facts
+ * behind those groupings are all on the candidate already; they only needed a
+ * name lookup, which is the one thing a `BanCandidate` cannot do for itself.
+ *
+ * PURE, and it reads nothing it does not own: no score is recomputed, no
+ * ordering is changed, and the input is never mutated.
+ */
+export function summarizeBanCandidate(
+  candidate: BanCandidate,
+  displayNameById: Readonly<Record<ScoutPlayerId, string>> = {},
+): ScoutBanCandidateContext {
+  const affectedPlayerNames = candidate.affectedPlayerIds
+    .map((id) => displayNameById[id])
+    .filter((name): name is string => typeof name === "string" && name.length > 0)
+
+  const targetPlayerName =
+    candidate.targetPlayerId === null ? undefined : displayNameById[candidate.targetPlayerId]
+
   return {
-    visible: reasons.slice(0, SCOUT_REASON_PREVIEW_COUNT),
-    collapsed: reasons.slice(SCOUT_REASON_PREVIEW_COUNT),
+    ...(candidate.phase === undefined ? {} : { phase: candidate.phase }),
+    isOverlap: candidate.isOverlap,
+    // The COUNT comes from the ids, not from the resolved names: a missing name
+    // must not make a ban look like it hits fewer players than it does.
+    affectedPlayerCount: candidate.affectedPlayerIds.length,
+    affectedPlayerNames,
+    ...(targetPlayerName === undefined ? {} : { targetPlayerName }),
   }
 }
+
+/**
+ * Which ban phase the panel is currently showing. `all` is the default and the
+ * canonical view: the full prioritised list, exactly as before 0.7.5.
+ */
+export type ScoutBanPhaseFilter = "all" | ScoutBanPhase
+
+/** The three phases in the order a draft goes through them. */
+const SCOUT_BAN_PHASES: readonly ScoutBanPhase[] = ["safe", "target", "situational"]
+
+/**
+ * The four filter values in display order, `all` first.
+ *
+ * Derived from {@link SCOUT_BAN_PHASES} rather than written out again, so the
+ * phase order lives in one place. Declared AFTER it on purpose: a `const` is in
+ * its temporal dead zone until its own line runs, and this array is built at
+ * module load.
+ */
+export const SCOUT_BAN_PHASE_FILTERS: readonly ScoutBanPhaseFilter[] = [
+  "all",
+  ...SCOUT_BAN_PHASES,
+]
+
+/** A ban candidate together with its position in the FULL prioritised list. */
+export interface RankedBanCandidate {
+  readonly candidate: BanCandidate
+  /** 1-based rank in `TeamBanPlan.prioritizedBans`, never in the filtered view. */
+  readonly rank: number
+}
+
+/**
+ * Tag every candidate with its 1-based rank in the full prioritised list.
+ *
+ * The rank is captured BEFORE any filtering, and that is the whole point: "#7"
+ * has to keep meaning "seventh most important ban overall". Renumbering the
+ * filtered view from 1 would make the same champion carry a different number
+ * depending on which chip happens to be pressed, and the number would then say
+ * nothing except "third row on screen".
+ *
+ * Pure. The input array is not mutated and the candidates are passed through by
+ * reference, not copied.
+ */
+export function rankBanCandidates(bans: readonly BanCandidate[]): RankedBanCandidate[] {
+  return bans.map((candidate, index) => ({ candidate, rank: index + 1 }))
+}
+
+/**
+ * The entries that belong to one phase filter, in unchanged priority order.
+ *
+ * `all` returns every entry. A phase filter matches STRICTLY on
+ * `candidate.phase`, so a candidate that carries no phase at all shows up only
+ * under `all`.
+ *
+ * That last case cannot arise from the engine: `analyzeScout` assigns a phase to
+ * every candidate in `prioritizedBans` via `resolvePhase()`, which is total and
+ * falls back to `situational`. The contract nevertheless has `phase` optional,
+ * so the filter has to answer the question, and answering it with "hide it
+ * everywhere" would lose a candidate silently.
+ */
+export function filterBansByPhase(
+  ranked: readonly RankedBanCandidate[],
+  filter: ScoutBanPhaseFilter,
+): RankedBanCandidate[] {
+  if (filter === "all") return [...ranked]
+  return ranked.filter((entry) => entry.candidate.phase === filter)
+}
+
+/** One filter chip: which view it selects and how many bans it would show. */
+export interface ScoutBanPhaseFilterOption {
+  filter: ScoutBanPhaseFilter
+  count: number
+}
+
+/**
+ * The four filter chips, each with the number of bans behind it.
+ *
+ * DERIVED FROM {@link filterBansByPhase}, deliberately: the count on a chip and
+ * the list it opens are then the same computation, and cannot disagree. The
+ * earlier `banPhaseCounts()` read from `TeamBanPlan.phases` while the list would
+ * have come from `prioritizedBans` — two sources for one number, which is the
+ * shape of defect this module has produced twice before (`ScoutManualSource` in
+ * three places, `overwrittenRows` vs `removedExistingRows`).
+ *
+ * All four are always returned, empty ones included: a missing "Situativ: 0"
+ * would read as "there is no such phase" rather than "nothing landed there".
+ */
+export function banPhaseFilterOptions(
+  ranked: readonly RankedBanCandidate[],
+): ScoutBanPhaseFilterOption[] {
+  return SCOUT_BAN_PHASE_FILTERS.map((filter) => ({
+    filter,
+    count: filterBansByPhase(ranked, filter).length,
+  }))
+}
+
+/**
+ * Is this chip clickable?
+ *
+ * An empty phase is disabled: clicking a zero leads to a guaranteed empty list,
+ * and the count on the chip already says everything there is to say.
+ *
+ * TWO EXCEPTIONS, and both matter:
+ * * `all` is never disabled. It is the way back, and it must stay reachable even
+ *   when the current filter has just emptied out.
+ * * The ACTIVE chip is never disabled. Data can change under a selected filter
+ *   (an edit in the scout data re-runs the analysis), and disabling the pressed
+ *   button would drop keyboard focus and leave `aria-pressed` on an inert
+ *   control. It stays pressed, stays focusable, and the panel shows an empty
+ *   state instead.
+ */
+export function isBanPhaseFilterEnabled(
+  option: ScoutBanPhaseFilterOption,
+  active: ScoutBanPhaseFilter,
+): boolean {
+  return option.filter === "all" || option.filter === active || option.count > 0
+}
+
+/** i18n key for a filter chip. `all` has its own key, the phases reuse theirs. */
+export const scoutBanPhaseFilterKey = (filter: ScoutBanPhaseFilter): TranslationKey =>
+  filter === "all" ? "scout_banPhase_all" : scoutBanPhaseKey(filter)
 
 /** Runtime guard for a `{rank}` param, mirroring `isScoutRole`. */
 function isScoutRankTier(value: string): value is ScoutRankTier {

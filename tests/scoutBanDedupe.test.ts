@@ -283,6 +283,37 @@ describe("analyzeScout — a champion appears at most once in the ban plan", () 
     }
   })
 
+  it("sets isOverlap on exactly the candidates that hit more than one player", () => {
+    // The UI leans on this from 0.7.4 on: the overlap badge is gated on
+    // `isOverlap` and prints `affectedPlayerIds.length`, and the badge has no
+    // singular form because a count of 1 is meant to be unreachable. That last
+    // part is only true while the flag and the list agree, so pin it.
+    const result = analyzeScout(
+      [player("p1", "mid"), player("p2", "top"), player("p3", "jungle")],
+      dataOf(
+        ["p1", [entry("Kai'Sa", 30, 68), entry("Ahri", 20, 60)]],
+        ["p2", [entry("KaiSa", 24, 64), entry("Lee Sin", 18, 58)]],
+        ["p3", [entry("Zed", 22, 61)]],
+      ),
+    )
+
+    const bans = result.banPlan.prioritizedBans
+    // Anchor: an empty plan would satisfy the loop below without asserting
+    // anything, and both sides of the flag have to actually occur.
+    expect(bans.length).toBeGreaterThan(2)
+    expect(bans.some((candidate) => candidate.isOverlap)).toBe(true)
+    expect(bans.some((candidate) => !candidate.isOverlap)).toBe(true)
+
+    for (const candidate of bans) {
+      expect(candidate.isOverlap, `${candidate.championName}`).toBe(
+        candidate.affectedPlayerIds.length > 1,
+      )
+      if (candidate.isOverlap) {
+        expect(candidate.affectedPlayerIds.length, `${candidate.championName}`).toBeGreaterThan(1)
+      }
+    }
+  })
+
   it("does not disturb champions that were never duplicated", () => {
     const data = dataOf(["p1", [entry("Ahri", 30, 68)]], ["p2", [entry("Zed", 24, 62)]])
     const result = analyzeScout(players, data)

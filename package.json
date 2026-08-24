@@ -1,7 +1,7 @@
 {
   "name": "lol-pro-meta-tool",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.7.5",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -15,6 +15,7 @@
     "typecheck:tools": "tsc --noEmit -p tsconfig.tools.json",
     "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
     "typecheck:all": "npm run typecheck && npm run typecheck:tools && npm run typecheck:tests",
+    "verify": "node scripts/verify.ts",
     "check:dist": "tsx scripts/checkDistForCustomDomain.ts",
     "sync:data": "tsx scripts/syncData.ts",
     "data:pack": "tsx scripts/packData.ts"

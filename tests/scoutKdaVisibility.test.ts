@@ -1276,24 +1276,13 @@ describe("every per-player ban list names its player", () => {
     const analysisPanel = stripComments(readSource("components/scout/ScoutAnalysisPanel.tsx"))
     const banPlan = stripComments(readSource("components/scout/ScoutBanPlanPanel.tsx"))
     const panelBody = functionBody(banPlan, "ScoutBanPlanPanel")
-    const banGroupBody = functionBody(banPlan, "BanGroup")
 
-    it("sliced the two panel bodies and kept them apart", () => {
+    it("sliced the panel body", () => {
         expect(analysisPanel.length, "ScoutAnalysisPanel.tsx looks empty").toBeGreaterThan(1500)
         expect(panelBody, "ScoutBanPlanPanel not found").not.toBe("")
-        expect(banGroupBody, "BanGroup not found").not.toBe("")
         expect(panelBody, "the ScoutBanPlanPanel slice lost its own markup").toContain(
             "scout_teamPlanTitle",
         )
-        expect(banGroupBody, "the BanGroup slice lost its own markup").toContain("scout-ban-group")
-        expect(
-            panelBody,
-            "the ScoutBanPlanPanel slice reaches into BanGroup - functionBody mis-sliced.",
-        ).not.toContain("scout-ban-group")
-        expect(
-            banGroupBody,
-            "the BanGroup slice reaches into ScoutBanPlanPanel - functionBody mis-sliced.",
-        ).not.toContain("scout_teamPlanTitle")
     })
 
     it("the analysis card passes its own player down", () => {
@@ -1321,40 +1310,25 @@ describe("every per-player ban list names its player", () => {
         ).toBe(false)
     })
 
-    it("BanGroup forwards whatever it was given", () => {
-        const rows = jsxElements(banGroupBody, "ScoutBanRow")
-
-        expect(rows, "expected exactly one ScoutBanRow inside BanGroup").toHaveLength(1)
-        expect(
-            rows[0],
-            "BanGroup does not forward forPlayerId, so the per-player groups below cannot " +
-                "reach ScoutBanRow with it however carefully they pass it in.",
-        ).toMatch(/forPlayerId=\{\s*forPlayerId\s*\}/)
+    it("renders no per-player ban row at all any more", () => {
+        // BanGroup used to repeat the prioritised candidates under each phase,
+        // under "hits several players" and under every player they hit. A
+        // champion could occupy four full rows. The panel now shows each
+        // candidate ONCE, so the whole class of "this row shows the wrong
+        // player's KDA" is gone from here by construction rather than by care.
+        expect(banPlan, "BanGroup is back").not.toContain("function BanGroup")
+        expect(jsxElements(banPlan, "BanGroup"), "a BanGroup is being rendered again").toEqual([])
     })
 
-    it("only the group whose heading names a player passes forPlayerId", () => {
-        const groups = jsxElements(panelBody, "BanGroup")
-        const namesAPlayer = groups.filter((group) => /player\.displayName/.test(group))
-
-        expect(groups.length, "expected several BanGroup call sites").toBeGreaterThanOrEqual(3)
+    it("keeps the per-player section to champion names, not ban rows", () => {
+        // The per-player view still exists, as names. Rendering full rows here
+        // would reintroduce both the duplication and the KDA-attribution trap.
+        expect(panelBody).toContain("scout_bansByPlayer")
+        expect(panelBody).toContain("candidate.championName")
         expect(
-            namesAPlayer,
-            "no BanGroup heading contains player.displayName - the per-player target ban " +
-                "groups are gone, or the heading is built somewhere this scan cannot see.",
+            jsxElements(panelBody, "ScoutBanRow"),
+            "the panel renders more than the one team-wide ban row",
         ).toHaveLength(1)
-        expect(
-            passesForPlayerId(namesAPlayer[0]),
-            "the group headed by a player's name does not pass forPlayerId. The heading " +
-                "says whose bans these are; the rows below it would say someone else's KDA.",
-        ).toBe(true)
-        for (const group of groups.filter((group) => !/player\.displayName/.test(group))) {
-            expect(
-                passesForPlayerId(group),
-                `a BanGroup that names no player passes forPlayerId:\n${group}\n` +
-                    "The phase and overlap groups are team-wide. Passing a player there " +
-                    "would relabel the same numbers as that player's.",
-            ).toBe(false)
-        }
     })
 })
 
@@ -1755,9 +1729,12 @@ describe("the ban row gained a span, not a paragraph", () => {
     })
 
     it("ScoutBanRow still has exactly its two existing paragraphs", () => {
-        // The flex warning and the substitute note. A third one is either the
-        // KDA in disguise or an unrelated block that this change should not
-        // have added; both are worth stopping.
+        // The flex warning, the substitute note and, since the ban panel was
+        // de-duplicated, the affected-players line. That third paragraph is
+        // deliberate: it names WHO a ban hits, which is the one fact the
+        // per-player ban groups used to convey by rendering the whole candidate
+        // again under each player. It carries no KDA — the test above proves
+        // that separately. A FOURTH is still worth stopping.
         const count = paragraphOpenCount(banRow)
 
         expect(
@@ -1767,10 +1744,14 @@ describe("the ban row gained a span, not a paragraph", () => {
         ).toBe(count)
         expect(
             count,
-            `ScoutBanRow renders ${count} paragraphs, expected 2 (scout_flexWarning and ` +
-                "scout_banSubstituteOnly). If a third one is genuinely wanted, say why here " +
+            `ScoutBanRow renders ${count} paragraphs, expected 3 (scout_banAffectedPlayers, ` +
+                "scout_flexWarning and scout_banSubstituteOnly). The affected-players line was " +
+                "added when the ban panel stopped repeating each candidate under its phase, " +
+                "under the overlap list and under every player it hits: naming those players " +
+                "is what that repetition used to convey. It carries no KDA, which the test " +
+                "above proves separately. If a FOURTH one is genuinely wanted, say why here " +
                 "and raise the number - do not delete this guard.",
-        ).toBe(2)
+        ).toBe(3)
     })
 
     it("the ban row has ONE facts span and middot-joins the KDA into it", () => {
