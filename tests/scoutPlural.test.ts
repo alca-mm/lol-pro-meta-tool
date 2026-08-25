@@ -8,6 +8,13 @@
  * (`team_membersOne`/`team_membersMany`, see tests/teamUiHelpers.test.ts);
  * this is the Scout half of that rule.
  *
+ * A fourth sentence of the same class, "Ohne Referenzdaten beurteilt:
+ * 1 Champions.", survived until 0.7.6 — not because anyone decided it was
+ * acceptable, but because every section of this file worked from a hand-written
+ * list and `scout_roleGate_unjudged` was on none of them. It did not appear
+ * anywhere under tests/ at all. Section 9 is the answer to that, and section 4
+ * is the sentence itself.
+ *
  * The mechanism under test:
  *  - src/i18n/plural.ts holds the neutral rule — `PluralKeys` and
  *    `pluralKey(count, keys)`. `count === 1` picks `one`, everything else
@@ -19,20 +26,25 @@
  *    `translateScoutReason()` / `translateScoutWarning()` pick by themselves.
  *
  * How the assertions are split, on purpose:
- *  - Sections 1 to 3 pin the three reported sentences WORD FOR WORD in both
- *    languages. Those exact forms are the requirement itself, so this file
- *    breaks the project's usual "never assert on wording" rule for them and
- *    for nothing else.
- *  - Section 4 loops over the remaining five fixed keys and checks the
+ *  - Sections 1 to 4 pin four sentences WORD FOR WORD in both languages: the
+ *    three that were reported, plus the one section 9 turned up. Those exact
+ *    forms are the requirement itself, so this file breaks the project's usual
+ *    "never assert on wording" rule for them and for nothing else.
+ *  - Section 5 loops over the remaining five fixed keys and checks the
  *    *properties* that make a sentence singular (no plural noun, singular
  *    verb) rather than the full sentence, so re-wording stays free.
- *  - Sections 6 and 7 are the guards in the other direction: keys that must
+ *  - Sections 7 and 8 are the guards in the other direction: keys that must
  *    NOT have grown a sibling, and hygiene for the ones that did.
+ *  - Section 9 is the completeness sweep. Sections 1 to 8 are only ever as
+ *    good as the lists they were handed; the sweep walks the catalogue itself
+ *    and insists that every counted key carry exactly one classification.
  *
  * Vitest runs in Node here (vite.config.ts, `test.environment: 'node'`) — no
  * jsdom, no document, no window. Everything below is a pure function over the
  * two catalogue objects, exactly like tests/scoutUiHelpers.test.ts.
  */
+
+import { readFileSync } from "node:fs"
 
 import { describe, expect, it } from "vitest"
 
@@ -52,6 +64,7 @@ import {
   SCOUT_MORE_COMFORT_KEYS,
   SCOUT_MORE_THREATS_KEYS,
   SCOUT_MORE_WEAKNESSES_KEYS,
+  SCOUT_ROLE_GATE_UNJUDGED_KEYS,
   fillPlaceholders,
   scoutPluralMessage,
   translateCount,
@@ -236,7 +249,50 @@ describe("scout_reason_small_sample is declined for {games}", () => {
 })
 
 /* ==========================================================================
- * 4. The other five fixed keys
+ * 4. The role-gate note — `scout_roleGate_unjudged`
+ *
+ * "Ohne Referenzdaten beurteilt: 1 Champions." Nobody reported this one and no
+ * test looked at it; the completeness sweep in section 9 is what found it, in
+ * 0.7.6. The number is `analysis.roleGate.unjudgedChampions`, which is the size
+ * of `unjudgedChampionKeys` and can be 1 as easily as any other value, and
+ * ScoutBanPlanPanel.tsx renders it inside the collapsed role-gate details.
+ *
+ * Pinned WORD FOR WORD like sections 1 to 3. The sentence is short and has no
+ * moving part except the number, and which of the two nouns follows that number
+ * is the entire fix, so there is nothing here that a property assertion would
+ * express more robustly than the sentence itself.
+ * ========================================================================== */
+
+describe("scout_roleGate_unjudged is declined for the count", () => {
+  const note = (t: ScoutTranslate, count: number): string =>
+    scoutPluralMessage(t, count, SCOUT_ROLE_GATE_UNJUDGED_KEYS)
+
+  it("DE says 1 Champion in the singular", () => {
+    // THE ONLY DISCRIMINATOR IN THIS BLOCK. At 2 the broken catalogue and the
+    // fixed one render the identical sentence, so the two plural tests below
+    // would have stayed green on "Ohne Referenzdaten beurteilt: 1 Champions."
+    // for as long as it was on screen. `toBe` on the whole sentence rather than
+    // `toContain`: "... 1 Champion." is a prefix of "... 1 Champions.", so
+    // anything weaker passes on the broken text too.
+    expect(note(tDe, 1)).toBe("Ohne Referenzdaten beurteilt: 1 Champion.")
+  })
+
+  it("DE says 2 Champions in the plural", () => {
+    expect(note(tDe, 2)).toBe("Ohne Referenzdaten beurteilt: 2 Champions.")
+  })
+
+  it("EN says 1 champion in the singular", () => {
+    // Same discriminator, English half: "1 champions." was what shipped.
+    expect(note(tEn, 1)).toBe("Judged without reference data: 1 champion.")
+  })
+
+  it("EN says 2 champions in the plural", () => {
+    expect(note(tEn, 2)).toBe("Judged without reference data: 2 champions.")
+  })
+})
+
+/* ==========================================================================
+ * 5. The other five fixed keys
  *
  * A loop rather than five copied blocks: every case answers the same two
  * questions ("what must the text say at 1" / "at 2"), and writing them as a
@@ -382,7 +438,7 @@ describe("the remaining counted Scout strings decline in both languages", () => 
 })
 
 /* ==========================================================================
- * 5. `pluralKey()` itself
+ * 6. `pluralKey()` itself
  * ========================================================================== */
 
 describe("pluralKey", () => {
@@ -447,7 +503,7 @@ describe("pluralKey", () => {
 })
 
 /* ==========================================================================
- * 6. The keys that were deliberately NOT touched
+ * 7. The keys that were deliberately NOT touched
  *
  * The regression guard pointing the other way. Every key below either cannot
  * reach a count of 1 or is already correct at 1, so giving it a `...One`
@@ -484,6 +540,13 @@ const UNTOUCHED_COUNT_KEYS: ReadonlyArray<readonly [key: string, why: string]> =
   // das Label kommt aus einem eigenen Key. "Sicher: 1" ist in beiden Sprachen
   // richtig, es gibt nichts zu deklinieren.
   ["scout_banPhaseFilterCount", 'the "Label: {count}" shape reads correctly at any number'],
+  // Der Overlap-Filter-Chip, 0.7.6. Dieselbe Form wie der Phasenfilter-Chip
+  // darueber, sogar woertlich derselbe Wert "{label}: {count}".
+  ["scout_banOverlapFilterCount", 'the "{label}: {count}" shape, and the label is its own key'],
+  // Die beiden Datenqualitaets-Warnungen. Ihre Zahl steht HINTER dem
+  // Doppelpunkt, es folgt ihr also kein Wort, das sich nach ihr richten muesste.
+  ["scout_warning_player_without_lineup_role", 'the "Label: {count}." shape puts the number last'],
+  ["scout_warning_offrole_data_present", 'the "Label: {count}." shape puts the number last'],
 ]
 
 describe("the untouched counted keys stayed single", () => {
@@ -551,10 +614,10 @@ describe("the untouched counted keys stayed single", () => {
 })
 
 /* ==========================================================================
- * 7. i18n hygiene of the new keys
+ * 8. i18n hygiene of the new keys
  *
  * tests/i18nScoutCopy.test.ts already enforces catalogue-wide parity and the
- * copy rules. This section re-states them for the fourteen new pairs so a failure
+ * copy rules. This section re-states them for the fifteen pairs so a failure
  * names the pair that broke, and adds the one rule the generic tests cannot
  * express: a singular and its plural must carry the SAME placeholders.
  * ========================================================================== */
@@ -577,7 +640,7 @@ const MECHANICAL_PLURAL_BASES = [
 ] as const
 
 /**
- * The fourteen pairs. The eight constant-backed pairs are read off the exported constants
+ * The fifteen pairs. The nine constant-backed pairs are read off the exported constants
  * rather than spelled out, so this file cannot drift from the names the UI
  * actually uses.
  */
@@ -590,6 +653,10 @@ const NEW_KEY_PAIRS: ReadonlyArray<readonly [one: string, many: string]> = [
   [SCOUT_MORE_BANS_KEYS.one, SCOUT_MORE_BANS_KEYS.many],
   [SCOUT_MORE_THREATS_KEYS.one, SCOUT_MORE_THREATS_KEYS.many],
   [SCOUT_MORE_COMFORT_KEYS.one, SCOUT_MORE_COMFORT_KEYS.many],
+  // Added in 0.7.6. Note the shape: `many` is the PRE-EXISTING base key
+  // `scout_roleGate_unjudged`, exactly like the mechanical families below, so
+  // nothing that renders the note changes at any count except 1.
+  [SCOUT_ROLE_GATE_UNJUDGED_KEYS.one, SCOUT_ROLE_GATE_UNJUDGED_KEYS.many],
   ...MECHANICAL_PLURAL_BASES.map((base) => [`${base}One`, base] as const),
 ]
 
@@ -699,8 +766,8 @@ describe("the collapse summaries agree in number", () => {
 })
 
 describe("the new plural keys are well formed", () => {
-  it("are fourteen distinct pairs, and no pair points at one key twice", () => {
-    expect(NEW_KEY_PAIRS.length).toBe(14)
+  it("are fifteen distinct pairs, and no pair points at one key twice", () => {
+    expect(NEW_KEY_PAIRS.length).toBe(15)
     // A pair whose halves are the same key would silently disable the whole
     // feature: every count would render the same sentence and every assertion
     // about the singular above would fail with a confusing message instead of
@@ -708,7 +775,7 @@ describe("the new plural keys are well formed", () => {
     for (const [one, many] of NEW_KEY_PAIRS) {
       expect(one, `pair ${one}/${many} names the same key twice`).not.toBe(many)
     }
-    expect(new Set(NEW_KEY_PAIRS.flatMap(([one, many]) => [one, many])).size).toBe(28)
+    expect(new Set(NEW_KEY_PAIRS.flatMap(([one, many]) => [one, many])).size).toBe(30)
   })
 
   it("exist in both languages and are not empty", () => {
@@ -759,9 +826,10 @@ describe("the new plural keys are well formed", () => {
     }
   })
 
-  it("added no One key beyond the fourteen", () => {
-    // The ballast guard from section 6, generalised: nobody may quietly grow a
-    // ninth singular for a string that never counts to one.
+  it("added no One key beyond the fifteen", () => {
+    // The ballast guard from section 7, generalised: nobody may quietly grow a
+    // sixteenth singular for a string that never counts to one. Section 9 is
+    // the same guard pointing the other way round.
     const expected = new Set(NEW_KEY_PAIRS.map(([one]) => one))
 
     for (const [lang, , dict] of LANGS) {
@@ -771,10 +839,260 @@ describe("the new plural keys are well formed", () => {
       for (const key of found) {
         expect(
           expected.has(key),
-          `${lang}.${key} is a singular sibling nobody asked for. Only these fourteen keys count ` +
+          `${lang}.${key} is a singular sibling nobody asked for. Only these fifteen keys count ` +
             `to one: ${[...expected].join(", ")}`,
         ).toBe(true)
       }
     }
+  })
+})
+
+/* ==========================================================================
+ * 9. The completeness sweep
+ *
+ * WHY THIS SECTION EXISTS. Every section above works from a HAND-WRITTEN LIST:
+ * COUNTED_CASES, UNTOUCHED_COUNT_KEYS, NEW_KEY_PAIRS. A counted key that nobody
+ * remembered to enter in one of them is not merely untested here, it is
+ * invisible here, and that is the entire history of `scout_roleGate_unjudged`:
+ * it rendered "1 Champions." from the day it was written until 0.7.6, and in
+ * between it did not occur once anywhere under tests/.
+ *
+ * So this walks the two catalogues instead of a list and asks one question of
+ * every `scout_` key whose German OR English text renders `{count}`: how is it
+ * classified? There are two legal answers, and a key must give EXACTLY ONE:
+ *
+ *  (a) it is one half of a complete singular/plural pair, or
+ *  (b) it is entered in UNTOUCHED_COUNT_KEYS together with the reason a count
+ *      of 1 needs no second form.
+ *
+ * (a) only asks whether the sibling EXISTS. That the pair is also registered in
+ * NEW_KEY_PAIRS, and therefore actually rendered and pinned, is what section 8
+ * enforces from the other side: it rejects any `scout_*One` key that is not in
+ * that list. Neither guard is complete alone; together they close the circle.
+ *
+ * THE LIMIT OF THIS SWEEP, stated plainly because a guard trusted for more than
+ * it does is worse than none: it looks at `{count}` and at nothing else. The
+ * other numeric placeholders are not swept, because they are not reliably
+ * counts. `{max}` is a constant, `{winrate}` is a percentage, `{label}` is a
+ * word. `{games}` genuinely does count, and its keys are handled BY NAME
+ * instead: on the source side by COUNT_SENSITIVE_REASONS, here by COUNTED_CASES
+ * and by three entries in UNTOUCHED_COUNT_KEYS. If a future key counts through
+ * a new placeholder, that name has to be added below or it passes unlooked at.
+ * ========================================================================== */
+
+/** Every key either catalogue knows, so a key missing from one is still swept. */
+const ALL_KEYS: readonly string[] = [...new Set([...Object.keys(DE), ...Object.keys(EN)])].sort()
+
+const keyExists = (key: string): boolean => typeof DE[key] === "string" || typeof EN[key] === "string"
+
+/** The placeholders this sweep reads as a count. See the limit above. */
+const COUNT_PLACEHOLDERS: readonly string[] = ["{count}"]
+
+const rendersACount = (key: string): boolean =>
+  COUNT_PLACEHOLDERS.some(
+    (placeholder) => (DE[key] ?? "").includes(placeholder) || (EN[key] ?? "").includes(placeholder),
+  )
+
+const COUNT_BEARING_KEYS: readonly string[] = ALL_KEYS.filter(
+  (key) => key.startsWith("scout_") && rendersACount(key),
+)
+
+/**
+ * The other half of `key`'s pair, or `null` when it has none.
+ *
+ * COMPLETENESS IS THE POINT, so a lone half does not count as classified: a
+ * `scout_fooMany` whose `scout_fooOne` was never written renders the plural at
+ * every count, which is this file's defect wearing a pair's name. The three
+ * shapes the project actually uses:
+ *  - `scout_fooOne` beside the base `scout_foo` (the mechanical families, and
+ *    `scout_roleGate_unjudged`: the base keeps the plural text so the compiler
+ *    can go on building `scout_reason_${code}` as a template literal),
+ *  - `scout_fooOne` beside `scout_fooMany` (the collapse summaries),
+ *  - a base key whose `...One` sibling exists.
+ */
+function pairPartnerOf(key: string): string | null {
+  if (key.endsWith("One")) {
+    const base = key.slice(0, -"One".length)
+    if (keyExists(base)) return base
+    return keyExists(`${base}Many`) ? `${base}Many` : null
+  }
+  if (key.endsWith("Many")) {
+    const base = key.slice(0, -"Many".length)
+    return keyExists(`${base}One`) ? `${base}One` : null
+  }
+  return keyExists(`${key}One`) ? `${key}One` : null
+}
+
+const UNTOUCHED_KEY_SET = new Set(UNTOUCHED_COUNT_KEYS.map(([key]) => key))
+
+/**
+ * Keys the sweep MUST have seen, one per shape it has to be able to reach.
+ *
+ * A bare `COUNT_BEARING_KEYS.length > n` proves the loop ran, not that it ran
+ * over the right things: at 36 keys a threshold of 20 would let sixteen vanish,
+ * including every one this file cares about. CLAUDE.md makes the same point
+ * about `scanned.length > 100` over 121 source files, and the answer there is
+ * the answer here: name the things that have to be in the scan.
+ */
+const REQUIRED_COUNT_KEYS: ReadonlyArray<readonly [key: string, why: string]> = [
+  ["scout_roleGate_unjudged", "the 0.7.6 defect; a sweep that cannot see this one is pointless"],
+  ["scout_banOverlapFilterCount", "the newest counted key, added with the overlap filter"],
+  ["scout_import_applied", "the originally reported sentence, section 1"],
+  ["scout_countPlayers", "an untouched chip, so both buckets are proven reachable"],
+]
+
+describe("every counted Scout key carries exactly one classification", () => {
+  it("swept the catalogues and found the keys it has to find", () => {
+    for (const [key, why] of REQUIRED_COUNT_KEYS) {
+      expect(
+        COUNT_BEARING_KEYS,
+        `SCANNER PROBLEM, not a rule violation: the sweep never saw ${key} (${why}). Either the ` +
+          "walk over the two catalogues broke, or that key stopped rendering {count} for a good " +
+          "reason, in which case drop it from REQUIRED_COUNT_KEYS. Do NOT relax the sweep.",
+      ).toContain(key)
+    }
+
+    // The weaker, second signal. It cannot stand in for the named keys above,
+    // but it does catch a walk that came back with almost nothing at all.
+    expect(
+      COUNT_BEARING_KEYS.length,
+      `SCANNER PROBLEM, not a rule violation: only ${COUNT_BEARING_KEYS.length} counted scout_ ` +
+        "keys were found, and there were 36 when this sweep was written.",
+    ).toBeGreaterThanOrEqual(30)
+  })
+
+  it("has a classifier that actually discriminates", () => {
+    // Without this the sweep could be vacuous in the worst way: a
+    // `pairPartnerOf` that answered every key would report a fully classified
+    // catalogue while classifying nothing. One key of each shape, pinned to the
+    // answer it has to give, and two that must come back empty-handed.
+    expect(pairPartnerOf("scout_roleGate_unjudged")).toBe("scout_roleGate_unjudgedOne")
+    expect(pairPartnerOf("scout_roleGate_unjudgedOne")).toBe("scout_roleGate_unjudged")
+    expect(pairPartnerOf("scout_moreBansOne")).toBe("scout_moreBansMany")
+    expect(pairPartnerOf("scout_moreBansMany")).toBe("scout_moreBansOne")
+    expect(pairPartnerOf("scout_banOverlapFilterCount")).toBeNull()
+    expect(pairPartnerOf("scout_countPlayers")).toBeNull()
+  })
+
+  it("leaves no counted key unclassified", () => {
+    for (const key of COUNT_BEARING_KEYS) {
+      const partner = pairPartnerOf(key)
+      const listedAsUntouched = UNTOUCHED_KEY_SET.has(key)
+
+      expect(
+        partner !== null || listedAsUntouched,
+        `${key} renders {count} and is classified neither way, so nothing in this file has ever ` +
+          `looked at how it reads at 1. Its German text is "${preview(DE[key] ?? "(missing)")}". ` +
+          "There are two ways out and one of them is right for it. EITHER give it a `...One` " +
+          "sibling and register the pair in NEW_KEY_PAIRS through a PluralKeys constant in " +
+          "scoutUiHelpers.ts, so the singular is really rendered and really pinned. OR enter it " +
+          "in UNTOUCHED_COUNT_KEYS with the reason a count of 1 needs no second form: the count " +
+          'is unreachable, or the text has the "Label: {count}" shape where no word follows the ' +
+          "number.",
+      ).toBe(true)
+    }
+  })
+
+  it("leaves no counted key classified twice", () => {
+    // This half deliberately overlaps the sibling guard in section 7. Computing
+    // "how many classifications" and then only ever reporting the empty case
+    // would leave the sweep's own verdict half stated. What differs is the
+    // message: it names the contradiction rather than the stray key.
+    for (const key of COUNT_BEARING_KEYS) {
+      if (!UNTOUCHED_KEY_SET.has(key)) continue
+      const partner = pairPartnerOf(key)
+
+      expect(
+        partner,
+        `${key} is entered in UNTOUCHED_COUNT_KEYS as a key that never needs a singular, and yet ` +
+          `${partner} exists. Both cannot be true. Either it counts to one, then remove the ` +
+          "UNTOUCHED entry and register the pair, or it does not, then delete the sibling.",
+      ).toBeNull()
+    }
+  })
+})
+
+/* ==========================================================================
+ * 10. The call site
+ *
+ * Sections 1 to 9 are about the CATALOGUE. They stay green even if the panel
+ * stops asking for the singular altogether, because Vitest runs in Node with
+ * no jsdom and nothing here renders a component.
+ *
+ * That gap is not hypothetical. Reverting ScoutBanPlanPanel to
+ * `fillPlaceholders(t("scout_roleGate_unjudged"), { count })` reinstates
+ * "Ohne Referenzdaten beurteilt: 1 Champions." word for word, and every
+ * assertion above survives it untouched. The only thing that would have
+ * noticed is `noUnusedLocals` tripping over the orphaned import, and only
+ * until whoever did the revert deletes that import too.
+ *
+ * So this section pins the CALL rather than the key. A source scan is a weak
+ * instrument; it is the strongest one available in a suite without a DOM, and
+ * it says so here rather than implying otherwise.
+ * ========================================================================== */
+
+/** Source with comments removed, so prose can neither satisfy nor break a scan. */
+const readPanelSource = (): string =>
+  readFileSync(
+    new URL("../src/components/scout/ScoutBanPlanPanel.tsx", import.meta.url),
+    "utf8",
+  )
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/[^\n]*/g, "$1")
+
+/** Whitespace collapsed, so a formatter reflowing the call cannot break a pin. */
+const collapse = (source: string): string => source.replace(/\s+/g, " ")
+
+describe("the role-gate note asks for the singular where it is rendered", () => {
+  const panel = readPanelSource()
+  const flat = collapse(panel)
+
+  it("read a panel that still looks like the ban plan", () => {
+    // The anti-vacuity half. Most assertions below are negative, so they would
+    // all pass on an empty string, and the message has to send the next reader
+    // at the SCANNER rather than at a rule they did not break.
+    expect(
+      panel.length,
+      "SCANNER PROBLEM: ScoutBanPlanPanel.tsx came back nearly empty. Fix the path before " +
+        "reading anything in this section as a verdict about the copy.",
+    ).toBeGreaterThan(2000)
+    expect(flat, "SCANNER PROBLEM: this is not the ban plan panel").toContain(
+      "scout_teamPlanTitle",
+    )
+    expect(
+      flat,
+      "SCANNER PROBLEM: the comment stripper ate the code, not just the prose",
+    ).toContain("export function ScoutBanPlanPanel")
+    expect(flat, "the role-gate note is gone from the panel entirely").toContain(
+      "analysis.roleGate.unjudgedChampions",
+    )
+  })
+
+  it("renders it through the pair, not through the plural key alone", () => {
+    // The WHOLE call, not the identifier: `SCOUT_ROLE_GATE_UNJUDGED_KEYS` also
+    // stands in the import list, so a bare toContain survives the revert. This
+    // is the same import-line trap the ban-plan guards were caught by twice.
+    expect(
+      flat,
+      "the role-gate note no longer renders through scoutPluralMessage, so it is back to one " +
+        'fixed form at every count. That is exactly how "Ohne Referenzdaten beurteilt: ' +
+        '1 Champions." reached production and stayed there until 0.7.6.',
+    ).toContain(
+      "scoutPluralMessage( t, analysis.roleGate.unjudgedChampions, SCOUT_ROLE_GATE_UNJUDGED_KEYS, )",
+    )
+  })
+
+  it("never fills either half of the pair directly", () => {
+    // The revert, spelled out, in both spellings it could take.
+    expect(
+      flat,
+      'the plural key is being filled directly again, which prints "1 Champions." at a count ' +
+        "of 1. Render it through SCOUT_ROLE_GATE_UNJUDGED_KEYS and scoutPluralMessage.",
+    ).not.toContain('t("scout_roleGate_unjudged")')
+    expect(
+      flat,
+      "the singular key is being rendered unconditionally, which prints \"4 Champion.\" at a " +
+        "count of 4. It is one half of a pair and only pluralKey() may choose it.",
+    ).not.toContain('t("scout_roleGate_unjudgedOne")')
   })
 })

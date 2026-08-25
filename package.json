@@ -1,7 +1,7 @@
 {
   "name": "lol-pro-meta-tool",
   "private": true,
-  "version": "0.7.5",
+  "version": "0.8.2",
   "type": "module",
   "engines": {
     "node": ">=24"

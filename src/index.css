@@ -415,6 +415,38 @@ table tbody tr:hover {
   color: var(--text);
 }
 
+/*
+ * The champion cell's expand button.
+ *
+ * Strips the UA button chrome so the cell looks exactly as it did when the name
+ * was bare text: the row, not the button, carries the padding and the hover
+ * tint. Only the semantics changed.
+ */
+.champion-row-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+
+/*
+ * A VISIBLE focus ring, and it has to be stated rather than left to the UA
+ * default: `background: none` plus `border: none` above removes the surfaces
+ * some browsers draw the default indicator against, and this button sits on a
+ * row that already changes colour on hover, so an indicator that is only a
+ * colour shift would be indistinguishable from hovering.
+ */
+.champion-row-toggle:focus-visible,
+.note-card-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .sort-active {
   color: var(--accent) !important;
 }
@@ -1083,6 +1115,36 @@ table tbody tr:hover {
   gap: 1rem;
 }
 
+/*
+ * A note card that is a real `<button>`.
+ *
+ * Everything here undoes a UA button default that would otherwise override
+ * `.recommendation-card`: buttons centre their text, impose their own font, and
+ * shrink to their content instead of filling the row. The card kept its own
+ * class, so its border, background and padding still come from there and the
+ * appearance is unchanged.
+ */
+.note-card-button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/*
+ * The note body inside that button. It was a `<p>`, which is flow content and
+ * therefore illegal inside a `<button>`; a block-level span is the same box
+ * without the invalid nesting. The global reset already zeroes paragraph
+ * margins, so this matches the previous rendering exactly.
+ */
+.note-card-text {
+  display: block;
+  margin-top: 0.25rem;
+  white-space: pre-wrap;
+}
+
 .recommendation-card h3 {
   margin-bottom: 0.5rem;
   color: var(--accent);
@@ -1258,42 +1320,6 @@ table tbody tr:hover {
     align-self: flex-start;
     border-radius: var(--radius);
     margin-bottom: -8px;
-  }
-
-  /* Recommendation side toggle */
-  .recommendation-side-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    color: var(--text-dim);
-    font-size: 0.9rem;
-  }
-
-  .recommendation-side-toggle button {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface2);
-    color: var(--text-dim);
-    cursor: pointer;
-    padding: 0.45rem 0.75rem;
-    font-size: 0.85rem;
-  }
-
-  .recommendation-side-toggle button:hover {
-    color: var(--text);
-  }
-
-  .recommendation-side-toggle .side-toggle-active.blue {
-    border-color: var(--blue);
-    color: #8fb7ff;
-    background: rgba(79, 140, 255, 0.12);
-  }
-
-  .recommendation-side-toggle .side-toggle-active.red {
-    border-color: var(--red);
-    color: #ff9a9a;
-    background: rgba(224, 79, 79, 0.12);
   }
 
   @media (max-width: 760px) {
@@ -1511,15 +1537,13 @@ button.filters-floating-button {
   min-height: 54px;
 }
 
-.role-filter-tabs .role-tab,
-.recommendation-side-toggle button {
+.role-filter-tabs .role-tab {
   background: var(--surface2);
   border: 1px solid var(--border);
   color: var(--text-dim);
 }
 
-.role-filter-tabs .role-tab:hover,
-.recommendation-side-toggle button:hover {
+.role-filter-tabs .role-tab:hover {
   color: var(--text);
   border-color: var(--accent-dim);
 }
@@ -1529,7 +1553,6 @@ button.filters-floating-button {
   border-color: var(--accent-dim);
   color: var(--accent);
 }
-
 
 /* App-level scrolling fix: keep the native browser scrollbar hidden and scroll inside the app */
 html,
@@ -1696,7 +1719,7 @@ body::-webkit-scrollbar {
 
 /* ── UX polish utility classes ─────────────────────────────────── */
 
-/* Panel header: title left, optional actions right */
+/* Panel header: title left, optional `.button-row` right */
 .panel-header {
   display: flex;
   align-items: center;
@@ -1710,13 +1733,6 @@ body::-webkit-scrollbar {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text);
-}
-
-.panel-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-wrap: wrap;
 }
 
 /* Danger button — same shape as secondary-button but danger-tinted */
@@ -1834,6 +1850,43 @@ body::-webkit-scrollbar {
 /* Right-align numeric table cells */
 .numeric {
   text-align: right;
+}
+
+/*
+ * The sort control inside a player-results table header.
+ *
+ * Everything here undoes a UA button default that would otherwise override the
+ * header: buttons impose their own font, centre their text and shrink to their
+ * content. `inherit` throughout means the button keeps whatever the `<th>` has,
+ * including the right-alignment `.numeric` gives numeric columns and the active
+ * colour the component sets inline, so the header looks exactly as it did when
+ * the whole cell was the click target.
+ *
+ * The padding lives HERE rather than on the `<th>` (which is set to `padding: 0`
+ * in the component). That is what keeps the click target the size of the whole
+ * header cell instead of shrinking it to the label.
+ */
+.results-sort-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+/*
+ * A stated focus ring, for the same reason as the 0.7.8 buttons: `background:
+ * none` plus `border: none` removes the surfaces a browser would draw its
+ * default indicator against. The offset is NEGATIVE so the ring stays inside
+ * the cell - a positive one would overlap the neighbouring header.
+ */
+.results-sort-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* Inline feedback message */
@@ -2669,38 +2722,57 @@ body::-webkit-scrollbar {
 }
 
 /*
- * Phase filter chips above the one canonical ban list.
+ * Filter chips above the one canonical ban list: the four phase chips and the
+ * overlap toggle beside them.
  *
  * Real buttons, so keyboard and screen reader work without extra handling. The
  * active state is carried by BORDER WEIGHT and a leading marker, not by colour
  * alone: `aria-pressed` announces it, and the marker shows it to anyone who
  * cannot tell the accent colour apart from the dim one.
+ *
+ * The overlap toggle shares every rule with the phase chips rather than
+ * inheriting `.scout-ban-phase-chip`, which would be a lie about what it
+ * filters. Same look, own name.
  */
-.scout-ban-phase-filter {
+.scout-ban-phase-filter,
+.scout-ban-overlap-filter {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 8px;
 }
 
-.scout-ban-phase-chip {
+.scout-ban-phase-chip,
+.scout-ban-overlap-chip {
   background: none;
   font: inherit;
   font-size: 10.5px;
   cursor: pointer;
 }
 
-.scout-ban-phase-chip:hover:not(:disabled) {
+/*
+ * HOVER MUST NOT OUTRANK THE PRESSED STATE.
+ *
+ * Without the `:not(...-active)` this selector scores (0,3,0) against the
+ * active rule's (0,1,0), so pointing at the chip that is ALREADY pressed
+ * repainted its border from `--accent` back to `--accent-dim`: the selected
+ * chip looked weaker than an unselected one for as long as the mouse sat on
+ * it. Cascade order cannot fix that, only specificity can.
+ */
+.scout-ban-phase-chip:hover:not(:disabled):not(.scout-ban-phase-chip-active),
+.scout-ban-overlap-chip:hover:not(:disabled):not(.scout-ban-overlap-chip-active) {
   border-color: var(--accent-dim);
   color: var(--accent);
 }
 
-.scout-ban-phase-chip:disabled {
+.scout-ban-phase-chip:disabled,
+.scout-ban-overlap-chip:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.scout-ban-phase-chip-active {
+.scout-ban-phase-chip-active,
+.scout-ban-overlap-chip-active {
   border-color: var(--accent);
   border-width: 2px;
   color: var(--accent);
@@ -2708,7 +2780,8 @@ body::-webkit-scrollbar {
 }
 
 /* The non-colour half of the active state. */
-.scout-ban-phase-chip-active::before {
+.scout-ban-phase-chip-active::before,
+.scout-ban-overlap-chip-active::before {
   content: "✓ ";
 }
 

@@ -1,4 +1,5 @@
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useCallback } from "react"
+import type { Dispatch, SetStateAction } from "react"
 import type { Match, Role } from "../domain/types"
 import {
     calculateDraftRecommendations,
@@ -20,6 +21,13 @@ import { SimilarDraftsPanel } from "./draft/SimilarDraftsPanel"
 import { ChampionNotesPanel } from "./draft/ChampionNotesPanel"
 import { TeamDraftLibraryPanel } from "./draft/TeamDraftLibraryPanel"
 import { findSimilarDrafts } from "../draft/similarDrafts"
+import {
+    draftAvailabilityKey,
+    draftBoardFromSlots,
+    takenChampionKeys,
+} from "../draft/draftAvailability"
+import type { DraftSlotsState } from "../draft/draftAvailability"
+import { isChampionTaken } from "../draft/draftState"
 import { useTranslation } from "../i18n/LanguageContext"
 import { useTeam } from "../teams/TeamContext"
 import type { SavedTeamDraft } from "../teams/teamDraftsService"
@@ -111,6 +119,15 @@ function poolBadgeStyle(tone: TeamPoolTone): { background: string; color: string
 
 interface DraftHelperProps {
     matches: Match[]
+    /**
+     * The four draft arrays, owned by `App.tsx` since 0.8.2.
+     *
+     * Controlled rather than local: this component unmounts when the user leaves
+     * the draft tab, so local state meant the draft was thrown away exactly when
+     * another tab wanted to read it.
+     */
+    slots: DraftSlotsState
+    onSlotsChange: Dispatch<SetStateAction<DraftSlotsState>>
 }
 
 function getRoleRecommendations(
@@ -667,7 +684,7 @@ export function generateBanRecommendations(input: {
     const opponentOpenRoles = ROLES.filter((role) => !opponentAssignedRoles.has(role))
 
     for (const entry of input.opponentRecommendations) {
-        const key = normalizeChampionName(entry.championName)
+        const key = draftAvailabilityKey(entry.championName)
         if (input.selectedChampionSet.has(key)) continue
         if (input.bannedChampionSet.has(key)) continue
 
@@ -875,7 +892,9 @@ function getFearlessChampionKeys(games: CompletedGameDraft[]): Set<string> {
 
     for (const game of games) {
         for (const slot of [...game.bluePickSlots, ...game.redPickSlots]) {
-            if (slot.championName) keys.add(normalizeChampionName(slot.championName))
+            // Same basis as the live board, so a champion picked in game 1 is
+            // still recognised in game 2 under a different spelling.
+            if (slot.championName) keys.add(draftAvailabilityKey(slot.championName))
         }
     }
 
@@ -908,14 +927,60 @@ function formatSingleGameDraftForExport(game: CompletedGameDraft, labelSuffix = 
     ].join("\n")
 }
 
-export function DraftHelper({ matches }: DraftHelperProps) {
+export function DraftHelper({ matches, slots, onSlotsChange }: DraftHelperProps) {
     const { t, lang } = useTranslation()
     const { activeTeam, myRole } = useTeam()
 
-    const [bluePickSlots, setBluePickSlots] = useState<PickSlot[]>(createEmptyPickSlots)
-    const [redPickSlots, setRedPickSlots] = useState<PickSlot[]>(createEmptyPickSlots)
-    const [blueBans, setBlueBans] = useState<string[]>(["", "", "", "", ""])
-    const [redBans, setRedBans] = useState<string[]>(["", "", "", "", ""])
+    /*
+      THE FOUR DRAFT ARRAYS LIVE IN `App.tsx` SINCE 0.8.2, not here.
+
+      Not for tidiness: this component is rendered conditionally, so switching to
+      the scout tab UNMOUNTED it and threw the whole draft away. The scout could
+      never have seen a draft that stopped existing the moment you navigated to
+      it. Lifting the four arrays fixes that and is what lets the ban plan read
+      the same board the user is filling in.
+
+      The four setters below keep the names and the exact `useState` signature
+      (a value or an updater function), so the thirty call sites in this file are
+      untouched and go on reading like local state. They write through to the one
+      owner instead of to a second copy - there is no local mirror, and therefore
+      no way for the two to disagree.
+    */
+    const { bluePickSlots, redPickSlots, blueBans, redBans } = slots
+
+    const setBluePickSlots = useCallback(
+        (next: SetStateAction<PickSlot[]>) =>
+            onSlotsChange((current) => ({
+                ...current,
+                bluePickSlots:
+                    typeof next === "function" ? next(current.bluePickSlots) : next,
+            })),
+        [onSlotsChange],
+    )
+    const setRedPickSlots = useCallback(
+        (next: SetStateAction<PickSlot[]>) =>
+            onSlotsChange((current) => ({
+                ...current,
+                redPickSlots: typeof next === "function" ? next(current.redPickSlots) : next,
+            })),
+        [onSlotsChange],
+    )
+    const setBlueBans = useCallback(
+        (next: SetStateAction<string[]>) =>
+            onSlotsChange((current) => ({
+                ...current,
+                blueBans: typeof next === "function" ? next(current.blueBans) : next,
+            })),
+        [onSlotsChange],
+    )
+    const setRedBans = useCallback(
+        (next: SetStateAction<string[]>) =>
+            onSlotsChange((current) => ({
+                ...current,
+                redBans: typeof next === "function" ? next(current.redBans) : next,
+            })),
+        [onSlotsChange],
+    )
     const [excludeBans, setExcludeBans] = useState(true)
     const [minGames, setMinGames] = useState(5)
     const [recommendationSide, setRecommendationSide] = useState<DraftVisualSide>("blue")
@@ -1065,18 +1130,32 @@ export function DraftHelper({ matches }: DraftHelperProps) {
         [bluePickSlots, redPickSlots],
     )
 
+    /*
+      THE ONE BOARD. `DraftHelper` keeps five bans and five pick slots per side;
+      `DRAFT_FLOW` describes exactly those twenty positions, so this reads the
+      state it already has into the domain shape instead of storing it twice.
+
+      Everything below - the two display sets and the duplicate guard in
+      `applyChampionToSlot` - is derived from THIS, so the champion grid can no
+      longer grey out a different set than the board actually refuses.
+    */
+    const draftBoard = useMemo(
+        () => draftBoardFromSlots({ bluePickSlots, redPickSlots, blueBans, redBans }),
+        [bluePickSlots, redPickSlots, blueBans, redBans],
+    )
+
     const selectedChampionSet = useMemo(() => {
-        return new Set(
-            [...bluePickSlots, ...redPickSlots]
-                .map((slot) => slot.championName)
-                .filter(Boolean)
-                .map((name) => normalizeChampionName(name)),
+        return takenChampionKeys(
+            draftBoard.filter((slot) => slot.action === "pick"),
         )
-    }, [bluePickSlots, redPickSlots])
+    }, [draftBoard])
 
     const bannedChampionSet = useMemo(() => {
-        return new Set([...allBans.map((name) => normalizeChampionName(name)), ...fearlessChampionSet])
-    }, [allBans, fearlessChampionSet])
+        return new Set([
+            ...takenChampionKeys(draftBoard.filter((slot) => slot.action === "ban")),
+            ...fearlessChampionSet,
+        ])
+    }, [draftBoard, fearlessChampionSet])
 
     const pickedChampions = useMemo(() => {
         return [...bluePickSlots, ...redPickSlots]
@@ -1376,9 +1455,21 @@ export function DraftHelper({ matches }: DraftHelperProps) {
     }
 
     function applyChampionToSlot(slot: ActiveDraftSlot, championName: string, roleOverride?: Role | null) {
-        const championKey = normalizeChampionName(championName)
+        /*
+          THE DUPLICATE GUARD, now the tested domain rule rather than a local
+          `Set.has`. `isChampionTaken` compares through `championIdentityKey`, so
+          `Kai'Sa` already on the board blocks `KaiSa` from a recommendation -
+          which the old `trim().toLowerCase()` basis let through as a second
+          champion. Measured over the catalogue: 19 champions differ that way,
+          and no two DIFFERENT champions are ever merged by either rule.
 
-        if (fearlessChampionSet.has(championKey) || selectedChampionSet.has(championKey) || bannedChampionSet.has(championKey)) {
+          Fearless stays a separate check: it bans champions from EARLIER games
+          in the series, which are not on this board at all.
+        */
+        if (
+            fearlessChampionSet.has(draftAvailabilityKey(championName)) ||
+            isChampionTaken(draftBoard, championName)
+        ) {
             return
         }
 

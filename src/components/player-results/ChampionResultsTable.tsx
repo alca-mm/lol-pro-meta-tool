@@ -86,27 +86,65 @@ export function ChampionResultsTable({ matches }: Props) {
                     <table className="stats-table" style={{ fontSize: "0.8rem" }}>
                         <thead>
                             <tr>
+                                {/*
+                                  THE SORT CONTROL IS THE BUTTON, NOT THE CELL.
+
+                                  Until 0.7.10 the `onClick` sat on the `<th>`
+                                  itself with a `cursor: pointer` to advertise
+                                  it. A table header is not focusable and answers
+                                  to no key, so sorting this table was impossible
+                                  without a mouse. Same defect the champion stats
+                                  table had, found by the same sweep.
+
+                                  A real `<button>` in the cell rather than
+                                  `role="button"` plus `tabIndex` on the `<th>`:
+                                  the browser supplies focus, Enter and Space,
+                                  and the header keeps its `columnheader`
+                                  semantics, which `role="button"` would have
+                                  replaced.
+
+                                  `aria-sort` belongs on the `<th>`, never on the
+                                  button inside it - ARIA defines it only for
+                                  `columnheader`/`rowheader`/`gridcell`, so on a
+                                  button it is silently dropped. That is the
+                                  0.7.9 lesson from ChampionStatsTable, applied
+                                  here before it could be repeated.
+
+                                  The cell gives up its padding to the button so
+                                  the click target stays the whole header, not
+                                  just the text.
+                                */}
                                 {COLUMNS.map((col) => (
                                     <th
                                         key={col.key}
                                         title={col.titleKey ? t(col.titleKey) : undefined}
                                         className={col.numeric ? "numeric" : undefined}
+                                        aria-sort={
+                                            sortKey === col.key
+                                                ? (sortAsc ? "ascending" : "descending")
+                                                : "none"
+                                        }
                                         style={{
                                             ...thStyle,
-                                            cursor: "pointer",
+                                            padding: 0,
                                             userSelect: "none",
                                             color: sortKey === col.key
                                                 ? "var(--text)"
                                                 : "var(--text-dim)",
                                         }}
-                                        onClick={() => handleSort(col.key)}
                                     >
-                                        {col.label}
-                                        {sortKey === col.key && (
-                                            <span style={{ marginLeft: "0.2em" }}>
-                                                {sortAsc ? "▲" : "▼"}
-                                            </span>
-                                        )}
+                                        <button
+                                            type="button"
+                                            className="results-sort-btn"
+                                            onClick={() => handleSort(col.key)}
+                                        >
+                                            {col.label}
+                                            {sortKey === col.key && (
+                                                <span style={{ marginLeft: "0.2em" }}>
+                                                    {sortAsc ? "▲" : "▼"}
+                                                </span>
+                                            )}
+                                        </button>
                                     </th>
                                 ))}
                             </tr>

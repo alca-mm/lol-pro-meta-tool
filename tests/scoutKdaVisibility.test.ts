@@ -27,6 +27,15 @@
  *     candidate's global `targetPlayerId` KDA shows B a number B never posted.
  *     `ScoutBanRow` therefore takes `forPlayerId`, both per-player call sites
  *     pass it, and the team-wide list deliberately does not.
+ *  6. and, since that is the same guarantee seen from the other side: ONE
+ *     candidate, ONE full ban row. 0.7.4 removed four groupings that rendered
+ *     the same candidates again, 0.7.6 added a second filter above the one
+ *     surviving list without adding a list, and 0.8.2 added a third (the live
+ *     draft) with the same rule: it takes rows away, it never adds a list.
+ *     Three numbers hold that: the ban
+ *     panel contains one `<ScoutBanRow` FILE-WIDE (not just inside the panel
+ *     function), counted in both JSX forms (not just self-closing), and its one
+ *     row helper is called twice - once per half of the split list.
  *
  * WHAT THIS FILE CAN AND CANNOT PROVE
  *
@@ -283,11 +292,68 @@ const paragraphOpenCount = (body: string): number => body.match(/<p\b/g)?.length
  * Every call site checked here is self-closing, and the lazy `[^>]*?` stops at
  * the first `/>` — so a run of sibling elements comes back as separate matches
  * and each one can be asked about its own props. Attributes spanning lines are
- * fine; an attribute containing a literal `>` (an arrow function, say) is not,
- * and the element-count assertions would notice.
+ * fine; an attribute containing a literal `>` (an arrow function, say) is not.
+ *
+ * IT DOES NOT SEE `<Tag …></Tag>`, and that blind spot is asymmetric in the
+ * dangerous direction. REWRITING the one existing row into the paired form
+ * drops the count to 0 and every assertion goes red, loudly. ADDING a second
+ * row in the paired form leaves the count at 1 and `[0]` still pointing at the
+ * correct element — the file has two full ban rows and nothing says so. Hence
+ * `jsxOpenCount` below: this function stays because it is the only one that can
+ * read an element's props, and the raw count stands beside it to bound how many
+ * elements there were to read. Same pairing, same reason, as
+ * `paragraphElements` / `paragraphOpenCount`.
  */
 const jsxElements = (body: string, tag: string): string[] =>
     body.match(new RegExp(`<${tag}\\b[^>]*?/>`, "g")) ?? []
+
+/**
+ * Raw `<Tag` count, used to cross-check the element parser above.
+ *
+ * Counts OPENINGS in both JSX forms and is not fooled by either: `</Tag>` has a
+ * slash between `<` and the name, so a paired element contributes exactly one,
+ * the same as a self-closing one. Whenever this and `jsxElements(...).length`
+ * disagree, an element exists that the prop assertions never looked at.
+ */
+const jsxOpenCount = (body: string, tag: string): number =>
+    body.match(new RegExp(`<${tag}\\b`, "g"))?.length ?? 0
+
+/**
+ * How often a local render helper is CALLED - `name(`, never `name = (`.
+ *
+ * The element count above answers "how many render sites are written", which is
+ * a different question from "how many lists does the panel put on screen". A
+ * helper that renders a full `<ol>` of ban rows is one render site however often
+ * it is called, so a loop that calls it once per phase brings back the 0.7.4
+ * duplication - four full rows for one champion - with every element assertion
+ * still green.
+ *
+ * Premise, and the one shape this reads differently: a helper declared as
+ * `function teamRows(items)` would count its own declaration. The panel's helper
+ * is a `const` arrow (`const teamRows = (items) =>`), where the `= ` keeps the
+ * declaration out, and the caller asserts that shape is still there.
+ */
+const renderHelperCallCount = (body: string, name: string): number =>
+    body.match(new RegExp(`\\b${name}\\s*\\(`, "g"))?.length ?? 0
+
+/**
+ * Does this body take the draft's champions out of the ban plan (0.8.2)?
+ *
+ * The whole call, and specifically its FIRST argument: `ranked`. The step is a
+ * visibility filter that has to sit between the ranking and the two chips, and
+ * an identifier alone proves none of that — `filterAvailableBanCandidates` also
+ * stands in the panel's import line, the same vacuity trap that has caught
+ * `scoutBanPhaseKey`, `scoutPluralMessage` and `banPhaseFilterOptions` in this
+ * module already.
+ *
+ * `draftBoard ?? []` is pinned with it because the fallback IS the promise that
+ * the scout tab keeps working with no draft open, rather than treating every
+ * candidate as taken.
+ */
+const filtersByDraftAvailability = (body: string): boolean =>
+    /const\s+available\s*=\s*filterAvailableBanCandidates\(\s*ranked\s*,\s*draftBoard\s*\?\?\s*\[\]\s*,/.test(
+        body,
+    )
 
 /** The `muted scout-signal-facts` spans — a row's one run of numbers. */
 const factsSpanElements = (body: string): string[] =>
@@ -732,6 +798,50 @@ describe("source scanner", () => {
         expect(jsxElements(body, "BanGroup")).toEqual([])
         expect(factsSpanElements(body)).toHaveLength(1)
         expect(factsSpanElements(body)[0]).toContain("KDA 3.2")
+        // The element parser bounds itself: two elements written, two read.
+        expect(jsxOpenCount(body, "ScoutBanRow")).toBe(rows.length)
+    })
+
+    it("counts a paired <Tag></Tag> that the element parser cannot read", () => {
+        // The new half of the scan, and the whole reason it exists: `jsxElements`
+        // is blind to the paired form, so ADDING a row that way keeps its count
+        // at 1 while the file renders two. Only the raw opening count sees it.
+        const body = [
+            '<ol className="scout-ban-list">',
+            "  <ScoutBanRow candidate={a} rank={1} />",
+            "  <ScoutBanRow candidate={b} rank={2}></ScoutBanRow>",
+            "</ol>",
+        ].join("\n")
+
+        expect(
+            jsxElements(body, "ScoutBanRow"),
+            "jsxElements now reads the paired form too - the raw-count cross-check has " +
+                "become redundant, which is good news, but say so before deleting it.",
+        ).toHaveLength(1)
+        expect(
+            jsxOpenCount(body, "ScoutBanRow"),
+            "jsxOpenCount misses the paired form as well - the two counts would agree on 1 " +
+                "and a second full ban row could be added in silence.",
+        ).toBe(2)
+        // A closing tag must not inflate the count, or every paired element
+        // would read as two and the cross-check would false-red on correct code.
+        expect(jsxOpenCount("<ScoutBanRow a={1}></ScoutBanRow>", "ScoutBanRow")).toBe(1)
+        expect(jsxOpenCount(body, "BanGroup")).toBe(0)
+    })
+
+    it("counts calls to a render helper without counting its definition", () => {
+        const body = [
+            "const teamRows = (items) => (<ol>{items}</ol>)",
+            "return (<div>{teamRows(visible)}{teamRows(collapsed)}</div>)",
+        ].join("\n")
+
+        expect(renderHelperCallCount(body, "teamRows")).toBe(2)
+        expect(
+            renderHelperCallCount("const teamRows = (items) => null", "teamRows"),
+            "the `const name = (` declaration is being counted as a call - the expected " +
+                "call count in section 1b would be off by one and mean nothing.",
+        ).toBe(0)
+        expect(renderHelperCallCount("return <div/>", "teamRows")).toBe(0)
     })
 
     it("finds paragraph elements and counts the raw openings", () => {
@@ -928,6 +1038,182 @@ describe("the guards catch the mutations they exist for", () => {
         const teamWide = "<ScoutBanRow candidate={candidate} rank={index + 1} forPlayerId={player.playerId} />"
 
         expect(jsxElements(teamWide, "ScoutBanRow").some(passesForPlayerId)).toBe(true)
+    })
+
+    /* ----------------------------------------------------------------------
+     * The three ways a second full ban row gets back into the panel without
+     * any element assertion noticing. All three keep `jsxElements(panelBody,
+     * "ScoutBanRow")` at exactly one correct element, which is precisely why
+     * the count alone was never the guarantee it read as.
+     * ---------------------------------------------------------------------- */
+
+    /** (a) A second row, written in the form the element parser cannot read. */
+    const SECOND_ROW_PAIRED = [
+        "export function ScoutBanPlanPanel({ analysis }) {",
+        "    const teamRows = (items) => (",
+        '        <ol className="scout-ban-list">',
+        "            {items.map((entry) => (",
+        "                <ScoutBanRow candidate={entry.candidate} rank={entry.rank} />",
+        "            ))}",
+        "            {overlapBans.map((entry) => (",
+        "                <ScoutBanRow candidate={entry.candidate} rank={entry.rank}></ScoutBanRow>",
+        "            ))}",
+        "        </ol>",
+        "    )",
+        "    return <div>{teamRows(prioritized.visible)}{teamRows(prioritized.collapsed)}</div>",
+        "}",
+        "",
+    ].join("\n")
+
+    it("catches a second ban row added as <ScoutBanRow></ScoutBanRow>", () => {
+        const body = functionBody(SECOND_ROW_PAIRED, "ScoutBanPlanPanel")
+
+        expect(body, "the fixture's own body was not sliced").toContain("scout-ban-list")
+        // The count assertion is fully satisfied, and `[0]` is even the right
+        // element - so every prop check on it passes too.
+        expect(jsxElements(body, "ScoutBanRow")).toHaveLength(1)
+        expect(passesForPlayerId(jsxElements(body, "ScoutBanRow")[0])).toBe(false)
+        expect(
+            jsxOpenCount(body, "ScoutBanRow"),
+            "jsxOpenCount agrees with jsxElements on a body that renders the overlap bans as " +
+                "a second list of full rows - the 0.7.4 duplication would be back and the " +
+                "element count would call it one row.",
+        ).toBe(2)
+    })
+
+    /** (b) A second row inside a new component AFTER the panel's closing brace. */
+    const SECOND_ROW_MODULE_LEVEL = [
+        'import { ScoutBanRow } from "./ScoutShared"',
+        "",
+        "export function ScoutBanPlanPanel({ analysis }) {",
+        "    const teamRows = (items) => (",
+        '        <ol className="scout-ban-list">',
+        "            {items.map((entry) => (",
+        "                <ScoutBanRow candidate={entry.candidate} rank={entry.rank} />",
+        "            ))}",
+        "        </ol>",
+        "    )",
+        "    return (",
+        "        <div>",
+        '            <h3>{t("scout_teamPlanTitle")}</h3>',
+        "            {teamRows(prioritized.visible)}",
+        "            <BanPhaseGroup items={byPhase.safe} />",
+        "        </div>",
+        "    )",
+        "}",
+        "",
+        "function BanPhaseGroup({ items }) {",
+        "    return (",
+        "        <ol>",
+        "            {items.map((entry) => (",
+        "                <ScoutBanRow candidate={entry.candidate} rank={entry.rank} />",
+        "            ))}",
+        "        </ol>",
+        "    )",
+        "}",
+        "",
+    ].join("\n")
+
+    it("catches a ban row moved into a component beside the panel", () => {
+        const body = functionBody(SECOND_ROW_MODULE_LEVEL, "ScoutBanPlanPanel")
+
+        expect(body, "the fixture's own body was not sliced").toContain("scout_teamPlanTitle")
+        // Scoped to the panel body the file looks untouched: one row, no player
+        // claimed, and the new component is out of frame entirely.
+        expect(jsxElements(body, "ScoutBanRow")).toHaveLength(1)
+        expect(jsxOpenCount(body, "ScoutBanRow")).toBe(1)
+        expect(
+            jsxElements(SECOND_ROW_MODULE_LEVEL, "ScoutBanRow"),
+            "the file-wide scan sees only one ScoutBanRow although a second component renders " +
+                "one - a phase grouping could be reintroduced on module level and every " +
+                "body-scoped assertion would stay green.",
+        ).toHaveLength(2)
+        expect(jsxOpenCount(SECOND_ROW_MODULE_LEVEL, "ScoutBanRow")).toBe(2)
+    })
+
+    /** (c) The same one render site, called once per phase. */
+    const ROW_HELPER_CALLED_PER_PHASE = [
+        "export function ScoutBanPlanPanel({ analysis }) {",
+        "    const teamRows = (items) => (",
+        '        <ol className="scout-ban-list">',
+        "            {items.map((entry) => (",
+        "                <ScoutBanRow candidate={entry.candidate} rank={entry.rank} />",
+        "            ))}",
+        "        </ol>",
+        "    )",
+        "    return (",
+        "        <div>",
+        "            {teamRows(prioritized.visible)}",
+        "            {teamRows(prioritized.collapsed)}",
+        "            {PHASES.map((phase) => teamRows(byPhase[phase]))}",
+        "        </div>",
+        "    )",
+        "}",
+        "",
+    ].join("\n")
+
+    it("catches the row helper being called once per phase", () => {
+        const body = functionBody(ROW_HELPER_CALLED_PER_PHASE, "ScoutBanPlanPanel")
+
+        expect(body, "the fixture's own body was not sliced").toContain("scout-ban-list")
+        // BOTH element counts are blind here, and correctly so: there really is
+        // one render site. The panel still puts three lists on screen, and a
+        // champion that lands in a phase is rendered twice with two copies of
+        // its reasons - the defect 0.7.4 removed.
+        expect(jsxElements(body, "ScoutBanRow")).toHaveLength(1)
+        expect(jsxOpenCount(body, "ScoutBanRow")).toBe(1)
+        expect(
+            renderHelperCallCount(body, "teamRows"),
+            "renderHelperCallCount does not see the per-phase loop - a row helper called " +
+                "three times renders three lists, and nothing else in this file counts them.",
+        ).toBe(3)
+    })
+
+    /**
+     * (d) The 0.8.2 step, and the three ways it half-happens.
+     *
+     * A predicate that fires on the import line would call every one of these
+     * "wired" — which is the same vacuity that let a review delete the collapse
+     * logic from ScoutShared.tsx and keep 2410 tests green.
+     */
+    it("catches a draft-availability step that is not the one the panel needs", () => {
+        const real = [
+            "    const ranked = rankBanCandidates(banPlan.prioritizedBans)",
+            "    const available = filterAvailableBanCandidates(",
+            "        ranked,",
+            "        draftBoard ?? [],",
+            "        (entry) => entry.candidate.championName,",
+            "    )",
+        ].join("\n")
+
+        expect(
+            filtersByDraftAvailability(real),
+            "the predicate does not read the real four-line call - as a guard it would be " +
+                "red on correct code and teach that the guard is the thing in the way.",
+        ).toBe(true)
+
+        expect(
+            filtersByDraftAvailability(
+                'import { filterAvailableBanCandidates } from "../../draft/draftAvailability"',
+            ),
+            "the import line satisfies the predicate - the panel could stop filtering by the " +
+                "draft entirely and stay green.",
+        ).toBe(false)
+        expect(
+            filtersByDraftAvailability(
+                "const available = filterAvailableBanCandidates(banPlan.prioritizedBans, draftBoard ?? [], nameOf)",
+            ),
+            "filtering BEFORE the rank satisfies the predicate - a champion the draft took " +
+                "would renumber every remaining ban, and '#7' would stop meaning 'seventh most " +
+                "important ban overall'.",
+        ).toBe(false)
+        expect(
+            filtersByDraftAvailability(
+                "const available = filterAvailableBanCandidates(ranked, [], nameOf)",
+            ),
+            "a hard-coded empty board satisfies the predicate - the draft would never reach " +
+                "the plan and the whole step would be inert.",
+        ).toBe(false)
     })
 
     it("catches a KDA segment rendered without its null guard", () => {
@@ -1290,6 +1576,13 @@ describe("every per-player ban list names its player", () => {
 
         expect(rows, "expected exactly one ScoutBanRow in ScoutAnalysisPanel.tsx").toHaveLength(1)
         expect(
+            jsxOpenCount(analysisPanel, "ScoutBanRow"),
+            `ScoutAnalysisPanel.tsx opens ${jsxOpenCount(analysisPanel, "ScoutBanRow")} ` +
+                `ScoutBanRow elements but ${rows.length} could be read for their props. The ` +
+                "unread one is written as `<ScoutBanRow …></ScoutBanRow>`, so nothing above " +
+                "checked whether it names its player.",
+        ).toBe(rows.length)
+        expect(
             rows[0],
             "the player card renders ScoutBanRow without forPlayerId. The card IS one " +
                 "player, and an overlap ban lands in several cards - so every card would " +
@@ -1310,6 +1603,129 @@ describe("every per-player ban list names its player", () => {
         ).toBe(false)
     })
 
+    it("renders exactly one full ban row in the whole file, in either JSX form", () => {
+        // THREE counts, because "one candidate, one row" can break in three
+        // places and each of the first two would have read as fine:
+        //
+        //  - the body count is scoped to ScoutBanPlanPanel, and the import
+        //    block and everything after the panel's closing brace lie outside
+        //    it. A `BanPhaseGroup` component at the end of the file is where a
+        //    reintroduced grouping would naturally land, and the body count
+        //    cannot see it.
+        //  - the file count reads the same self-closing form, so a row ADDED as
+        //    `<ScoutBanRow …></ScoutBanRow>` leaves it at 1.
+        //  - the raw opening count sees both forms and bounds the other two.
+        const inBody = jsxElements(panelBody, "ScoutBanRow").length
+        const inFile = jsxElements(banPlan, "ScoutBanRow").length
+        const openings = jsxOpenCount(banPlan, "ScoutBanRow")
+
+        expect(inBody, "no ScoutBanRow inside ScoutBanPlanPanel at all").toBe(1)
+        expect(
+            inFile,
+            `ScoutBanPlanPanel.tsx renders ${inFile} ScoutBanRow elements, expected 1. A ` +
+                "second one outside the panel function - a helper component beside it, say - " +
+                "is a second list of full ban rows: the same candidate under its phase AND " +
+                "in the prioritised list, with two copies of its reasons. That is exactly " +
+                "the duplication 0.7.4 removed.",
+        ).toBe(1)
+        expect(
+            openings,
+            `ScoutBanPlanPanel.tsx opens ${openings} ScoutBanRow elements but only ${inFile} ` +
+                "are self-closing. A row written as `<ScoutBanRow …></ScoutBanRow>` is " +
+                "invisible to every other assertion in this file: the count stays at 1 and " +
+                "the props that are checked belong to the other row.",
+        ).toBe(inFile)
+    })
+
+    it("calls its one row helper exactly twice, once per half of the split list", () => {
+        // The render site is inside `teamRows`, so calling it more often does
+        // not change ANY count above - and a call per phase is the 0.7.4
+        // grouping back in full: one champion under "Sicher", in the overlap
+        // list, under every player it hits, each time with its own reasons.
+        const calls = renderHelperCallCount(panelBody, "teamRows")
+
+        expect(
+            panelBody,
+            "ScoutBanPlanPanel no longer defines `const teamRows = (`. If the row helper was " +
+                "renamed, rename it here too; if it was inlined, the call count below has to " +
+                "be replaced by whatever now bounds the number of lists - do not drop it.",
+        ).toContain("const teamRows = (")
+        expect(
+            calls,
+            `ScoutBanPlanPanel calls teamRows() ${calls} times, expected 2: the visible half ` +
+                "of the split list and the collapsed half inside the <details>. Both halves " +
+                "are the SAME list, which is why two calls are still one list. A third call " +
+                "puts a second list of full ban rows on screen, and a call inside a loop over " +
+                "the phases restores 0.7.4 exactly - up to four full rows for one champion. " +
+                "The element counts cannot see either: there is still only one render site.",
+        ).toBe(2)
+    })
+
+    it("the overlap toggle narrows the one list instead of opening a second", () => {
+        // 0.7.6 added a second filter above the same list. Both controls feed
+        // ONE `filterBans` call whose result is split once and rendered by the
+        // one row helper, so the three numbers pinned above are unchanged by the
+        // feature - which is the claim this test makes, and it is only worth
+        // anything while the feature is actually present.
+        //
+        // Since 0.8.2 both start from `available` rather than `ranked`: the
+        // draft takes candidates out of the plan BEFORE either control counts,
+        // so a chip cannot promise a number the list has already lost.
+        expect(
+            panelBody,
+            "ScoutBanPlanPanel does not call filterBans(available, phaseFilter, overlapOnly). " +
+                "Either the overlap toggle is gone, or it stopped combining with the phase " +
+                "chips, or it is sieving `ranked` again and the list now contains champions " +
+                "the draft has already taken - and if it builds a list of its own, the guards " +
+                "below are being asked about the wrong panel.",
+        ).toMatch(/filterBans\(\s*available\s*,\s*phaseFilter\s*,\s*overlapOnly\s*\)/)
+        expect(
+            panelBody,
+            "the overlap chip no longer counts through banOverlapFilterOption(available, " +
+                "phaseFilter, overlapOnly) - a chip counting from a second source is how it " +
+                "starts promising a number the list does not show, and counting from `ranked` " +
+                "makes the draft exactly that second source.",
+        ).toMatch(/banOverlapFilterOption\(\s*available\s*,\s*phaseFilter\s*,\s*overlapOnly\s*\)/)
+        // And with it in place, nothing about the rendering changed.
+        expect(
+            jsxOpenCount(banPlan, "ScoutBanRow"),
+            "the overlap toggle brought a second ScoutBanRow render site with it. It is a " +
+                "FILTER over the prioritised list: it must narrow which candidates are shown, " +
+                "never open the separate overlap list 0.7.4 deleted.",
+        ).toBe(1)
+        expect(
+            renderHelperCallCount(panelBody, "teamRows"),
+            "the overlap toggle added a call to the row helper - the overlap bans are being " +
+                "rendered as their own list again instead of narrowing the one list.",
+        ).toBe(2)
+    })
+
+    it("der Draft nimmt Zeilen weg, er legt keine zweite Liste an", () => {
+        // 0.8.2 blendet Champions aus, die im laufenden Draft schon gepickt
+        // oder gebannt sind. Das ist ein FILTER wie die beiden davor: er darf
+        // die Menge der gezeigten Kandidaten verkleinern, aber weder eine
+        // zweite Liste ("schon weg") noch eine zweite Renderstelle anlegen. Ein
+        // Panel, das die genommenen Bans durchgestrichen unter der Liste noch
+        // einmal rendert, brauchte dafuer genau einen dritten teamRows-Aufruf.
+        expect(
+            filtersByDraftAvailability(panelBody),
+            "ScoutBanPlanPanel does not run the draft-availability step on `ranked` with " +
+                "`draftBoard ?? []`. Either the ban plan recommends champions the draft has " +
+                "already taken, or the step moved somewhere it renumbers the ranks.",
+        ).toBe(true)
+        expect(
+            jsxOpenCount(banPlan, "ScoutBanRow"),
+            "the draft filter brought a second ScoutBanRow render site with it - most likely " +
+                "a list of the candidates it removed. It is VISIBILITY ONLY: it takes rows " +
+                "away, it never adds a list.",
+        ).toBe(1)
+        expect(
+            renderHelperCallCount(panelBody, "teamRows"),
+            "the draft filter added a call to the row helper - the taken candidates are being " +
+                "rendered as a list of their own instead of simply being gone.",
+        ).toBe(2)
+    })
+
     it("renders no per-player ban row at all any more", () => {
         // BanGroup used to repeat the prioritised candidates under each phase,
         // under "hits several players" and under every player they hit. A
@@ -1318,6 +1734,12 @@ describe("every per-player ban list names its player", () => {
         // player's KDA" is gone from here by construction rather than by care.
         expect(banPlan, "BanGroup is back").not.toContain("function BanGroup")
         expect(jsxElements(banPlan, "BanGroup"), "a BanGroup is being rendered again").toEqual([])
+        expect(
+            jsxOpenCount(banPlan, "BanGroup"),
+            "a BanGroup is being rendered again as `<BanGroup …></BanGroup>`, which the " +
+                "element parser above does not read - the assertion beside this one was green " +
+                "on it.",
+        ).toBe(0)
     })
 
     it("keeps the per-player section to champion names, not ban rows", () => {
@@ -1329,6 +1751,15 @@ describe("every per-player ban list names its player", () => {
             jsxElements(panelBody, "ScoutBanRow"),
             "the panel renders more than the one team-wide ban row",
         ).toHaveLength(1)
+        // The per-player section is the place a full row would most plausibly
+        // be reinstated, and a paired `<ScoutBanRow></ScoutBanRow>` there would
+        // leave the count above at 1.
+        expect(
+            jsxOpenCount(panelBody, "ScoutBanRow"),
+            "the panel opens a ScoutBanRow the element parser cannot read - most likely a " +
+                "full row back under each player, which is both the duplication and the " +
+                "KDA-attribution trap this section exists to stop.",
+        ).toBe(1)
     })
 })
 
@@ -1580,7 +2011,24 @@ describe("the two row-value keys are actually used", () => {
     const files = readdirSync(SRC_DIR, { recursive: true, encoding: "utf8" })
         .map((entry) => entry.split(sep).join("/"))
         .filter((entry) => /\.(ts|tsx)$/.test(entry) && !entry.startsWith("i18n/"))
-    const text = files.map((file) => readSource(file)).join("\n")
+    /**
+     * Comments stripped, like every other scan in this file.
+     *
+     * This was the one read that skipped `stripComments`, and it is the read
+     * where a comment counts in the WRONG direction: the other scans ask "is a
+     * forbidden pattern written", where prose quoting the mistake is a false
+     * red; this one asks "is the key still read", where prose MENTIONING the key
+     * is a false green. A JSDoc line saying "used to go through
+     * scout_kdaValue" would keep this section green for a key nothing renders
+     * any more - the same shape as the `dh_games` coupling CLAUDE.md documents
+     * under "Quelltext-Scanner in Tests".
+     *
+     * Harmless today: both keys currently appear in real calls in
+     * scoutUiHelpers.ts and in no comment anywhere under src/, so stripping
+     * changes no verdict here. It is the next comment that this pays for, and
+     * the scanner self-test below proves the strip actually bites.
+     */
+    const text = files.map((file) => stripComments(readSource(file))).join("\n")
 
     it("scanned a plausible source tree", () => {
         // Without this the assertion below passes vacuously the day the scan
@@ -1589,6 +2037,30 @@ describe("the two row-value keys are actually used", () => {
         // look alive, and that is the silent direction.
         expect(files.length, "src/ scan found almost no TypeScript files").toBeGreaterThan(50)
         expect(text, "src/ scan found no scout_title reference at all").toContain("scout_title")
+    })
+
+    it("does not count a key that only survives in a comment", () => {
+        // Both directions pinned, because one alone proves nothing: the raw
+        // text MUST contain the key (otherwise the fixture is not exercising
+        // anything) and the stripped text MUST NOT (otherwise the strip is
+        // inert and a deleted call site would still read as wired).
+        const commentOnly = [
+            "/** Formerly rendered through scout_kdaValue. */",
+            "export const scoutKdaLabel = () => null",
+            "const legacy = 1 // scout_banPriorityValue was read here",
+        ].join("\n")
+
+        expect(commentOnly).toContain("scout_kdaValue")
+        expect(commentOnly).toContain("scout_banPriorityValue")
+        expect(
+            stripComments(commentOnly),
+            "stripComments leaves a key mentioned in a JSDoc block behind - a key nothing " +
+                "renders any more would still count as referenced.",
+        ).not.toContain("scout_kdaValue")
+        expect(
+            stripComments(commentOnly),
+            "stripComments leaves a key mentioned in a line comment behind.",
+        ).not.toContain("scout_banPriorityValue")
     })
 
     it("is referenced from src/ outside the catalogues", () => {

@@ -11,7 +11,7 @@ einer offen genannten Datenquelle stammen oder die du selbst eingetragen hast. E
 fremden Webseiten aus, es rät keine fehlenden Werte, und wo eine Aussage auf einer dünnen
 Stichprobe steht, sagt es das dazu.
 
-Aktueller Stand: **0.7.5**.
+Aktueller Stand: **0.8.2**.
 
 ---
 
@@ -268,7 +268,7 @@ npm run build
 npm run check:dist
 ```
 
-Stand 0.7.5: **76 Testdateien, 2600 Tests**, alle grün.
+Stand 0.8.2: **85 Testdateien, 3014 Tests**, alle grün.
 
 Zwei Dinge, die man beim Lesen der Tests wissen muss:
 

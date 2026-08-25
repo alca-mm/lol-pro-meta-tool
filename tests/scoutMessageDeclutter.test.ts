@@ -8,6 +8,7 @@ import {
   SCOUT_REASON_PREVIEW_COUNT,
   banPhaseFilterOptions,
   fillPlaceholders,
+  filterBans,
   filterBansByPhase,
   isBanPhaseFilterEnabled,
   rankBanCandidates,
@@ -55,12 +56,117 @@ const read = (path: string): string => stripComments(readFileSync(path, "utf8"))
 /** The raw file, for the rare assertion that really is about the whole text. */
 const readRaw = (path: string): string => readFileSync(path, "utf8")
 
+/** How often `needle` occurs. For guards that are about a COUNT, not presence. */
+const occurrences = (source: string, needle: string): number => source.split(needle).length - 1
+
+/**
+ * Jeder oeffnende `<tag …>` als EIN String, Zeilenumbrueche zu Leerzeichen
+ * normalisiert.
+ *
+ * Uebernommen aus tests/a11ySemantics.test.ts, wo derselbe Helfer aus genau
+ * diesem Grund steht: `role="group"` und `aria-label` einzeln ueber die ganze
+ * Datei zu suchen belegt NICHT, dass sie auf demselben Element stehen. Die
+ * Filtergruppe koennte namenlos bleiben, waehrend ein beliebiges anderes <div>
+ * beide Treffer liefert. Ein einzeiliges Regex taugt dafuer nicht, weil die
+ * Gruppen hier ueber vier Zeilen aufgeschrieben sind.
+ */
+function openingTags(source: string, tagName: string): string[] {
+  const found: string[] = []
+  for (const match of source.matchAll(new RegExp(`<${tagName}\\b`, "g"))) {
+    const from = match.index ?? 0
+    let index = from + match[0].length
+    let depth = 0
+    let quote: string | null = null
+    while (index < source.length) {
+      const character = source[index]
+      if (quote !== null) {
+        if (character === quote) quote = null
+      } else if (character === '"' || character === "'" || character === "`") {
+        quote = character
+      } else if (character === "{") {
+        depth += 1
+      } else if (character === "}") {
+        if (depth > 0) depth -= 1
+      } else if (character === ">" && depth === 0) {
+        break
+      }
+      index += 1
+    }
+    found.push(source.slice(from, Math.min(index + 1, source.length)).replace(/\s+/g, " ").trim())
+  }
+  return found
+}
+
+/**
+ * Der Quelltext GENAU EINES JSX-Elements: vom `<tag`, das `marker` traegt, bis
+ * zu dessen zugehoerigem `</tag>`.
+ *
+ * Ersetzt das frueher hier stehende 1400-Zeichen-Fenster. Diese Magic Number
+ * endete zufaellig kurz vor dem schliessenden `</div>` der Filtergruppe: waechst
+ * der Block um ein paar Zeilen, rutscht genau der Teil aus dem Fenster, den die
+ * Negativ-Assertions pruefen sollen, und der Guard wird still vakuos.
+ *
+ * Gibt bei einem fehlenden Marker den LEEREN String zurueck. Jeder Aufrufer muss
+ * das pruefen, sonst sind seine `not.toContain`-Assertions beweisfrei.
+ */
+function jsxElement(source: string, tagName: string, marker: string): string {
+  const markerAt = source.indexOf(marker)
+  if (markerAt < 0) return ""
+  const from = source.lastIndexOf(`<${tagName}`, markerAt)
+  if (from < 0) return ""
+  const scanner = new RegExp(`<${tagName}\\b|</${tagName}\\s*>`, "g")
+  scanner.lastIndex = from
+  let depth = 0
+  for (let hit = scanner.exec(source); hit !== null; hit = scanner.exec(source)) {
+    depth += hit[0].startsWith("</") ? -1 : 1
+    if (depth === 0) return source.slice(from, hit.index + hit[0].length)
+  }
+  return source.slice(from)
+}
+
+/**
+ * Der Rumpf der CSS-Regel, deren Selektorliste `selector` enthaelt.
+ *
+ * Noetig, weil `toContain(".foo::before")` nur belegt, dass die ZEICHENKETTE im
+ * CSS steht. Eine Regel mit leerem `content` oder ohne `content` haette den
+ * frueheren Guard erfuellt, und der Marker waere unsichtbar gewesen.
+ */
+const cssRuleBody = (css: string, selector: string): string => {
+  const at = css.indexOf(selector)
+  if (at < 0) return ""
+  const open = css.indexOf("{", at)
+  const close = css.indexOf("}", open)
+  if (open < 0 || close < 0) return ""
+  return css.slice(open + 1, close)
+}
+
 const IMPORT_PANEL = "src/components/scout/ScoutStatsImportPanel.tsx"
 const SHARED = "src/components/scout/ScoutShared.tsx"
 const INPUT_PANEL = "src/components/scout/ScoutInputPanel.tsx"
 const PLAYER_CARD = "src/components/scout/ScoutPlayerCard.tsx"
 const ANALYSIS_PANEL = "src/components/scout/ScoutAnalysisPanel.tsx"
 const BAN_PANEL = "src/components/scout/ScoutBanPlanPanel.tsx"
+
+/**
+ * Der VOLLSTAENDIGE Verfuegbarkeitsschritt des Ban-Panels (0.8.2).
+ *
+ * Als Regex und nicht als `toContain`, weil der Aufruf im Panel ueber vier
+ * Zeilen steht. Gepinnt wird nicht der Bezeichner, sondern was er filtert:
+ *
+ *  - `ranked` als ERSTES Argument. Steht dort `banPlan.prioritizedBans`, laeuft
+ *    die Verfuegbarkeit VOR dem Ranken und ein vom Draft genommener Champion
+ *    nummeriert die uebrigen um.
+ *  - `draftBoard ?? []` als zweites. Der Fallback IST die Zusage, dass ein
+ *    Scout-Tab ohne geoeffneten Draft weiterarbeitet, statt jeden Kandidaten
+ *    fuer genommen zu halten.
+ *
+ * Ein blosser Bezeichner taugt hier nicht: `filterAvailableBanCandidates` steht
+ * auch in der Importzeile, und genau diese Vakuositaetsfalle hat dieses Modul
+ * schon dreimal produziert (scoutBanPhaseKey, scoutPluralMessage,
+ * banPhaseFilterOptions).
+ */
+const AVAILABILITY_CALL =
+  /const\s+available\s*=\s*filterAvailableBanCandidates\(\s*ranked\s*,\s*draftBoard\s*\?\?\s*\[\]\s*,/
 
 const reason = (code: string): ScoutReason => ({ code }) as ScoutReason
 
@@ -396,8 +502,27 @@ describe("der Phasenfilter des Ban-Plans", () => {
   })
 
   describe("banPhaseFilterOptions", () => {
+    // Eine Liste MIT Mehrfach-Bans. PLAN hat keine, dort waere jede
+    // overlapOnly-Assertion nur "ueberall 0" und damit fast beweisfrei.
+    const MIXED = rankBanCandidates([
+      banOf("Ahri", "safe"),
+      candidate({
+        championName: "Zed",
+        phase: "safe",
+        isOverlap: true,
+        affectedPlayerIds: ["p1", "p2"],
+      }),
+      candidate({
+        championName: "Karma",
+        phase: "target",
+        isOverlap: true,
+        affectedPlayerIds: ["p1", "p3"],
+      }),
+      banOf("Yasuo", "situational"),
+    ])
+
     it("liefert alle vier in Anzeigereihenfolge, all zuerst", () => {
-      expect(banPhaseFilterOptions(rankBanCandidates(PLAN))).toEqual([
+      expect(banPhaseFilterOptions(rankBanCandidates(PLAN), false)).toEqual([
         { filter: "all", count: 5 },
         { filter: "safe", count: 2 },
         { filter: "target", count: 2 },
@@ -406,7 +531,7 @@ describe("der Phasenfilter des Ban-Plans", () => {
     })
 
     it("meldet eine leere Phase mit 0, statt sie wegzulassen", () => {
-      const options = banPhaseFilterOptions(rankBanCandidates([banOf("Ahri", "safe")]))
+      const options = banPhaseFilterOptions(rankBanCandidates([banOf("Ahri", "safe")]), false)
       expect(options.map((option) => option.filter)).toEqual([
         "all",
         "safe",
@@ -417,7 +542,19 @@ describe("der Phasenfilter des Ban-Plans", () => {
     })
 
     it("meldet bei leerem Plan viermal 0", () => {
-      expect(banPhaseFilterOptions([]).map((option) => option.count)).toEqual([0, 0, 0, 0])
+      expect(banPhaseFilterOptions([], false).map((option) => option.count)).toEqual([0, 0, 0, 0])
+    })
+
+    it("zaehlt bei gedruecktem Overlap-Regler nur noch die Mehrfach-Bans", () => {
+      // Der zweite Parameter ist seit 0.7.6 PFLICHT und bewusst nicht auf false
+      // gedefaultet: sonst verspricht ein Chip "Sicher: 2" und oeffnet eine
+      // Liste von einem. Ohne diesen Fall bliebe ein banPhaseFilterOptions, das
+      // seinen zweiten Parameter schlicht ignoriert, in allen anderen Tests
+      // dieser Datei gruen, weil die alle false uebergeben.
+      expect(banPhaseFilterOptions(MIXED, false).map((option) => option.count)).toEqual([
+        4, 2, 1, 1,
+      ])
+      expect(banPhaseFilterOptions(MIXED, true).map((option) => option.count)).toEqual([2, 1, 1, 0])
     })
 
     it("die Zahl auf dem Chip IST die Laenge der Liste, die er oeffnet", () => {
@@ -425,9 +562,18 @@ describe("der Phasenfilter des Ban-Plans", () => {
       // TeamBanPlan.phases und die Liste waere aus prioritizedBans gekommen:
       // zwei Quellen fuer eine Aussage, genau die Form von Defekt, die dieses
       // Modul schon zweimal produziert hat.
-      const ranked = rankBanCandidates(PLAN)
-      for (const option of banPhaseFilterOptions(ranked)) {
-        expect(filterBansByPhase(ranked, option.filter), option.filter).toHaveLength(option.count)
+      //
+      // Seit 0.7.6 gilt die Zusage in BEIDEN Reglerstellungen, und gemessen wird
+      // gegen `filterBans` — dieselbe Funktion, aus der das Panel die Liste
+      // baut. Gegen `filterBansByPhase` zu messen waere der Rueckfall in zwei
+      // Quellen: die Zahl beruecksichtigte den Overlap-Regler, die Liste nicht.
+      for (const overlapOnly of [false, true]) {
+        for (const option of banPhaseFilterOptions(MIXED, overlapOnly)) {
+          expect(
+            filterBans(MIXED, option.filter, overlapOnly),
+            `${option.filter} / overlapOnly=${overlapOnly}`,
+          ).toHaveLength(option.count)
+        }
       }
     })
   })
@@ -610,13 +756,95 @@ describe("diagnostic blocks are collapsed, not removed", () => {
     expect(source).toContain("scout-list-details")
   })
 
+  it("der Quelltext-Scanner selbst liest, was er zu lesen behauptet", () => {
+    // Selbsttest fuer die beiden Helfer, auf denen die Filter-Guards stehen.
+    // jsxElement() gibt bei einem fehlenden Marker den LEEREN String zurueck,
+    // und auf dem leeren String ist jedes `not.toContain` erfuellt: ein
+    // umbenanntes className wuerde die Element-Guards also nicht rot machen,
+    // sondern lautlos entwerten.
+    const sample = [
+      '<div className="a" role="group">',
+      '  <button type="button">x</button>',
+      "</div>",
+      '<div className="b"><span onClick={f}>y</span></div>',
+    ].join("\n")
+
+    expect(jsxElement(sample, "div", 'className="a"')).toContain("<button")
+    expect(jsxElement(sample, "div", 'className="a"')).not.toMatch(/<span[^>]*onClick/)
+    expect(jsxElement(sample, "div", 'className="b"')).toMatch(/<span[^>]*onClick/)
+    expect(jsxElement(sample, "div", 'className="gibtEsNicht"')).toBe("")
+
+    expect(openingTags(sample, "div")).toHaveLength(2)
+    expect(openingTags(sample, "div")[0]).toContain('role="group"')
+    expect(openingTags(sample, "div")[1]).not.toContain('role="group"')
+
+    // Und cssRuleBody liest den RUMPF, nicht nur den Selektor.
+    expect(cssRuleBody('.a::before,\n.b::before {\n  content: "x";\n}', ".b::before")).toContain(
+      'content: "x"',
+    )
+    expect(cssRuleBody(".a { color: red }", ".gibtEsNicht")).toBe("")
+  })
+
+  it("das Verfuegbarkeits-Muster erkennt genau den einen richtigen Aufruf", () => {
+    // Fixture-Selbsttest fuer AVAILABILITY_CALL, das mit 0.8.2 neu dazukommt.
+    // Ein Muster, das auf der Importzeile oder auf der falschen Eingabe
+    // anschlaegt, waere als Reihenfolge-Guard wertlos, und ein zu strenges
+    // wuerde bei einem Reformat rot ohne dass sich etwas geaendert haette.
+    const real = [
+      "    const available = filterAvailableBanCandidates(",
+      "        ranked,",
+      "        draftBoard ?? [],",
+      "        (entry) => entry.candidate.championName,",
+      "    )",
+    ].join("\n")
+    expect(AVAILABILITY_CALL.test(real), "das Muster liest den echten Aufruf nicht").toBe(true)
+    // Einzeilig geschrieben ebenfalls, sonst waere der Guard ein Formatwaechter.
+    expect(
+      AVAILABILITY_CALL.test(
+        "const available = filterAvailableBanCandidates(ranked, draftBoard ?? [], nameOf)",
+      ),
+    ).toBe(true)
+
+    // Und die drei Mutanten, die es fangen muss.
+    expect(
+      AVAILABILITY_CALL.test(
+        'import { filterAvailableBanCandidates } from "../../draft/draftAvailability"',
+      ),
+      "die Importzeile erfuellt das Muster - als Guard waere es vakuos",
+    ).toBe(false)
+    expect(
+      AVAILABILITY_CALL.test(
+        "const available = filterAvailableBanCandidates(banPlan.prioritizedBans, draftBoard ?? [], nameOf)",
+      ),
+      "die Verfuegbarkeit vor dem Ranken erfuellt das Muster - der Rang wuerde umnummeriert",
+    ).toBe(false)
+    expect(
+      AVAILABILITY_CALL.test(
+        "const available = filterAvailableBanCandidates(ranked, [], nameOf)",
+      ),
+      "ein fest leeres Board erfuellt das Muster - der Draft erreichte den Plan nie",
+    ).toBe(false)
+  })
+
   it("die Phasenanzeige sind echte Buttons, keine statische Textzeile", () => {
     // Bis 0.7.4 stand hier eine reine Zaehlzeile. Sie ist jetzt bedienbar, und
     // zwar als <button>: Tastatur, Fokus und Aktivierung kommen dann vom
     // Browser, nicht aus nachgebautem Klickverhalten auf einem <span>.
     const source = read(BAN_PANEL)
-    expect(source).toContain('role="group"')
-    expect(source).toContain('aria-label={t("scout_banPhaseFilterLabel")}')
+
+    // role und aria-label auf DEMSELBEN oeffnenden Tag. Als zwei getrennte
+    // toContain ueber die ganze Datei war das erfuellt, sobald die Attribute
+    // irgendwo standen: das Label haette auf der Overlap-Gruppe sitzen koennen
+    // und die Phasengruppe waere namenlos geblieben.
+    const groupTags = openingTags(source, "div").filter((tag) =>
+      tag.includes('className="scout-ban-phase-filter"'),
+    )
+    expect(groupTags, "die Phasen-Filtergruppe fehlt").toHaveLength(1)
+    expect(groupTags[0], "die Phasengruppe ist keine Gruppe mehr").toContain('role="group"')
+    expect(groupTags[0], "die Phasengruppe hat kein Label mehr").toContain(
+      'aria-label={t("scout_banPhaseFilterLabel")}',
+    )
+
     expect(source).toContain("onClick={() => setPhaseFilter(option.filter)}")
     expect(source, "die Phasenzeile ist wieder statisch").not.toContain(
       "scout-ban-phase-summary",
@@ -627,9 +855,14 @@ describe("diagnostic blocks are collapsed, not removed", () => {
     // `onClick` und `aria-pressed` standen ja alle noch da. Ein klickbares
     // <span> ist aber nicht fokussierbar und reagiert weder auf Enter noch auf
     // Leertaste, und genau das ist der Unterschied, um den es hier geht.
-    const groupAt = source.indexOf('className="scout-ban-phase-filter"')
-    expect(groupAt, "die Filtergruppe fehlt").toBeGreaterThan(-1)
-    const group = source.slice(groupAt, groupAt + 1400)
+    //
+    // Gelesen wird bis zum echten `</div>` der Gruppe. Das frueher hier
+    // stehende 1400-Zeichen-Fenster endete kurz vor dem Gruppenende, also
+    // haetten ein paar zusaetzliche Zeilen die Negativ-Assertions still
+    // entwertet.
+    const group = jsxElement(source, "div", 'className="scout-ban-phase-filter"')
+    expect(group, "die Filtergruppe fehlt").not.toBe("")
+    expect(group.endsWith("</div>"), "die Gruppe wurde nicht bis zum Ende gelesen").toBe(true)
 
     expect(group, "die Chips sind keine <button> mehr").toContain("<button")
     expect(group).toContain('type="button"')
@@ -639,18 +872,103 @@ describe("diagnostic blocks are collapsed, not removed", () => {
     expect(group, "ein Chip ist ein klickbares <div> geworden").not.toMatch(/<div[^>]*onClick/)
   })
 
+  it("der Overlap-Regler ist ein echter Button in einer eigenen Gruppe", () => {
+    // Der zweite Regler von 0.7.6. Er verdient dieselbe Pruefung wie die
+    // Phasenchips: Attribute belegen kein Element, und ein klickbares <span>
+    // traegt `type`, `onClick` und `aria-pressed` genauso.
+    const source = read(BAN_PANEL)
+
+    const groupTags = openingTags(source, "div").filter((tag) =>
+      tag.includes('className="scout-ban-overlap-filter"'),
+    )
+    expect(groupTags, "die Overlap-Filtergruppe fehlt").toHaveLength(1)
+    expect(groupTags[0], "die Overlap-Gruppe ist keine Gruppe mehr").toContain('role="group"')
+    expect(groupTags[0], "die Overlap-Gruppe hat kein Label, sie klingt wie eine Phase").toContain(
+      'aria-label={t("scout_banOverlapFilterLabel")}',
+    )
+
+    const group = jsxElement(source, "div", 'className="scout-ban-overlap-filter"')
+    expect(group, "die Overlap-Gruppe fehlt").not.toBe("")
+    expect(group.endsWith("</div>"), "die Gruppe wurde nicht bis zum Ende gelesen").toBe(true)
+
+    expect(group, "der Overlap-Regler ist kein <button> mehr").toContain("<button")
+    expect(group).toContain('type="button"')
+    expect(group, "der Regler ist ein klickbares <span> geworden").not.toMatch(
+      /<span[^>]*onClick/,
+    )
+    expect(group, "der Regler ist ein klickbares <div> geworden").not.toMatch(/<div[^>]*onClick/)
+    expect(group, "der Regler schaltet nichts mehr um").toContain(
+      "onClick={() => setOverlapOnly(!overlapOnly)}",
+    )
+  })
+
   it("der aktive Filter wird angesagt und nicht nur eingefaerbt", () => {
     const source = read(BAN_PANEL)
-    expect(source, "aria-pressed fehlt, der gedrueckte Zustand ist nur sichtbar").toContain(
+
+    // aria-pressed IN der jeweiligen Gruppe, nicht irgendwo in der Datei: sonst
+    // deckte ein einziges aria-pressed beide Regler ab.
+    const phaseGroup = jsxElement(source, "div", 'className="scout-ban-phase-filter"')
+    const overlapGroup = jsxElement(source, "div", 'className="scout-ban-overlap-filter"')
+    expect(phaseGroup, "die Phasengruppe fehlt").not.toBe("")
+    expect(overlapGroup, "die Overlap-Gruppe fehlt").not.toBe("")
+
+    expect(phaseGroup, "aria-pressed fehlt, der gedrueckte Chip ist nur sichtbar").toContain(
       "aria-pressed={active}",
     )
-    // Und die nicht-farbliche Haelfte: der aktive Chip traegt eine eigene Klasse,
-    // an der das CSS eine Markierung haengt.
-    expect(source).toContain("scout-ban-phase-chip-active")
-    const css = readRaw("src/index.css")
-    expect(css, "der aktive Chip hat keine Markierung ausser Farbe").toContain(
-      ".scout-ban-phase-chip-active::before",
+    expect(overlapGroup, "aria-pressed fehlt, der gedrueckte Regler ist nur sichtbar").toContain(
+      "aria-pressed={overlapOnly}",
     )
+
+    // Und die nicht-farbliche Haelfte: der aktive Chip traegt eine eigene
+    // Klasse, an der das CSS eine Markierung haengt.
+    expect(phaseGroup).toContain("scout-ban-phase-chip-active")
+    expect(overlapGroup).toContain("scout-ban-overlap-chip-active")
+
+    // Kommentar-gestrippt gelesen: die Regel auszukommentieren muss rot werden.
+    // Und geprueft wird der RUMPF, nicht nur der Selektor. Ein
+    // `content: ""` oder eine Regel ohne `content` haette den frueheren
+    // toContain-Guard erfuellt, und der Marker waere trotzdem unsichtbar.
+    const css = read("src/index.css")
+    expect(css.length, "src/index.css wurde nicht gelesen").toBeGreaterThan(10000)
+    for (const [chip, selector] of [
+      ["Phase", ".scout-ban-phase-chip-active::before"],
+      ["Overlap", ".scout-ban-overlap-chip-active::before"],
+    ] as const) {
+      expect(css, `${chip}: der aktive Chip hat keine Markierung ausser Farbe`).toContain(selector)
+      const body = cssRuleBody(css, selector)
+      const content = /content\s*:\s*("[^"]*"|'[^']*')/.exec(body)
+      expect(content, `${chip}: die Markierungsregel hat kein content-Literal`).not.toBeNull()
+      expect(content?.[1].slice(1, -1).trim(), `${chip}: der Marker ist leer`).not.toBe("")
+    }
+  })
+
+  it("der Hover ueberschreibt den gedrueckten Zustand nicht", () => {
+    // EIN ECHTER DEFEKT AUS 0.7.5, hier eingefroren. Die Hover-Regel lautete
+    // `.scout-ban-phase-chip:hover:not(:disabled)` und wiegt damit (0,3,0),
+    // die Aktiv-Regel `.scout-ban-phase-chip-active` nur (0,1,0). Auf den
+    // BEREITS gedrueckten Chip zu zeigen faerbte seinen Rahmen also von
+    // `--accent` zurueck auf `--accent-dim`: der ausgewaehlte Chip sah
+    // schwaecher aus als ein nicht ausgewaehlter, solange die Maus darauf
+    // stand. Die Reihenfolge im Stylesheet kann das nicht heilen, nur die
+    // Spezifitaet, deshalb das `:not(...-active)`.
+    const css = read("src/index.css")
+    expect(css.length, "src/index.css wurde nicht gelesen").toBeGreaterThan(10000)
+
+    for (const chip of ["scout-ban-phase-chip", "scout-ban-overlap-chip"] as const) {
+      expect(
+        css,
+        `${chip}: die Hover-Regel nimmt den aktiven Chip nicht aus und ueberschreibt ihn ` +
+          "deshalb wieder (Spezifitaet 0,3,0 gegen 0,1,0).",
+      ).toContain(`.${chip}:hover:not(:disabled):not(.${chip}-active)`)
+
+      // Die Gegenrichtung: die nackte Form darf NICHT als eigener Selektor
+      // zurueckkommen. Ohne sie bliebe der Guard gruen, wenn jemand die
+      // ausgenommene Regel behaelt und die alte daneben wieder einfuehrt.
+      expect(
+        new RegExp(`\\.${chip}:hover:not\\(:disabled\\)\\s*[,{]`).test(css),
+        `${chip}: die alte, nicht ausgenommene Hover-Regel steht wieder im Stylesheet.`,
+      ).toBe(false)
+    }
   })
 
   it("eine leere Phase ist gesperrt, all und der aktive Chip nie", () => {
@@ -658,34 +976,257 @@ describe("diagnostic blocks are collapsed, not removed", () => {
     // Funktion getestet; hier wird gepinnt, dass das Panel sie auch benutzt.
     const source = read(BAN_PANEL)
     expect(source).toContain("disabled={!isBanPhaseFilterEnabled(option, phaseFilter)}")
-  })
-
-  it("filtert VOR dem Kappen, nicht danach", () => {
-    // Andersherum wuerde die volle Liste bei acht gekappt und ERST DANN nach
-    // Phase gesiebt: "Gezielt" zeigte dann die gezielten Bans, die zufaellig in
-    // die ersten acht gefallen sind, und verschwiege den Rest.
-    const source = read(BAN_PANEL)
-    const filterAt = source.indexOf("filterBansByPhase(ranked, phaseFilter)")
-    const splitAt = source.indexOf("splitScoutList(visibleBans, MAX_PRIORITIZED)")
-
-    expect(filterAt, "der Filter wird gar nicht angewandt").toBeGreaterThan(-1)
-    expect(splitAt, "die Liste wird nicht mehr gekappt").toBeGreaterThan(-1)
-    expect(splitAt, "gekappt wird vor dem Filtern").toBeGreaterThan(filterAt)
-    expect(source, "gekappt wird weiterhin die ungefilterte Liste").not.toContain(
-      "splitScoutList(ranked",
+    // Dasselbe fuer den Overlap-Regler: 0 Mehrfach-Bans heisst garantiert leere
+    // Liste, der GEDRUECKTE Regler bleibt aber bedienbar, sonst verliert er den
+    // Tastaturfokus, sobald sich die Daten unter ihm aendern.
+    expect(source, "der Overlap-Regler laesst sich in eine garantierte Leere klicken").toContain(
+      "disabled={!isBanOverlapFilterEnabled(overlapOption)}",
     )
   })
 
-  it("der Filter beruehrt den Export nicht", () => {
+  it("rankt, entfernt Gedraftetes, filtert, kappt - in genau dieser Reihenfolge", () => {
+    // VIER Stufen seit 0.8.2, und jede der drei Grenzen dazwischen ist eine
+    // eigene Zusage. Deshalb wird jede einzeln und mit eigener Begruendung
+    // gepinnt statt "irgendwie in dieser Reihenfolge":
+    //
+    // (1) GERANKT WIRD ZUERST, aus der vollen Liste. Ein vom Draft genommener
+    //     Champion darf die uebrigen nicht umnummerieren, sonst heisst "#7"
+    //     nicht mehr "siebtwichtigster Ban insgesamt", sondern nur noch
+    //     "siebte Zeile, die gerade uebrig ist".
+    // (2) VERFUEGBARKEIT VOR PHASE UND OVERLAP. Sonst zaehlen die Chips
+    //     Kandidaten mit, die die Liste gar nicht mehr zeigt: "Gezielt: 4"
+    //     oeffnet eine Liste von zwei.
+    // (3) GEKAPPT WIRD ZULETZT. Andersherum wuerde die volle Liste bei acht
+    //     gekappt und ERST DANN gesiebt: "Gezielt" zeigte dann die gezielten
+    //     Bans, die zufaellig in die ersten acht gefallen sind, und
+    //     verschwiege den Rest, ohne dass die Klappe etwas davon sagt.
+    //
+    // Seit 0.7.6 sieben ZWEI Regler, und beide laufen durch `filterBans`. Ein
+    // Panel, das hier wieder nur `filterBansByPhase` aufruft, kappt die
+    // Overlap-Auswahl erneut vor dem Filtern; deshalb ist ueberall der
+    // VOLLSTAENDIGE Aufruf gepinnt und nicht der Bezeichner.
+    const source = read(BAN_PANEL)
+    const rankAt = source.indexOf("rankBanCandidates(banPlan.prioritizedBans)")
+    const availableAt = source.search(AVAILABILITY_CALL)
+    const optionsAt = source.indexOf("banPhaseFilterOptions(available, overlapOnly)")
+    const filterAt = source.indexOf("filterBans(available, phaseFilter, overlapOnly)")
+    const splitAt = source.indexOf("splitScoutList(visibleBans, MAX_PRIORITIZED)")
+
+    expect(rankAt, "der Rang kommt nicht mehr aus der vollen Liste").toBeGreaterThan(-1)
+    expect(
+      availableAt,
+      "der Verfuegbarkeitsschritt fehlt. Der Ban-Plan empfiehlt damit wieder Champions, die " +
+        "im laufenden Draft schon gepickt oder gebannt sind.",
+    ).toBeGreaterThan(-1)
+    expect(optionsAt, "die Phasenchips zaehlen nicht mehr aus der Liste").toBeGreaterThan(-1)
+    expect(filterAt, "die beiden Filter werden nicht mehr gemeinsam angewandt").toBeGreaterThan(-1)
+    expect(splitAt, "die Liste wird nicht mehr gekappt").toBeGreaterThan(-1)
+
+    expect(
+      rankAt,
+      "die Verfuegbarkeit greift VOR dem Ranken. Ein vom Draft genommener Champion " +
+        "nummeriert damit alle uebrigen um, und '#7' heisst nicht mehr 'siebtwichtigster Ban " +
+        "insgesamt'.",
+    ).toBeLessThan(availableAt)
+    expect(
+      availableAt,
+      "die Verfuegbarkeit greift NACH den Chips. Die Chips zaehlen dann Kandidaten mit, die " +
+        "die Liste gar nicht zeigt: 'Gezielt: 4' oeffnet eine Liste von zwei.",
+    ).toBeLessThan(optionsAt)
+    expect(
+      availableAt,
+      "die Verfuegbarkeit greift NACH dem Phasen-/Overlap-Filter. Zaehler und Liste kaemen " +
+        "damit aus zwei verschiedenen Mengen.",
+    ).toBeLessThan(filterAt)
+    expect(splitAt, "gekappt wird vor dem Filtern").toBeGreaterThan(filterAt)
+
+    // Die naheliegenden Rueckfaelle, jeder einzeln benannt. Alle lassen eine
+    // Stufe aus, ohne dass eine Zeile geloescht werden muesste.
+    for (const [call, why] of [
+      [
+        "filterBans(ranked",
+        "der Phasen-/Overlap-Filter laeuft wieder auf der ungefilterten Liste, also auf " +
+          "Kandidaten, die der Draft bereits genommen hat",
+      ],
+      [
+        "banPhaseFilterOptions(ranked",
+        "die Phasenchips zaehlen wieder aus `ranked` und versprechen damit eine Zahl, die " +
+          "die Liste nicht zeigt",
+      ],
+      [
+        "banOverlapFilterOption(ranked",
+        "der Overlap-Chip zaehlt wieder aus `ranked` - dieselbe Zusage, dieselbe Luecke",
+      ],
+      ["splitScoutList(ranked", "gekappt wird weiterhin die ungefilterte Liste"],
+      [
+        "splitScoutList(available",
+        "gekappt wird vor dem Phasen-/Overlap-Filter. Die Klappe zeigte dann nur die Treffer " +
+          "aus den ersten acht und verschwiege den Rest.",
+      ],
+      [
+        "filterBansByOverlap(prioritized",
+        "der Overlap-Filter laeuft auf der bereits gekappten Liste",
+      ],
+    ] as const) {
+      expect(source, why).not.toContain(call)
+    }
+  })
+
+  it("Liste und beide Zaehler starten von DERSELBEN Menge", () => {
+    // DIE inhaltlich wichtigste Zusage von 0.8.2, und sie ist genau die Form
+    // von Defekt, die dieses Modul schon dreimal produziert hat: ein Wert wird
+    // aus einer Quelle gezaehlt und aus einer anderen gerendert
+    // (`ScoutManualSource` an drei Stellen, `overwrittenRows` gegen
+    // `removedExistingRows`, `banPhaseCounts` gegen `prioritizedBans`).
+    //
+    // Der Draft nimmt Kandidaten weg. Zaehlte auch nur EINE der drei Stellen
+    // weiter aus `ranked`, verspraeche ein Chip eine Zahl, die die Liste nicht
+    // einloest, und der Nutzer haette keinen Weg, den Unterschied zu sehen.
+    //
+    // VOLLSTAENDIGE Aufrufe, nicht Bezeichner: alle drei stehen ausserdem in
+    // der Importzeile des Panels.
+    const source = read(BAN_PANEL)
+    for (const call of [
+      "banPhaseFilterOptions(available, overlapOnly)",
+      "banOverlapFilterOption(available, phaseFilter, overlapOnly)",
+      "filterBans(available, phaseFilter, overlapOnly)",
+    ]) {
+      expect(source, `${call} fehlt: Zaehler und Liste kommen aus zwei Quellen`).toContain(call)
+    }
+
+    // Die Gegenrichtung. Ein Zaehler auf der bereits gesiebten oder gekappten
+    // Liste ist der andere Weg in dieselbe Luecke: der Chip zeigte dann immer
+    // die Laenge der gerade sichtbaren Auswahl statt die seiner eigenen.
+    for (const call of [
+      "banPhaseFilterOptions(visibleBans",
+      "banOverlapFilterOption(visibleBans",
+      "banPhaseFilterOptions(prioritized",
+      "banOverlapFilterOption(prioritized",
+    ]) {
+      expect(
+        source,
+        `${call}: der Chip zaehlt die schon gefilterte oder gekappte Liste`,
+      ).not.toContain(call)
+    }
+  })
+
+  it("waehlt den Leerzustand ueber die Regel, nicht ueber ein inline ? :", () => {
+    // Welcher Satz erscheint, ist eine Regel: bei gedruecktem Overlap-Regler
+    // muss der Satz DIESEN Regler nennen, sonst wird jemand auf "Alle"
+    // geschickt und landet in einer genauso leeren Liste. Als Ternaer im JSX
+    // waere die Regel nicht testbar, Vitest laeuft hier ohne jsdom.
+    // Seit 0.8.2 gibt es DREI Saetze und damit erst recht keinen Ternaer: hat
+    // der Draft jeden Kandidaten genommen, hilft weder "schalte auf Alle" noch
+    // "schalte den Overlap-Regler aus", beide fuehren in eine genauso leere
+    // Liste. Der VOLLSTAENDIGE Aufruf ist gepinnt, weil das zweite Argument die
+    // Regel ueberhaupt erst entscheidbar macht.
+    const source = read(BAN_PANEL)
+    expect(source).toContain(
+      "t(scoutBanListEmptyKey(overlapOnly, available.length === 0 && takenByDraft > 0))",
+    )
+    // Und woher die Draft-Haelfte dieser Bedingung kommt. `takenByDraft` ist
+    // die Differenz DERSELBEN zwei Listen, nicht etwa die Zahl der belegten
+    // Draft-Slots: ein Draft, der zwei von neun nimmt, laesst sieben uebrig,
+    // und dann sind wirklich die Filter schuld.
+    expect(
+      source,
+      "takenByDraft wird nicht mehr aus ranked und available berechnet - der Leerzustand " +
+        "begruendet sich dann mit einem Draft, der die Liste gar nicht geleert hat",
+    ).toContain("const takenByDraft = ranked.length - available.length")
+    // Ein inline `? :` nennt die Schluessel woertlich. Das Panel darf keinen
+    // von den dreien kennen.
+    for (const key of [
+      "scout_banPhaseFilterEmpty",
+      "scout_banOverlapFilterEmpty",
+      "scout_banDraftEmpty",
+    ]) {
+      expect(source, `das Panel entscheidet den Leerzustand wieder selbst (${key})`).not.toContain(
+        key,
+      )
+    }
+  })
+
+  it("der Leerzustand meldet sich, und nur er", () => {
+    // 0.7.7. Der Leerzustand entsteht durch einen Tastendruck: ein sehender
+    // Nutzer sieht die Zeilen verschwinden, ein Screenreader-Nutzer hoerte
+    // vorher nur "gedrueckt" und sonst nichts. `role="status"` traegt genau
+    // diese eine Tatsache nach.
+    const source = read(BAN_PANEL)
+
+    // GENAU DAS <p>, nicht irgendwo in der Datei. Ohne die Eingrenzung waere
+    // ein role="status" an der Ban-Liste von diesem Guard mitgedeckt.
+    const emptyState = jsxElement(source, "p", "scoutBanListEmptyKey(overlapOnly,")
+    expect(
+      emptyState,
+      "der Leerzustand des Ban-Plans wurde nicht gefunden, die Assertions unten sind beweisfrei",
+    ).not.toBe("")
+    expect(emptyState, "der Leerzustand meldet sich nicht mehr").toContain('role="status"')
+    expect(emptyState, "der Leerzustand ist nicht mehr die scout-nodata-Zeile").toContain(
+      'className="scout-nodata"',
+    )
+
+    // Und NUR er. Eine Live-Region ueber der ganzen Liste laese bei jedem
+    // Chipdruck saemtliche Zeilen erneut vorlesen, also genau die Unordnung,
+    // die 0.7.0 aus diesem Panel entfernt hat.
+    const banList = jsxElement(source, "ol", 'className="scout-ban-list"')
+    expect(banList, "die Ban-Liste wurde nicht gefunden").not.toBe("")
+    expect(banList, "die ganze Ban-Liste ist eine Live-Region geworden").not.toContain("role=")
+    expect(banList, "die ganze Ban-Liste ist eine Live-Region geworden").not.toContain("aria-live")
+
+    expect(
+      occurrences(source, 'role="status"'),
+      "das Panel hat mehr als eine Live-Region. Genau eine Aussage ist es wert, angesagt zu " +
+        "werden: dass der Filter die Liste geleert hat.",
+    ).toBe(1)
+  })
+
+  it("meldet den Leerzustand hoeflich, nie assertiv", () => {
+    // `role="status"` ist von sich aus polite und atomic. `assertive` wuerde
+    // dem Nutzer ins Wort fallen, und ein Filterergebnis ist kein Notfall.
+    // Der restliche Scout nutzt ebenfalls das nackte role="status".
+    const source = read(BAN_PANEL)
+    expect(
+      source,
+      'aria-live="assertive" im Ban-Plan: ein leeres Filterergebnis unterbricht damit die ' +
+        'laufende Ausgabe. role="status" allein ist hoeflich und reicht.',
+    ).not.toContain("assertive")
+  })
+
+  it("die Filter beruehren den Export nicht", () => {
     // Der Export kopiert den vollen Plan. Ihn an den Panel-Zustand zu haengen
     // hiesse, dass der kopierte Text davon abhaengt, welcher Chip gerade
-    // gedrueckt war.
+    // gedrueckt war und ob der Overlap-Regler an war.
+    //
+    // `ScoutBanPhaseFilter` steht ausdruecklich mit auf der Liste: das
+    // vorhandene `phaseFilter` deckt den Typnamen wegen des grossen P NICHT ab.
+    //
+    // Seit 0.8.2 ist die Aussage SCHAERFER: der Export ist nicht nur
+    // filter-unabhaengig, sondern draft-unabhaengig. Der kopierte Text ist der
+    // volle Plan, und was im laufenden Draft schon liegt, ist eine Frage der
+    // Sichtbarkeit im Panel. Wuerde der Export sie mitbeantworten, haenge der
+    // Inhalt der Zwischenablage davon ab, wie weit der Draft gerade ist - und
+    // ein Team, das den Plan VOR dem Draft teilt, bekaeme einen anderen Text
+    // als eines, das ihn mittendrin kopiert. Deshalb stehen der Filter, sein
+    // Modul, das Prop und der Slot-Typ alle vier auf der Liste.
     const exportSource = read("src/components/scout/scoutExport.ts")
+    expect(exportSource.length, "scoutExport.ts wurde nicht gelesen").toBeGreaterThan(1000)
     for (const forbidden of [
       "phaseFilter",
+      "ScoutBanPhaseFilter",
+      "filterBans",
       "filterBansByPhase",
+      "filterBansByOverlap",
       "banPhaseFilterOptions",
+      "banOverlapFilterOption",
+      "isBanPhaseFilterEnabled",
+      "isBanOverlapFilterEnabled",
+      "scoutBanListEmptyKey",
+      "overlapOnly",
       "rankBanCandidates",
+      "filterAvailableBanCandidates",
+      "draftAvailability",
+      "draftBoard",
+      "DraftSlot",
     ]) {
       expect(exportSource, `scoutExport.ts kennt jetzt ${forbidden}`).not.toContain(forbidden)
     }
@@ -730,6 +1271,11 @@ describe("diagnostic blocks are collapsed, not removed", () => {
     expect(source).toContain("teamRows(prioritized.visible)")
     expect(source, "the whole list is rendered open again").not.toContain("teamRows(ranked)")
     expect(source, "the filter is bypassed in the open half").not.toContain("teamRows(visibleBans)")
+    // Since 0.8.2 there is a third list-shaped local to bypass the cap with,
+    // and it is the most plausible one: `available` reads like "the list".
+    expect(source, "the cap and both filters are bypassed in the open half").not.toContain(
+      "teamRows(available)",
+    )
   })
 
   it("no longer cuts a list without saying so", () => {
@@ -849,8 +1395,21 @@ describe("diagnostic blocks are collapsed, not removed", () => {
     expect(source, "BanGroup is back").not.toContain("function BanGroup")
     expect(source, "a second ban list is being rendered").not.toContain("<BanGroup")
     // The context those lists carried now rides on the row itself.
-    expect(source).toContain("banPhaseFilterOptions")
-    expect(source).toContain("displayNameById")
+    //
+    // WHOLE CALLS, not identifiers. `banPhaseFilterOptions` was already
+    // satisfied by the IMPORT line, so the panel could stop building chips
+    // altogether and stay green; `displayNameById` was already satisfied by the
+    // local `const displayNameById`, so deleting the PROP would silently drop
+    // the "Betrifft:" line from every team-plan row.
+    // Seit 0.8.2 zaehlen die Chips aus `available`, nicht aus `ranked`: der
+    // Draft nimmt Kandidaten weg, und ein Chip darf keine Zahl versprechen, die
+    // die Liste darunter nicht zeigt.
+    expect(source, "die Chips werden nicht mehr aus der Liste gezaehlt").toContain(
+      "banPhaseFilterOptions(available, overlapOnly)",
+    )
+    expect(source, "die Zeile bekommt die Namen nicht mehr").toContain(
+      "displayNameById={displayNameById}",
+    )
     // And the phase chips FILTER the one list, they do not open a second one.
     expect(source, "a chip renders its own ban list again").not.toContain(
       "teamRows(filterBansByPhase",
@@ -860,6 +1419,56 @@ describe("diagnostic blocks are collapsed, not removed", () => {
     expect(row).toContain("scoutBanPhaseKey")
     expect(row).toContain("scout_banAffectedPlayers")
     expect(row).toContain("summarizeBanCandidate")
+  })
+
+  it("ruft die eine Zeilen-Renderstelle genau zweimal auf", () => {
+    // DER GUARD, DEN DIE ANDEREN NICHT ERSETZEN. "Ein Kandidat, eine Zeile" war
+    // bisher als RENDERSTELLE gezaehlt, und `<ScoutBanRow` kommt im Panel nur
+    // einmal vor, weil die Stelle in der lokalen Helferfunktion teamRows()
+    // sitzt. Eine Schleife, die teamRows() je Phase noch einmal aufruft, holt
+    // damit die 0.7.4-Phasenlisten zurueck, OHNE eine zweite Renderstelle
+    // anzulegen: jeder bisherige Guard blieb dabei gruen. Das vorhandene
+    // `not.toContain("teamRows(filterBansByPhase")` ist ausserdem mit einer
+    // Zwischenvariablen zu umgehen. Gezaehlt werden deshalb die AUFRUFE.
+    const source = read(BAN_PANEL)
+    expect(occurrences(source, "<ScoutBanRow"), "eine zweite Ban-Zeilen-Renderstelle").toBe(1)
+    expect(
+      occurrences(source, "teamRows("),
+      "die eine Liste wird oefter als offen-plus-eingeklappt gerendert",
+    ).toBe(2)
+    expect(source).toContain("teamRows(prioritized.visible)")
+    expect(source).toContain("teamRows(prioritized.collapsed)")
+  })
+
+  it("die vier Gruppierungen von 0.7.4 sind und bleiben geloescht", () => {
+    // `BanGroup` ist oben gepinnt, `PHASE_HEADINGS` war es repo-weit NICHT: die
+    // Konstante konnte samt Ueberschriftszeile zurueckkommen, ohne dass
+    // irgendetwas rot wird. Dasselbe gilt fuer die vier i18n-Keys, die 0.7.4
+    // mit den Listen entfernt hat.
+    const panel = read(BAN_PANEL)
+    expect(panel, "PHASE_HEADINGS ist zurueck").not.toContain("PHASE_HEADINGS")
+
+    const DELETED_KEYS = [
+      "scout_safeBans",
+      "scout_targetBans",
+      "scout_situationalBans",
+      "scout_overlapBans",
+    ]
+    for (const [lang, path] of [
+      ["de", "src/i18n/de.ts"],
+      ["en", "src/i18n/en.ts"],
+    ] as const) {
+      const dict = read(path)
+      // Anti-Vakuositaet: belegt, dass hier das richtige, nicht leergestrippte
+      // Woerterbuch gelesen wird. Ohne das waere jede Abwesenheit trivial wahr.
+      expect(dict.length, `${lang}: das Woerterbuch wurde nicht gelesen`).toBeGreaterThan(10000)
+      expect(dict, `${lang}: das ist nicht das Scout-Woerterbuch`).toContain(
+        "scout_banPhaseFilterLabel",
+      )
+      for (const key of DELETED_KEYS) {
+        expect(dict, `${lang}: ${key} ist wieder da`).not.toContain(key)
+      }
+    }
   })
 
   it("numbers the newly collapsed ban lists continuously", () => {

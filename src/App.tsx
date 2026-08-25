@@ -1,5 +1,10 @@
 import { useState, useMemo, useEffect, useRef, useCallback, lazy, Suspense } from "react"
 import { FilterProvider, useFilters } from "./context/FilterContext"
+import {
+    createEmptyDraftSlots,
+    draftBoardFromSlots,
+} from "./draft/draftAvailability"
+import type { DraftSlotsState } from "./draft/draftAvailability"
 import { LanguageProvider, useTranslation } from "./i18n/LanguageContext"
 import { AuthProvider } from "./auth/AuthContext"
 import { TeamProvider } from "./teams/TeamContext"
@@ -67,6 +72,23 @@ function AppContent() {
     const { filters } = useFilters()
     const { t, lang, setLang } = useTranslation()
     const [selectedChampion, setSelectedChampion] = useState<string | null>(null)
+
+    /*
+      THE DRAFT, OWNED HERE SINCE 0.8.2.
+
+      It used to live inside `DraftHelper`, which is rendered conditionally and
+      therefore UNMOUNTED whenever the user left the draft tab - the whole draft
+      was thrown away on every tab switch. The scout tab could not have read a
+      draft that stopped existing the moment you navigated to it.
+
+      One owner, one truth: `DraftHelper` renders and edits it, the scout reads
+      the board derived from it. Nothing is persisted, exactly as before.
+    */
+    const [draftSlots, setDraftSlots] = useState<DraftSlotsState>(createEmptyDraftSlots)
+
+    // The domain view of the same four arrays. Derived, never stored, so it can
+    // never drift from what the draft board shows.
+    const draftBoard = useMemo(() => draftBoardFromSlots(draftSlots), [draftSlots])
     const [activeTab, setActiveTab] = useState<TabId>("champions")
     const [filtersCollapsed, setFiltersCollapsed] = useState(false)
     const [authPanelOpen, setAuthPanelOpen] = useState(false)
@@ -323,6 +345,7 @@ function AppContent() {
                         <section className="section">
                             <TournamentScout
                                 championRoleReference={scoutChampionRoleReference}
+                                draftBoard={draftBoard}
                             />
                         </section>
                     ) : allMatches.length === 0 ? (
@@ -352,7 +375,11 @@ function AppContent() {
 
                             {activeTab === "draft" && (
                                 <section className="section">
-                                    <DraftHelper matches={filteredMatches} />
+                                    <DraftHelper
+                                        matches={filteredMatches}
+                                        slots={draftSlots}
+                                        onSlotsChange={setDraftSlots}
+                                    />
                                 </section>
                             )}
 

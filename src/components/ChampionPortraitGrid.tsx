@@ -1,4 +1,5 @@
 import { ChampionIcon } from "./ChampionIcon"
+import { draftAvailabilityKey } from "../draft/draftAvailability"
 import { useTranslation } from "../i18n/LanguageContext"
 import type { TranslationKey } from "../i18n/types"
 import type { ChampionNoteRating } from "../notes/types"
@@ -11,10 +12,6 @@ interface ChampionPortraitGridProps {
     onSearchQueryChange: (value: string) => void
     onSelectChampion: (championName: string) => void
     teamRatings?: Map<string, ChampionNoteRating>
-}
-
-function normalizeChampionName(name: string): string {
-    return name.trim().toLowerCase()
 }
 
 function ratingDotColor(rating: ChampionNoteRating): string {
@@ -69,7 +66,9 @@ export function ChampionPortraitGrid({
 
             <div className="champion-grid">
                 {filteredChampions.map((champion) => {
-                    const normalized = normalizeChampionName(champion)
+                    // The same basis the board enforces with, so the grid
+                    // never offers a champion the board then refuses.
+                    const normalized = draftAvailabilityKey(champion)
                     const isSelected = selectedChampions.has(normalized)
                     const isBanned = bannedChampions.has(normalized)
                     const isUnavailable = isSelected || isBanned

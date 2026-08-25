@@ -132,10 +132,34 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
                         <p className="muted">{t("cn_noDraftedNotes")}</p>
                     ) : (
                         relevantNotes.map((n) => (
-                            <div
+                            /*
+                              A REAL BUTTON, not a clickable div. Loading a note
+                              into the editor below was previously reachable only
+                              with a mouse: the card was a `<div onClick>`, which
+                              takes no focus and answers to no key.
+
+                              `<button>` rather than `role="button"` plus
+                              `tabIndex` plus a hand-written Enter/Space handler,
+                              because the browser does all four correctly and for
+                              free. The layout does not force a div here: the
+                              card's content is all phrasing, so it is legal
+                              inside a button once the note paragraph becomes a
+                              block-level `<span>` (a `<p>` inside a `<button>`
+                              is invalid HTML - flow content in a phrasing-only
+                              element - and browsers recover from it by breaking
+                              the button out of the DOM position it was written
+                              in).
+
+                              `.note-card-button` only strips the UA button
+                              chrome that would otherwise override
+                              `.recommendation-card`; the card looks exactly as
+                              before.
+                            */
+                            <button
                                 key={n.championName}
-                                className="recommendation-card"
-                                style={{ marginBottom: "0.5rem", cursor: "pointer" }}
+                                type="button"
+                                className="recommendation-card note-card-button"
+                                style={{ marginBottom: "0.5rem" }}
                                 onClick={() => setSelectedChampion(n.championName)}
                                 title={t("cn_editNote")}
                             >
@@ -149,11 +173,9 @@ export function ChampionNotesPanel({ pickedChampions }: ChampionNotesPanelProps)
                                     <span className="muted"> · {n.tags.join(", ")}</span>
                                 )}
                                 {n.note && (
-                                    <p className="muted" style={{ marginTop: "0.25rem", whiteSpace: "pre-wrap" }}>
-                                        {n.note}
-                                    </p>
+                                    <span className="muted note-card-text">{n.note}</span>
                                 )}
-                            </div>
+                            </button>
                         ))
                     )}
                 </div>

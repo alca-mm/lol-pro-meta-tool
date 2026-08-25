@@ -701,6 +701,7 @@ export const de = {
     scout_roleGate_details: "Rollen-Check erklären",
     scout_roleGate_source: "Verglichen wird mit Pro-Play-Daten, deine Zahlen kommen aus der Soloqueue.",
     scout_roleGate_unjudged: "Ohne Referenzdaten beurteilt: {count} Champions.",
+    scout_roleGate_unjudgedOne: "Ohne Referenzdaten beurteilt: {count} Champion.",
     scout_roleGate_evaluatedRole: "Geprüfte Lane: {role}",
     scout_roleGate_picksInRole: "Picks auf dieser Lane: {picks}",
     scout_roleGate_roleShare: "Anteil an allen Picks: {share}%",
@@ -807,6 +808,13 @@ export const de = {
     scout_banPhaseFilterLabel: "Ban-Plan nach Phase filtern",
     scout_banPhaseFilterCount: "{label}: {count}",
     scout_banPhaseFilterEmpty: "In dieser Phase steht gerade kein Ban. Wechsle auf Alle.",
+    scout_banOverlapFilterLabel: "Ban-Plan nach Mehrfachtreffern filtern",
+    scout_banOverlapFilterOnly: "Nur Mehrfachtreffer",
+    scout_banOverlapFilterCount: "{label}: {count}",
+    scout_banDraftEmpty:
+        "Alle Ban-Kandidaten sind im laufenden Draft schon vergeben. Nimm einen Pick oder Ban zurueck.",
+    scout_banOverlapFilterEmpty:
+        "Hier trifft kein Ban mehrere Spieler. Schalte den Filter aus oder wechsle auf Alle.",
     scout_bansByPlayer: "Bans nach Spieler",
     scout_bansByPlayerNone: "keine",
     scout_banAgainstRole: "gegen {role}",

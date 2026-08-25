@@ -67,6 +67,7 @@ import type {
 } from "../../scout/types"
 import { ScoutAnalysisPanel } from "./ScoutAnalysisPanel"
 import { ScoutBanPlanPanel } from "./ScoutBanPlanPanel"
+import type { DraftSlot } from "../../draft/draftState"
 import { ScoutInputPanel, type ScoutParseError } from "./ScoutInputPanel"
 import { ScoutLineupPanel } from "./ScoutLineupPanel"
 import { ScoutPlayerCard } from "./ScoutPlayerCard"
@@ -134,6 +135,15 @@ function omitKey<T>(map: Readonly<Record<string, T>>, key: string): Record<strin
 
 interface TournamentScoutProps {
     /**
+     * The live draft board, owned by `App.tsx` since 0.8.2.
+     *
+     * OPTIONAL FOR THE SAME REASON `championRoleReference` IS. This tab works on
+     * its own; with no board nothing is filtered and the ban plan behaves exactly
+     * as it did before 0.8.2. Read-only here: the scout never writes a draft.
+     */
+    draftBoard?: readonly DraftSlot[]
+
+    /**
      * Champion role evidence for the viability gate, normally
      * `calculateChampionStats(allMatches)`.
      *
@@ -152,7 +162,7 @@ interface TournamentScoutProps {
     championRoleReference?: readonly ChampionStats[]
 }
 
-export function TournamentScout({ championRoleReference }: TournamentScoutProps = {}) {
+export function TournamentScout({ championRoleReference, draftBoard }: TournamentScoutProps = {}) {
     const { t } = useTranslation()
 
     const [initialState] = useState(loadScoutState)
@@ -640,7 +650,7 @@ export function TournamentScout({ championRoleReference }: TournamentScoutProps 
             </div>
 
             <ScoutAnalysisPanel analysis={analysis} />
-            <ScoutBanPlanPanel analysis={analysis} />
+            <ScoutBanPlanPanel analysis={analysis} draftBoard={draftBoard} />
 
             <div className="scout-button-row scout-footer-actions">
                 <button type="button" className="scout-primary-button" onClick={() => void handleCopy()}>

@@ -700,6 +700,7 @@ export const en: Translations = {
     scout_roleGate_details: "Explain the role check",
     scout_roleGate_source: "The comparison uses pro play data, while your numbers come from solo queue.",
     scout_roleGate_unjudged: "Judged without reference data: {count} champions.",
+    scout_roleGate_unjudgedOne: "Judged without reference data: {count} champion.",
     scout_roleGate_evaluatedRole: "Lane checked: {role}",
     scout_roleGate_picksInRole: "Picks on this lane: {picks}",
     scout_roleGate_roleShare: "Share of all picks: {share}%",
@@ -806,6 +807,13 @@ export const en: Translations = {
     scout_banPhaseFilterLabel: "Filter the ban plan by phase",
     scout_banPhaseFilterCount: "{label}: {count}",
     scout_banPhaseFilterEmpty: "No ban sits in this phase right now. Switch to All.",
+    scout_banOverlapFilterLabel: "Filter the ban plan by multi-player hits",
+    scout_banOverlapFilterOnly: "Multi-player only",
+    scout_banOverlapFilterCount: "{label}: {count}",
+    scout_banDraftEmpty:
+        "Every ban candidate is already taken in the current draft. Undo a pick or a ban.",
+    scout_banOverlapFilterEmpty:
+        "No ban here hits several players. Turn the filter off or switch to All.",
     scout_bansByPlayer: "Bans by player",
     scout_bansByPlayerNone: "none",
     scout_banAgainstRole: "against {role}",

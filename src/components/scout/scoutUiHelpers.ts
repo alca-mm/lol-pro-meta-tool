@@ -417,6 +417,22 @@ export const SCOUT_MORE_BANS_KEYS: PluralKeys = {
   many: "scout_moreBansMany",
 }
 
+/**
+ * "Ohne Referenzdaten beurteilt: 1 Champion." / "... 4 Champions."
+ *
+ * The NOUN FOLLOWS THE NUMBER here, which is what separates this from the
+ * `Label: {count}` chips beside it: those read correctly at any count because
+ * nothing after the figure declines. This one read "1 Champions." in German and
+ * "1 champions." in English until 0.7.6, and the singular is the only value that
+ * shows it, exactly the trap CLAUDE.md records for "1 neue Match gespeichert".
+ * The base key stays the plural, as everywhere else, so nothing that renders it
+ * changes at counts other than 1.
+ */
+export const SCOUT_ROLE_GATE_UNJUDGED_KEYS: PluralKeys = {
+  one: "scout_roleGate_unjudgedOne",
+  many: "scout_roleGate_unjudged",
+}
+
 /** "1 weitere Bedrohung anzeigen" / "4 weitere Bedrohungen anzeigen". */
 export const SCOUT_MORE_THREATS_KEYS: PluralKeys = {
   one: "scout_moreThreatsOne",
@@ -642,7 +658,7 @@ export interface ScoutBanPhaseFilterOption {
 /**
  * The four filter chips, each with the number of bans behind it.
  *
- * DERIVED FROM {@link filterBansByPhase}, deliberately: the count on a chip and
+ * DERIVED FROM {@link filterBans}, deliberately: the count on a chip and
  * the list it opens are then the same computation, and cannot disagree. The
  * earlier `banPhaseCounts()` read from `TeamBanPlan.phases` while the list would
  * have come from `prioritizedBans` — two sources for one number, which is the
@@ -651,13 +667,19 @@ export interface ScoutBanPhaseFilterOption {
  *
  * All four are always returned, empty ones included: a missing "Situativ: 0"
  * would read as "there is no such phase" rather than "nothing landed there".
+ *
+ * `overlapOnly` IS REQUIRED, not defaulted. The counts have to shrink while the
+ * overlap toggle is on, or a chip reading "Gezielt: 4" would open a list of two.
+ * A default would let a caller silently get the unfiltered numbers, which is
+ * the precise failure this function was extracted to prevent.
  */
 export function banPhaseFilterOptions(
   ranked: readonly RankedBanCandidate[],
+  overlapOnly: boolean,
 ): ScoutBanPhaseFilterOption[] {
   return SCOUT_BAN_PHASE_FILTERS.map((filter) => ({
     filter,
-    count: filterBansByPhase(ranked, filter).length,
+    count: filterBans(ranked, filter, overlapOnly).length,
   }))
 }
 
@@ -686,6 +708,137 @@ export function isBanPhaseFilterEnabled(
 /** i18n key for a filter chip. `all` has its own key, the phases reuse theirs. */
 export const scoutBanPhaseFilterKey = (filter: ScoutBanPhaseFilter): TranslationKey =>
   filter === "all" ? "scout_banPhase_all" : scoutBanPhaseKey(filter)
+
+/**
+ * The entries that hit more than one opponent, in unchanged priority order.
+ *
+ * `false` returns every entry, so the default view stays the canonical list.
+ * `true` keeps only `candidate.isOverlap`, which is the ENGINE's own flag
+ * (`affectedPlayerIds.length > 1`) and not a recount of resolved display names.
+ * That is the same reason the overlap badge on the row reads it: a per-player
+ * card passes no name lookup at all, and a filter built on names would answer
+ * differently there.
+ *
+ * This does NOT bring back the `overlapBans` list that 0.7.4 deleted. It selects
+ * from the one prioritised list instead of rendering a second one, so a
+ * candidate is still shown at most once.
+ *
+ * Pure. The input is not mutated and the entries are passed through by
+ * reference, so the rank each one carries survives untouched.
+ */
+export function filterBansByOverlap(
+  ranked: readonly RankedBanCandidate[],
+  overlapOnly: boolean,
+): RankedBanCandidate[] {
+  if (!overlapOnly) return [...ranked]
+  return ranked.filter((entry) => entry.candidate.isOverlap)
+}
+
+/**
+ * BOTH filters, in the one order the panel is allowed to apply them.
+ *
+ * THE WHOLE POINT IS THAT THIS EXISTS ONCE. Every count on every chip and the
+ * list those chips open come from this function, so a chip cannot promise a
+ * number the list then fails to show. That is the invariant 0.7.5 established
+ * when it replaced `banPhaseCounts()`, which read from `TeamBanPlan.phases`
+ * while the list came from `prioritizedBans`, and adding a second filter is
+ * exactly the moment it would otherwise break.
+ *
+ * Ranking happens BEFORE this (see {@link rankBanCandidates}) and capping AFTER
+ * it (see {@link splitScoutList}). Capping first would trim the full list to
+ * eight and only then discard what does not match, so a filter would show
+ * whichever bans happened to fall inside the first eight and hide the rest
+ * without the fold saying anything about it.
+ *
+ * The two predicates are independent, so the order between THEM does not change
+ * the result. It is fixed here anyway, so there is one answer rather than one
+ * per call site.
+ */
+export function filterBans(
+  ranked: readonly RankedBanCandidate[],
+  filter: ScoutBanPhaseFilter,
+  overlapOnly: boolean,
+): RankedBanCandidate[] {
+  return filterBansByOverlap(filterBansByPhase(ranked, filter), overlapOnly)
+}
+
+/** The overlap toggle: how many bans it would show, and whether it is on. */
+export interface ScoutBanOverlapFilterOption {
+  /**
+   * Bans in the CURRENTLY SELECTED PHASE that hit more than one player.
+   *
+   * Scoped to the phase rather than to the whole plan, deliberately: the toggle
+   * then states exactly what pressing it opens. Under "Gezielt" it counts the
+   * targeted overlap bans, under "Alle" all of them. The figure is computed with
+   * `overlapOnly = true` in both states, so it does not jump when pressed. It
+   * always answers "how many are there", never "how many are hidden".
+   */
+  count: number
+  /** Whether the toggle is currently on. */
+  active: boolean
+}
+
+/**
+ * The overlap toggle for one phase selection.
+ *
+ * Derived from {@link filterBans}, like the phase chips, so the count and the
+ * list it opens cannot disagree.
+ */
+export function banOverlapFilterOption(
+  ranked: readonly RankedBanCandidate[],
+  filter: ScoutBanPhaseFilter,
+  overlapOnly: boolean,
+): ScoutBanOverlapFilterOption {
+  return { count: filterBans(ranked, filter, true).length, active: overlapOnly }
+}
+
+/**
+ * Is the overlap toggle clickable?
+ *
+ * Same rule as {@link isBanPhaseFilterEnabled}, and for the same reason: a zero
+ * leads to a guaranteed empty list, but the ACTIVE control is never disabled.
+ * Data can change underneath a pressed toggle (an edit in the scout data re-runs
+ * the analysis), and disabling it would drop keyboard focus and leave
+ * `aria-pressed` on an inert control. It stays pressed, stays focusable, and the
+ * panel shows an empty state instead.
+ *
+ * There is no `all`-style exception here because the toggle IS its own way back:
+ * pressing it again clears the filter.
+ */
+export function isBanOverlapFilterEnabled(option: ScoutBanOverlapFilterOption): boolean {
+  return option.active || option.count > 0
+}
+
+/**
+ * Which empty state a filtered-to-nothing ban list should show.
+ *
+ * The overlap message wins while the toggle is on, because it names the control
+ * that is actually hiding the rows and offers both ways out. Telling someone to
+ * "switch to Alle" when the overlap toggle is what emptied the list would send
+ * them to a view that is just as empty.
+ *
+ * A function rather than an `if` in the JSX: Vitest runs in Node with no jsdom,
+ * so a rule written inline in the component could not be tested at all. Same
+ * argument as `scoutImportHelpers.ts` and `pluralMessage()`.
+ */
+export const scoutBanListEmptyKey = (
+  overlapOnly: boolean,
+  emptiedByDraft = false,
+): TranslationKey => {
+  /*
+    THE DRAFT WINS, and it is checked first on purpose. When the draft has taken
+    every candidate, no chip the user can press will bring one back - telling
+    them to "switch to Alle" or to turn the overlap toggle off would send them
+    to a view that is just as empty, which is the exact mistake the overlap
+    message was written to avoid one release earlier.
+
+    `emptiedByDraft` is passed as "the draft removed candidates AND nothing
+    survived", not as "a draft exists": a draft that took two of nine leaves
+    seven, and then the filters really are the reason the screen is empty.
+  */
+  if (emptiedByDraft) return "scout_banDraftEmpty"
+  return overlapOnly ? "scout_banOverlapFilterEmpty" : "scout_banPhaseFilterEmpty"
+}
 
 /** Runtime guard for a `{rank}` param, mirroring `isScoutRole`. */
 function isScoutRankTier(value: string): value is ScoutRankTier {
